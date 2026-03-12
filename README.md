@@ -10,6 +10,19 @@ Eye-candy TUI package viewer for all your package managers. Tokyo Night theme, 1
 go install github.com/neur0map/glazepkg/cmd/gpk@latest
 ```
 
+If `gpk` is not found after installing, add Go's bin directory to your PATH:
+
+```bash
+# bash (~/.bashrc) or zsh (~/.zshrc)
+echo 'export PATH="$PATH:$HOME/go/bin"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+```fish
+# fish
+fish_add_path ~/go/bin
+```
+
 Or build from source:
 
 ```bash
