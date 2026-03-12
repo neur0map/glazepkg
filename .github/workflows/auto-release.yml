@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  tag-and-release:
+  auto-release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,3 +35,25 @@ jobs:
         run: |
           git tag ${{ steps.bump.outputs.new_tag }}
           git push origin ${{ steps.bump.outputs.new_tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build binaries
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -o gpk-darwin-arm64 ./cmd/gpk
+          GOOS=darwin GOARCH=amd64 go build -o gpk-darwin-amd64 ./cmd/gpk
+          GOOS=linux GOARCH=amd64 go build -o gpk-linux-amd64 ./cmd/gpk
+          GOOS=linux GOARCH=arm64 go build -o gpk-linux-arm64 ./cmd/gpk
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          generate_release_notes: true
+          files: |
+            gpk-darwin-arm64
+            gpk-darwin-amd64
+            gpk-linux-amd64
+            gpk-linux-arm64
