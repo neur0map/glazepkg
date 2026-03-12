@@ -1,0 +1,37 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'README.md'
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest tag and bump patch
+        id: bump
+        run: |
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$latest" ]; then
+            echo "new_tag=v0.1.1" >> "$GITHUB_OUTPUT"
+          else
+            major=$(echo "$latest" | sed 's/v//' | cut -d. -f1)
+            minor=$(echo "$latest" | sed 's/v//' | cut -d. -f2)
+            patch=$(echo "$latest" | sed 's/v//' | cut -d. -f3)
+            patch=$((patch + 1))
+            echo "new_tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create and push tag
+        run: |
+          git tag ${{ steps.bump.outputs.new_tag }}
+          git push origin ${{ steps.bump.outputs.new_tag }}
