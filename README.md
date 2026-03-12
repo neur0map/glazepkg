@@ -2,6 +2,8 @@
 
 Eye-candy TUI package viewer for all your package managers. Tokyo Night theme, 13 managers, fuzzy search, live descriptions, snapshots, and diffs.
 
+![demo](demo.gif)
+
 ## Install
 
 ```bash
