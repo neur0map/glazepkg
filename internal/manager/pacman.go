@@ -1,0 +1,100 @@
+package manager
+
+import (
+	"bufio"
+	"os/exec"
+	"strings"
+	"time"
+
+	"github.com/neur0map/glazepkg/internal/model"
+)
+
+type Pacman struct{}
+
+func (p *Pacman) Name() model.Source { return model.SourcePacman }
+
+func (p *Pacman) Available() bool { return commandExists("pacman") }
+
+func (p *Pacman) Scan() ([]model.Package, error) {
+	// Get explicitly installed native packages (excludes AUR/foreign)
+	out, err := exec.Command("pacman", "-Qen").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        fields[0],
+			Version:     fields[1],
+			Source:      model.SourcePacman,
+			InstalledAt: time.Now(),
+		})
+	}
+	return pkgs, nil
+}
+
+func (p *Pacman) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		detail, err := QueryDetail(pkg.Name)
+		if err == nil && detail.Description != "" {
+			descs[pkg.Name] = detail.Description
+		}
+	}
+	return descs
+}
+
+// QueryDetail fetches extended info for a single pacman package.
+func QueryDetail(name string) (model.Package, error) {
+	out, err := exec.Command("pacman", "-Qi", name).Output()
+	if err != nil {
+		return model.Package{}, err
+	}
+
+	pkg := model.Package{Name: name, Source: model.SourcePacman, InstalledAt: time.Now()}
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		key, val, ok := parseField(line)
+		if !ok {
+			continue
+		}
+		switch key {
+		case "Version":
+			pkg.Version = val
+		case "Description":
+			pkg.Description = val
+		case "Installed Size":
+			pkg.Size = val
+		case "Repository":
+			pkg.Repository = val
+		case "Depends On":
+			if val != "None" {
+				pkg.DependsOn = strings.Fields(val)
+			}
+		case "Required By":
+			if val != "None" {
+				pkg.RequiredBy = strings.Fields(val)
+			}
+		case "Install Date":
+			if t, err := time.Parse("Mon 02 Jan 2006 03:04:05 PM MST", val); err == nil {
+				pkg.InstalledAt = t
+			}
+		}
+	}
+	return pkg, nil
+}
+
+func parseField(line string) (key, val string, ok bool) {
+	idx := strings.Index(line, ":")
+	if idx < 0 {
+		return "", "", false
+	}
+	return strings.TrimSpace(line[:idx]), strings.TrimSpace(line[idx+1:]), true
+}
