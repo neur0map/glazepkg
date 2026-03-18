@@ -30,6 +30,7 @@ func renderDetail(pkg model.Package, editing bool, descInput string) string {
 		{"Version", pkg.Version},
 		{"Source", formatSource(pkg)},
 		{"Installed", formatInstalled(pkg)},
+		{"Location", pkg.Location},
 		{"Size", pkg.Size},
 		{"Depends on", formatList(pkg.DependsOn)},
 		{"Required by", formatList(pkg.RequiredBy)},

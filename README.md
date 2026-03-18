@@ -26,7 +26,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **14 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, bun, flatpak (+ brew dependency tracking)
+- **14 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak (+ brew dependency tracking)
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
@@ -103,6 +103,7 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | **cargo** | Cross-platform | Installed Rust binaries | — |
 | **go** | Cross-platform | Go binaries in `~/go/bin` | — |
 | **npm** | Cross-platform | Global Node.js packages | `npm info` |
+| **pnpm** | Cross-platform | Global pnpm packages | `pnpm info` |
 | **bun** | Cross-platform | Global Bun packages | — |
 | **flatpak** | Linux | Flatpak applications | `flatpak info` |
 
