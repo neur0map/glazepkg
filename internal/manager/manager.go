@@ -27,6 +27,7 @@ func All() []Manager {
 		&Cargo{},
 		&Go{},
 		&Npm{},
+		&Pnpm{},
 		&Bun{},
 		&Flatpak{},
 	}

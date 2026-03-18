@@ -12,6 +12,7 @@ const (
 	SourceCargo   Source = "cargo"
 	SourceGo      Source = "go"
 	SourceNpm     Source = "npm"
+	SourcePnpm    Source = "pnpm"
 	SourceBun     Source = "bun"
 	SourceFlatpak Source = "flatpak"
 	SourceBrew    Source = "brew"
@@ -32,6 +33,7 @@ type Package struct {
 	RequiredBy    []string  `json:"required_by,omitempty"`
 	InstalledAt   time.Time `json:"installed_at"`
 	LatestVersion string    `json:"-"` // not persisted, populated at runtime
+	Location      string    `json:"location,omitempty"`
 }
 
 // Key returns a unique identifier for this package across all managers.

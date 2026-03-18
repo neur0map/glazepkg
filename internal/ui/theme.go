@@ -21,6 +21,7 @@ var (
 	ColorYellow  = lipgloss.Color("#e0af68")
 	ColorCyan    = lipgloss.Color("#7dcfff")
 	ColorOrange  = lipgloss.Color("#ff9e64")
+	ColorWhite   = lipgloss.Color("#c6c6df")
 )
 
 var (
@@ -113,6 +114,7 @@ var ManagerColors = map[model.Source]lipgloss.Color{
 	model.SourceCargo:   ColorOrange,
 	model.SourceGo:      ColorCyan,
 	model.SourceNpm:     ColorRed,
+	model.SourcePnpm:    ColorWhite,
 	model.SourceBun:     ColorYellow,
 	model.SourceFlatpak: ColorBlue,
 }
