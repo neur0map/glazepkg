@@ -76,7 +76,13 @@ func (n *Pnpm) CheckUpdates(pkgs []model.Package) map[string]string {
 
 func (n *Pnpm) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
+	seen := make(map[string]struct{})
 	for _, pkg := range pkgs {
+		// Don't look up the same package twice (since the same package could be present in multiple stores)
+		if _, ok := seen[pkg.Name]; ok {
+			continue
+		}
+		seen[pkg.Name] = struct{}{}
 		out, err := exec.Command("pnpm", "info", pkg.Name, "description").Output()
 		if err != nil {
 			continue
