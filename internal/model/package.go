@@ -23,6 +23,14 @@ const (
 	SourceMacPorts Source = "macports"
 	SourcePkgsrc   Source = "pkgsrc"
 	SourceOpam     Source = "opam"
+	SourceGem      Source = "gem"
+	SourcePkg      Source = "pkg"
+	SourceComposer Source = "composer"
+	SourceMas      Source = "mas"
+	SourceApk      Source = "apk"
+	SourceNix      Source = "nix"
+	SourceConda    Source = "conda"
+	SourceLuarocks Source = "luarocks"
 )
 
 type Package struct {

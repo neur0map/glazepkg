@@ -33,6 +33,14 @@ func All() []Manager {
 		&MacPorts{},
 		&Pkgsrc{},
 		&Opam{},
+		&Gem{},
+		&FreeBSDPkg{},
+		&Composer{},
+		&Mas{},
+		&Apk{},
+		&Nix{},
+		&Conda{},
+		&Luarocks{},
 	}
 }
 

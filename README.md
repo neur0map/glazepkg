@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **17 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **25 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml/badge.svg)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
@@ -26,7 +26,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **17 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam (+ brew dependency tracking)
+- **25 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks (+ brew dependency tracking)
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Size filter** — press `f` to cycle through size filters (< 1 MB, 1–10 MB, 10–100 MB, > 100 MB, has updates); sorted largest-first
 - **Fuzzy search** — find any package across all managers instantly with `/`
@@ -110,6 +110,14 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | **MacPorts** | macOS | Installed ports | `port info` |
 | **pkgsrc** | NetBSD/cross-platform | Installed packages | `pkg_info` |
 | **opam** | Cross-platform | OCaml packages | `opam show` |
+| **gem** | Cross-platform | Ruby gems | `gem info` |
+| **pkg** | FreeBSD | Installed packages | inline from scan |
+| **composer** | Cross-platform | Global PHP packages | inline from JSON |
+| **mas** | macOS | Mac App Store apps | — |
+| **apk** | Alpine Linux | Installed packages | `apk info` |
+| **nix** | NixOS/cross-platform | Nix packages | `nix-env -qa` |
+| **conda/mamba** | Cross-platform | Conda environments | — |
+| **luarocks** | Cross-platform | Lua rocks | `luarocks show` |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Brew separates explicitly installed formulae from auto-pulled dependencies — deps go in a dedicated **deps** tab.

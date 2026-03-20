@@ -52,6 +52,17 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourcePnpm, "pnpm"},
 		{model.SourceBun, "bun"},
 		{model.SourceFlatpak, "flatpak"},
+		{model.SourceMacPorts, "macports"},
+		{model.SourcePkgsrc, "pkgsrc"},
+		{model.SourceOpam, "opam"},
+		{model.SourceGem, "gem"},
+		{model.SourcePkg, "pkg"},
+		{model.SourceComposer, "composer"},
+		{model.SourceMas, "mas"},
+		{model.SourceApk, "apk"},
+		{model.SourceNix, "nix"},
+		{model.SourceConda, "conda"},
+		{model.SourceLuarocks, "luarocks"},
 	}
 
 	for _, s := range sources {

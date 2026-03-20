@@ -379,7 +379,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case updateAvailableMsg:
-		m.updateBanner = fmt.Sprintf("update available: %s → %s — run gpk update", m.version, msg.latest)
+		m.updateBanner = fmt.Sprintf("↑ %s → %s available — run `gpk update`", m.version, msg.latest)
 		return m, nil
 
 	case exportDoneMsg:
@@ -645,17 +645,18 @@ func (m *Model) applyFilter() {
 	// Apply size / update filter
 	if m.sizeFilter > 0 {
 		sf := sizeFilters[m.sizeFilter]
-		var sized []model.Package
+		var matched, unknown []model.Package
 		for _, p := range tabFiltered {
 			if sf.MinBytes == -1 {
 				// Special "Has updates" filter
 				if p.LatestVersion != "" && p.LatestVersion != p.Version {
-					sized = append(sized, p)
+					matched = append(matched, p)
 				}
 				continue
 			}
 			if p.SizeBytes == 0 {
-				continue // skip packages without size data
+				unknown = append(unknown, p)
+				continue
 			}
 			if sf.MinBytes > 0 && p.SizeBytes < sf.MinBytes {
 				continue
@@ -663,13 +664,13 @@ func (m *Model) applyFilter() {
 			if sf.MaxBytes > 0 && p.SizeBytes >= sf.MaxBytes {
 				continue
 			}
-			sized = append(sized, p)
+			matched = append(matched, p)
 		}
-		// Sort largest first
-		sort.Slice(sized, func(i, j int) bool {
-			return sized[i].SizeBytes > sized[j].SizeBytes
+		// Sort matched by size descending, then append unknown-size packages
+		sort.Slice(matched, func(i, j int) bool {
+			return matched[i].SizeBytes > matched[j].SizeBytes
 		})
-		tabFiltered = sized
+		tabFiltered = append(matched, unknown...)
 	}
 
 	// Then apply fuzzy search
@@ -690,14 +691,10 @@ func (m Model) View() string {
 	// Title bar
 	title := StyleTitle.Render("GlazePKG")
 	b.WriteString(title)
-	b.WriteString("\n")
-
-	// Update banner
 	if m.updateBanner != "" {
-		b.WriteString(StyleUpdateBanner.Render("  " + m.updateBanner))
-		b.WriteString("\n")
+		b.WriteString("  " + StyleUpdateBanner.Render(m.updateBanner))
 	}
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
 	switch m.view {
 	case viewList:
