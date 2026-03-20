@@ -20,6 +20,9 @@ const (
 	SourceDnf     Source = "dnf"
 	SourceSnap     Source = "snap"
 	SourceBrewDeps Source = "brew-deps"
+	SourceMacPorts Source = "macports"
+	SourcePkgsrc   Source = "pkgsrc"
+	SourceOpam     Source = "opam"
 )
 
 type Package struct {
@@ -34,6 +37,7 @@ type Package struct {
 	InstalledAt   time.Time `json:"installed_at"`
 	LatestVersion string    `json:"-"` // not persisted, populated at runtime
 	Location      string    `json:"-"`
+	SizeBytes     int64     `json:"size_bytes,omitempty"`
 }
 
 // Key returns a unique identifier for this package across all managers.

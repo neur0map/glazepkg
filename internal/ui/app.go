@@ -25,6 +25,20 @@ const (
 	viewDiff
 )
 
+// Size filter thresholds (in bytes).
+var sizeFilters = []struct {
+	Label    string
+	MinBytes int64
+	MaxBytes int64
+}{
+	{"All", 0, 0},                             // no filter
+	{"< 1 MB", 0, 1 << 20},                   // 0 – 1 MB
+	{"1–10 MB", 1 << 20, 10 << 20},           // 1 – 10 MB
+	{"10–100 MB", 10 << 20, 100 << 20},       // 10 – 100 MB
+	{"> 100 MB", 100 << 20, 0},               // 100 MB+
+	{"Has updates", -1, -1},                   // special: only packages with updates
+}
+
 type updateAvailableMsg struct {
 	latest string
 }
@@ -91,6 +105,7 @@ type Model struct {
 	// Filter / Search
 	filterInput textinput.Model
 	filtering   bool
+	sizeFilter  int // 0=all, cycles through sizeFilterLabels
 
 	// Overlays
 	showHelp     bool
@@ -561,6 +576,14 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.detailPkg = pkg
 			m.view = viewDetail
 		}
+	case "f":
+		m.sizeFilter = (m.sizeFilter + 1) % len(sizeFilters)
+		m.applyFilter()
+		if m.sizeFilter == 0 {
+			m.statusMsg = ""
+		} else {
+			m.statusMsg = "filter: " + sizeFilters[m.sizeFilter].Label
+		}
 	case "r":
 		m.scanning = true
 		m.statusMsg = "rescanning..."
@@ -617,6 +640,36 @@ func (m *Model) applyFilter() {
 			continue
 		}
 		tabFiltered = append(tabFiltered, p)
+	}
+
+	// Apply size / update filter
+	if m.sizeFilter > 0 {
+		sf := sizeFilters[m.sizeFilter]
+		var sized []model.Package
+		for _, p := range tabFiltered {
+			if sf.MinBytes == -1 {
+				// Special "Has updates" filter
+				if p.LatestVersion != "" && p.LatestVersion != p.Version {
+					sized = append(sized, p)
+				}
+				continue
+			}
+			if p.SizeBytes == 0 {
+				continue // skip packages without size data
+			}
+			if sf.MinBytes > 0 && p.SizeBytes < sf.MinBytes {
+				continue
+			}
+			if sf.MaxBytes > 0 && p.SizeBytes >= sf.MaxBytes {
+				continue
+			}
+			sized = append(sized, p)
+		}
+		// Sort largest first
+		sort.Slice(sized, func(i, j int) bool {
+			return sized[i].SizeBytes > sized[j].SizeBytes
+		})
+		tabFiltered = sized
 	}
 
 	// Then apply fuzzy search
@@ -710,7 +763,8 @@ func (m Model) renderListView(b *strings.Builder) {
 	if listHeight < 5 {
 		listHeight = 5
 	}
-	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width))
+	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
+	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize))
 
 	// Loading indicators
 	if m.loadingDescs {
@@ -749,16 +803,45 @@ func (m Model) renderStatusBar() string {
 		return StyleStatusBar.Render(m.statusMsg)
 	}
 
+	keyStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+	sepStyle := lipgloss.NewStyle().Foreground(ColorSubtext)
+	descStyle := lipgloss.NewStyle().Foreground(ColorText)
+	sep := sepStyle.Render("  ")
+
+	formatBinds := func(binds []struct{ key, desc string }) string {
+		var parts []string
+		for _, b := range binds {
+			parts = append(parts, keyStyle.Render(b.key)+descStyle.Render(" "+b.desc))
+		}
+		return strings.Join(parts, sep)
+	}
+
 	switch m.view {
 	case viewList:
-		return StyleStatusBar.Render("/: search  tab: source  enter: detail  r: rescan  s: snap  d: diff  e: export  ?: help  q: quit")
+		binds := []struct{ key, desc string }{
+			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
+			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
+			{"d", "diff"}, {"e", "export"}, {"?", "help"}, {"q", "quit"},
+		}
+		bar := formatBinds(binds)
+		if m.sizeFilter > 0 {
+			filterStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+			bar = filterStyle.Render("["+sizeFilters[m.sizeFilter].Label+"]") + sep + bar
+		}
+		return " " + bar
 	case viewDetail:
 		if m.editingDesc {
-			return StyleStatusBar.Render("enter: save    esc: cancel")
+			return " " + formatBinds([]struct{ key, desc string }{
+				{"enter", "save"}, {"esc", "cancel"},
+			})
 		}
-		return StyleStatusBar.Render("e: edit description    esc: back    q: quit")
+		return " " + formatBinds([]struct{ key, desc string }{
+			{"e", "edit description"}, {"esc", "back"}, {"q", "quit"},
+		})
 	case viewDiff:
-		return StyleStatusBar.Render("esc: back    q: quit")
+		return " " + formatBinds([]struct{ key, desc string }{
+			{"esc", "back"}, {"q", "quit"},
+		})
 	}
 	return ""
 }

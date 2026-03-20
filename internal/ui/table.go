@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int) string {
+func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -40,11 +40,15 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int) string 
 	}
 
 	// Header — pad each header label to column width using plain strings
+	lastCol := "DESCRIPTION"
+	if showSize {
+		lastCol = "SIZE"
+	}
 	header := "  " +
 		padCell(StyleTableHeader.Render("PACKAGE"), colName) +
 		padCell(StyleTableHeader.Render("VERSION"), colVer) +
 		padCell(StyleTableHeader.Render("MANAGER"), colBadge) +
-		StyleTableHeader.Render("DESCRIPTION")
+		StyleTableHeader.Render(lastCol)
 
 	// Scrolling viewport
 	visibleHeight := height - 4
@@ -74,17 +78,22 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int) string 
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
 
-		// For dependency packages, show what requires them
-		descText := p.Description
-		if len(p.RequiredBy) > 0 {
-			reqBy := strings.Join(p.RequiredBy, ", ")
-			if descText != "" {
-				descText = "req by " + reqBy + " — " + descText
-			} else {
-				descText = "req by " + reqBy
+		// Last column: show size when filtering by size, otherwise description
+		var lastText string
+		if showSize {
+			lastText = p.Size
+		} else {
+			lastText = p.Description
+			if len(p.RequiredBy) > 0 {
+				reqBy := strings.Join(p.RequiredBy, ", ")
+				if lastText != "" {
+					lastText = "req by " + reqBy + " — " + lastText
+				} else {
+					lastText = "req by " + reqBy
+				}
 			}
 		}
-		desc := truncate(descText, colDesc-1)
+		desc := truncate(lastText, colDesc-1)
 
 		if i == cursor {
 			// Selected: highlight name+version+desc, badge stays colored

@@ -20,6 +20,7 @@ func renderHelpOverlay(width, height int) string {
 		{"Esc", "Clear search / close overlay"},
 		{"Enter", "Package details"},
 		{"e (detail)", "Edit description"},
+		{"f", "Cycle filter"},
 		{"r", "Rescan all managers"},
 		{"s", "Save snapshot"},
 		{"d", "Diff against last snapshot"},

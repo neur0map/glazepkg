@@ -30,6 +30,9 @@ func All() []Manager {
 		&Pnpm{},
 		&Bun{},
 		&Flatpak{},
+		&MacPorts{},
+		&Pkgsrc{},
+		&Opam{},
 	}
 }
 

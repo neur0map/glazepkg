@@ -15,6 +15,7 @@ type KeyMap struct {
 	Rescan     key.Binding
 	Edit       key.Binding
 	Help       key.Binding
+	SizeFilter key.Binding
 	Up         key.Binding
 	Down       key.Binding
 	PageUp     key.Binding
@@ -73,6 +74,10 @@ var Keys = KeyMap{
 	Help: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "help"),
+	),
+	SizeFilter: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "cycle filter"),
 	),
 	Up: key.NewBinding(
 		key.WithKeys("up", "k"),

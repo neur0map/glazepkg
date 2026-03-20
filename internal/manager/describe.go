@@ -4,11 +4,15 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
 )
+
+var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
 
 // Describer is implemented by managers that can fetch package descriptions.
 type Describer interface {
@@ -88,6 +92,12 @@ func (dc *DescriptionCache) Flush() {
 	dc.save()
 }
 
+// sanitizeDesc strips HTML tags and collapses whitespace from descriptions.
+func sanitizeDesc(s string) string {
+	s = htmlTagRe.ReplaceAllString(s, "")
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // FetchDescriptions fetches descriptions for all packages, using the cache
 // where possible and falling back to the manager's Describer interface.
 func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionCache) map[string]string {
@@ -114,7 +124,7 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 		var uncached []model.Package
 		for _, p := range srcPkgs {
 			if d, ok := cache.Get(p.Key()); ok {
-				result[p.Key()] = d
+				result[p.Key()] = sanitizeDesc(d)
 			} else {
 				uncached = append(uncached, p)
 			}
@@ -127,6 +137,7 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 		fetched := desc.Describe(uncached)
 		for _, p := range uncached {
 			if d, ok := fetched[p.Name]; ok && d != "" {
+				d = sanitizeDesc(d)
 				result[p.Key()] = d
 				cache.Set(p.Key(), d)
 			}

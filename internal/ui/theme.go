@@ -116,7 +116,10 @@ var ManagerColors = map[model.Source]lipgloss.Color{
 	model.SourceNpm:     ColorRed,
 	model.SourcePnpm:    ColorWhite,
 	model.SourceBun:     ColorYellow,
-	model.SourceFlatpak: ColorBlue,
+	model.SourceFlatpak:  ColorBlue,
+	model.SourceMacPorts: ColorCyan,
+	model.SourcePkgsrc:   ColorGreen,
+	model.SourceOpam:     ColorOrange,
 }
 
 // RenderBadge returns a styled pill for a package source (used in detail view).

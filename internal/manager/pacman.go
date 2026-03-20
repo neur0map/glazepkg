@@ -72,6 +72,7 @@ func QueryDetail(name string) (model.Package, error) {
 			pkg.Description = val
 		case "Installed Size":
 			pkg.Size = val
+			pkg.SizeBytes = ParseSizeString(val)
 		case "Repository":
 			pkg.Repository = val
 		case "Depends On":

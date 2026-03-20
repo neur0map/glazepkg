@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **14 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **17 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml/badge.svg)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
@@ -26,8 +26,9 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **14 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak (+ brew dependency tracking)
+- **17 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam (+ brew dependency tracking)
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
+- **Size filter** — press `f` to cycle through size filters (< 1 MB, 1–10 MB, 10–100 MB, > 100 MB, has updates); sorted largest-first
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
 - **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
@@ -106,6 +107,9 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | **pnpm** | Cross-platform | Global pnpm packages | `pnpm info` |
 | **bun** | Cross-platform | Global Bun packages | — |
 | **flatpak** | Linux | Flatpak applications | `flatpak info` |
+| **MacPorts** | macOS | Installed ports | `port info` |
+| **pkgsrc** | NetBSD/cross-platform | Installed packages | `pkg_info` |
+| **opam** | Cross-platform | OCaml packages | `opam show` |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Brew separates explicitly installed formulae from auto-pulled dependencies — deps go in a dedicated **deps** tab.
@@ -122,6 +126,7 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | `Ctrl+d` / `Ctrl+u` | Half-page down / up |
 | `PgDn` / `PgUp` | Page down / up |
 | `Tab` / `Shift+Tab` | Cycle manager tabs |
+| `f` | Cycle size filter |
 | `/` | Fuzzy search |
 | `Enter` | Package details |
 | `e` (detail) | Edit description |

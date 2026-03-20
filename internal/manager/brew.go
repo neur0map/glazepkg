@@ -1,8 +1,12 @@
 package manager
 
 import (
+	"bufio"
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -67,12 +71,17 @@ func (b *Brew) Scan() ([]model.Package, error) {
 		}
 	}
 
+	// Get cellar sizes in one call
+	sizes := brewCellarSizes()
+
 	var pkgs []model.Package
 	for _, f := range info.Formulae {
 		if len(f.Installed) == 0 {
 			continue
 		}
 		inst := f.Installed[0]
+		sizeBytes := sizes[f.Name]
+		sizeStr := FormatBytes(sizeBytes)
 
 		if inst.InstalledOnRequest {
 			// Explicit package → goes in "brew" tab
@@ -82,18 +91,21 @@ func (b *Brew) Scan() ([]model.Package, error) {
 				Description: f.Desc,
 				Source:      model.SourceBrew,
 				InstalledAt: time.Now(),
+				Size:        sizeStr,
+				SizeBytes:   sizeBytes,
 			})
 		} else {
 			// Auto-installed dependency → goes in "brew-deps" tab
-			pkg := model.Package{
+			pkgs = append(pkgs, model.Package{
 				Name:        f.Name,
 				Version:     inst.Version,
 				Description: f.Desc,
 				Source:      model.SourceBrewDeps,
 				RequiredBy:  requiredBy[f.Name],
 				InstalledAt: time.Now(),
-			}
-			pkgs = append(pkgs, pkg)
+				Size:        sizeStr,
+				SizeBytes:   sizeBytes,
+			})
 		}
 	}
 	return pkgs, nil
@@ -138,3 +150,39 @@ func (b *Brew) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+// brewCellarSizes runs a single `du -sk` on the cellar directory and returns
+// a map of formula name → size in bytes.
+func brewCellarSizes() map[string]int64 {
+	cellarOut, err := exec.Command("brew", "--cellar").Output()
+	if err != nil {
+		return nil
+	}
+	cellar := strings.TrimSpace(string(cellarOut))
+
+	out, err := exec.Command("du", "-sk", cellar+"/*").Output()
+	if err != nil {
+		// Shell glob won't expand; use shell
+		out, err = exec.Command("sh", "-c", "du -sk "+cellar+"/*").Output()
+		if err != nil {
+			return nil
+		}
+	}
+
+	sizes := make(map[string]int64)
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		kb, err := strconv.ParseInt(fields[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		name := filepath.Base(fields[1])
+		sizes[name] = kb * 1024 // convert KB to bytes
+	}
+	return sizes
+}
+
