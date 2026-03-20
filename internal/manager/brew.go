@@ -107,24 +107,11 @@ func (b *Brew) CheckUpdates(pkgs []model.Package) map[string]string {
 
 	var outdated struct {
 		Formulae []struct {
-			Name             string `json:"name"`
-			CurrentVersion   string `json:"current_version"`
-			InstalledVersion string `json:"installed_versions"`
+			Name           string   `json:"name"`
+			CurrentVersion string   `json:"current_version"`
+			InstalledVersions []string `json:"installed_versions"`
 		} `json:"formulae"`
 	}
-	// brew outdated --json returns an array of objects at top level
-	var arr []struct {
-		Name           string `json:"name"`
-		CurrentVersion string `json:"current_version"`
-	}
-	if err := json.Unmarshal(out, &arr); err == nil {
-		updates := make(map[string]string)
-		for _, f := range arr {
-			updates[f.Name] = f.CurrentVersion
-		}
-		return updates
-	}
-	// Try the nested format (newer brew versions)
 	if err := json.Unmarshal(out, &outdated); err == nil {
 		updates := make(map[string]string)
 		for _, f := range outdated.Formulae {
