@@ -41,6 +41,12 @@ func All() []Manager {
 		&Nix{},
 		&Conda{},
 		&Luarocks{},
+		&Winget{},
+		&Chocolatey{},
+		&Nuget{},
+		&PowerShell{},
+		&WindowsUpdates{},
+		&Scoop{},
 	}
 }
 
