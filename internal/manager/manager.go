@@ -44,6 +44,12 @@ func All() []Manager {
 		&Xbps{},
 		&Portage{},
 		&Guix{},
+		&Winget{},
+		&Chocolatey{},
+		&Nuget{},
+		&PowerShell{},
+		&WindowsUpdates{},
+		&Scoop{},
 	}
 }
 
