@@ -63,6 +63,12 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourceNix, "nix"},
 		{model.SourceConda, "conda"},
 		{model.SourceLuarocks, "luarocks"},
+		{model.SourceWinget, "winget"},
+		{model.SourceChocolatey, "choco"},
+		{model.SourceNuget, "nuget"},
+		{model.SourcePowerShell, "pwsh"},
+		{model.SourceWindowsUpdates, "winupd"},
+		{model.SourceScoop, "scoop"},
 	}
 
 	for _, s := range sources {
