@@ -31,6 +31,9 @@ const (
 	SourceNix      Source = "nix"
 	SourceConda    Source = "conda"
 	SourceLuarocks Source = "luarocks"
+	SourceXbps     Source = "xbps"
+	SourcePortage  Source = "portage"
+	SourceGuix     Source = "guix"
 )
 
 type Package struct {

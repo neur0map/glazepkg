@@ -41,6 +41,9 @@ func All() []Manager {
 		&Nix{},
 		&Conda{},
 		&Luarocks{},
+		&Xbps{},
+		&Portage{},
+		&Guix{},
 	}
 }
 

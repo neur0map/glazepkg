@@ -35,7 +35,7 @@ func (p *Pkgsrc) Scan() ([]model.Package, error) {
 			continue
 		}
 		nameVer := fields[0]
-		name, version := splitPkgsrcNameVersion(nameVer)
+		name, version := SplitPkgsrcNameVersion(nameVer)
 		if name == "" {
 			continue
 		}
@@ -72,8 +72,36 @@ func (p *Pkgsrc) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
-// splitPkgsrcNameVersion splits "name-version" by the last hyphen.
-func splitPkgsrcNameVersion(s string) (string, string) {
+func (p *Pkgsrc) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		nameVer := pkg.Name
+		if pkg.Version != "" {
+			nameVer = pkg.Name + "-" + pkg.Version
+		}
+		out, err := exec.Command("pkg_info", "-qN", nameVer).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			name, _ := SplitPkgsrcNameVersion(line)
+			if name != "" {
+				pkgDeps = append(pkgDeps, name)
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
+// SplitPkgsrcNameVersion splits "name-version" by the last hyphen.
+func SplitPkgsrcNameVersion(s string) (string, string) {
 	idx := strings.LastIndex(s, "-")
 	if idx <= 0 {
 		return s, ""

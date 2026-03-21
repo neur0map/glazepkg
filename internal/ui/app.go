@@ -73,6 +73,10 @@ type updatesDoneMsg struct {
 	updates map[string]string // key → latest version
 }
 
+type depsDoneMsg struct {
+	deps map[string][]string // key → dependency list
+}
+
 type exportDoneMsg struct {
 	path string
 	err  error
@@ -111,6 +115,8 @@ type Model struct {
 	showHelp     bool
 	showExport   bool
 	exportCursor int
+	showDeps     bool
+	depsCursor   int
 
 	// Descriptions
 	loadingDescs bool
@@ -119,6 +125,10 @@ type Model struct {
 	// Updates
 	loadingUpdates bool
 	updateCache    *manager.UpdateCache
+
+	// Dependencies
+	loadingDeps bool
+	depsCache   *manager.DepsCache
 
 	// Update banner
 	version      string
@@ -155,6 +165,7 @@ func NewModel(version string) Model {
 		scanning:    true,
 		descCache:   manager.NewDescriptionCache(),
 		updateCache: manager.NewUpdateCache(),
+		depsCache:   manager.NewDepsCache(),
 		userNotes:   snapshot.LoadNotes(),
 		version:     version,
 	}
@@ -260,6 +271,21 @@ func fetchDescriptions(pkgs []model.Package, cache *manager.DescriptionCache, sk
 	}
 }
 
+func fetchDependencies(pkgs []model.Package, cache *manager.DepsCache) tea.Cmd {
+	return func() tea.Msg {
+		// Filter out packages that already have deps (e.g., populated during scan)
+		var toFetch []model.Package
+		for _, p := range pkgs {
+			if len(p.DependsOn) == 0 {
+				toFetch = append(toFetch, p)
+			}
+		}
+		mgrs := manager.All()
+		deps := manager.FetchDependencies(mgrs, toFetch, cache)
+		return depsDoneMsg{deps: deps}
+	}
+}
+
 func fetchUpdates(pkgs []model.Package, cache *manager.UpdateCache) tea.Cmd {
 	return func() tea.Msg {
 		mgrs := manager.All()
@@ -286,7 +312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		if m.scanning || m.loadingDescs || m.loadingUpdates {
+		if m.scanning || m.loadingDescs || m.loadingUpdates || m.loadingDeps {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -328,15 +354,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.applyFilter()
-		// Dispatch background update check
+		// Dispatch background update check and dependency fetch in parallel
 		m.loadingUpdates = true
-		return m, fetchUpdates(m.allPkgs, m.updateCache)
+		m.loadingDeps = true
+		return m, tea.Batch(
+			fetchUpdates(m.allPkgs, m.updateCache),
+			fetchDependencies(m.allPkgs, m.depsCache),
+		)
 
 	case updatesDoneMsg:
 		m.loadingUpdates = false
 		for i := range m.allPkgs {
 			if latest, ok := msg.updates[m.allPkgs[i].Key()]; ok {
 				m.allPkgs[i].LatestVersion = latest
+			}
+		}
+		m.applyFilter()
+		return m, nil
+
+	case depsDoneMsg:
+		m.loadingDeps = false
+		for i := range m.allPkgs {
+			key := m.allPkgs[i].Key()
+			if deps, ok := msg.deps[key]; ok && len(deps) > 0 {
+				m.allPkgs[i].DependsOn = deps
 			}
 		}
 		m.applyFilter()
@@ -602,14 +643,45 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
+	// Deps overlay intercepts keys
+	if m.showDeps {
+		switch key {
+		case "esc", "q", "d":
+			m.showDeps = false
+		case "j", "down":
+			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
+			if m.depsCursor < total-1 {
+				m.depsCursor++
+			}
+		case "k", "up":
+			if m.depsCursor > 0 {
+				m.depsCursor--
+			}
+		case "g", "home":
+			m.depsCursor = 0
+		case "G", "end":
+			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
+			if total > 0 {
+				m.depsCursor = total - 1
+			}
+		}
+		return m, nil
+	}
+
 	switch key {
 	case "esc", "q":
+		m.showDeps = false
 		m.view = viewList
 	case "e":
 		m.editingDesc = true
 		m.descInput.SetValue(m.detailPkg.Description)
 		m.descInput.Focus()
 		return m, textinput.Blink
+	case "d":
+		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
+			m.showDeps = true
+			m.depsCursor = 0
+		}
 	}
 	return m, nil
 }
@@ -720,6 +792,9 @@ func (m Model) View() string {
 	if m.showExport {
 		return content + "\n" + renderExportOverlay(m.exportCursor, m.width, m.height)
 	}
+	if m.showDeps {
+		return content + "\n" + renderDepsOverlay(m.detailPkg, m.depsCursor, m.width, m.height)
+	}
 
 	return content
 }
@@ -768,10 +843,10 @@ func (m Model) renderListView(b *strings.Builder) {
 		b.WriteString("\n  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString(StyleDim.Render(" Loading descriptions..."))
-	} else if m.loadingUpdates {
+	} else if m.loadingUpdates || m.loadingDeps {
 		b.WriteString("\n  ")
 		b.WriteString(m.spinner.View())
-		b.WriteString(StyleDim.Render(" Checking for updates..."))
+		b.WriteString(StyleDim.Render(" Loading details..."))
 	}
 }
 
@@ -832,9 +907,19 @@ func (m Model) renderStatusBar() string {
 				{"enter", "save"}, {"esc", "cancel"},
 			})
 		}
-		return " " + formatBinds([]struct{ key, desc string }{
-			{"e", "edit description"}, {"esc", "back"}, {"q", "quit"},
-		})
+		if m.showDeps {
+			return " " + formatBinds([]struct{ key, desc string }{
+				{"j/k", "navigate"}, {"esc", "close"},
+			})
+		}
+		binds := []struct{ key, desc string }{
+			{"e", "edit description"},
+		}
+		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
+			binds = append(binds, struct{ key, desc string }{"d", "dependencies"})
+		}
+		binds = append(binds, struct{ key, desc string }{"esc", "back"}, struct{ key, desc string }{"q", "quit"})
+		return " " + formatBinds(binds)
 	case viewDiff:
 		return " " + formatBinds([]struct{ key, desc string }{
 			{"esc", "back"}, {"q", "quit"},

@@ -65,6 +65,38 @@ func (a *Apt) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (a *Apt) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, p := range pkgs {
+		out, err := exec.Command("apt-cache", "depends", "--no-recommends",
+			"--no-suggests", "--no-conflicts", "--no-breaks",
+			"--no-replaces", "--no-enhances", p.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			var dep string
+			switch {
+			case strings.HasPrefix(line, "Depends:"):
+				dep = strings.TrimSpace(strings.TrimPrefix(line, "Depends:"))
+			case strings.HasPrefix(line, "PreDepends:"):
+				dep = strings.TrimSpace(strings.TrimPrefix(line, "PreDepends:"))
+			default:
+				continue
+			}
+			dep = strings.Trim(dep, "<>")
+			if dep != "" {
+				pkgDeps = append(pkgDeps, dep)
+			}
+		}
+		deps[p.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (a *Apt) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, p := range pkgs {

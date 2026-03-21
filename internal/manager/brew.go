@@ -90,6 +90,7 @@ func (b *Brew) Scan() ([]model.Package, error) {
 				Version:     inst.Version,
 				Description: f.Desc,
 				Source:      model.SourceBrew,
+				DependsOn:   f.Dependencies,
 				InstalledAt: time.Now(),
 				Size:        sizeStr,
 				SizeBytes:   sizeBytes,
@@ -101,6 +102,7 @@ func (b *Brew) Scan() ([]model.Package, error) {
 				Version:     inst.Version,
 				Description: f.Desc,
 				Source:      model.SourceBrewDeps,
+				DependsOn:   f.Dependencies,
 				RequiredBy:  requiredBy[f.Name],
 				InstalledAt: time.Now(),
 				Size:        sizeStr,
@@ -149,6 +151,26 @@ func (b *Brew) Describe(pkgs []model.Package) map[string]string {
 		}
 	}
 	return descs
+}
+
+func (b *Brew) ListDependencies(pkgs []model.Package) map[string][]string {
+	info, err := fetchBrewInfo()
+	if err != nil {
+		return nil
+	}
+
+	formulaMap := make(map[string]*brewFormula, len(info.Formulae))
+	for i := range info.Formulae {
+		formulaMap[info.Formulae[i].Name] = &info.Formulae[i]
+	}
+
+	deps := make(map[string][]string, len(pkgs))
+	for _, p := range pkgs {
+		if f, ok := formulaMap[p.Name]; ok {
+			deps[p.Name] = f.Dependencies
+		}
+	}
+	return deps
 }
 
 // brewCellarSizes runs a single `du -sk` on the cellar directory and returns

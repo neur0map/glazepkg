@@ -69,6 +69,32 @@ func (a *AUR) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (a *AUR) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("pacman", "-Qi", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			key, val, ok := parseField(scanner.Text())
+			if !ok {
+				continue
+			}
+			if key == "Depends On" {
+				if val != "None" {
+					deps[pkg.Name] = strings.Fields(val)
+				} else {
+					deps[pkg.Name] = nil
+				}
+				break
+			}
+		}
+	}
+	return deps
+}
+
 func (a *AUR) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

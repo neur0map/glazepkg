@@ -65,6 +65,36 @@ func (s *Snap) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (s *Snap) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, p := range pkgs {
+		out, err := exec.Command("snap", "connections", p.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		first := true
+		for scanner.Scan() {
+			if first {
+				first = false
+				continue // skip header
+			}
+			fields := strings.Fields(scanner.Text())
+			// Format: "Interface  Plug  Slot  Notes"
+			if len(fields) >= 3 && fields[2] != "-" {
+				// Slot provider is the dependency (e.g., "core:network")
+				slotParts := strings.SplitN(fields[2], ":", 2)
+				if len(slotParts) >= 1 && slotParts[0] != p.Name {
+					pkgDeps = append(pkgDeps, slotParts[0])
+				}
+			}
+		}
+		deps[p.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (s *Snap) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, p := range pkgs {

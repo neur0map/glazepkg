@@ -69,6 +69,35 @@ func (d *Dnf) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (d *Dnf) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, p := range pkgs {
+		out, err := exec.Command("rpm", "-qR", p.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			// Skip non-package requirements (paths, libraries, rpmlib, config)
+			if strings.HasPrefix(line, "/") || strings.Contains(line, "(") ||
+				strings.HasPrefix(line, "rpmlib") || strings.HasPrefix(line, "config") {
+				continue
+			}
+			name := strings.Fields(line)[0]
+			if name != "" {
+				pkgDeps = append(pkgDeps, name)
+			}
+		}
+		deps[p.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (d *Dnf) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, p := range pkgs {

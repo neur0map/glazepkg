@@ -77,6 +77,31 @@ func (g *Gem) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (g *Gem) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("gem", "dependency", pkg.Name, "--pipe").Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			// Format: "dep_name --version '>= 0'"
+			fields := strings.Fields(line)
+			if len(fields) >= 1 {
+				pkgDeps = append(pkgDeps, fields[0])
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (g *Gem) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

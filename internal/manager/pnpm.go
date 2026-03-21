@@ -74,6 +74,33 @@ func (n *Pnpm) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (n *Pnpm) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	seen := make(map[string]struct{})
+	for _, pkg := range pkgs {
+		if _, ok := seen[pkg.Name]; ok {
+			continue
+		}
+		seen[pkg.Name] = struct{}{}
+		out, err := exec.Command("pnpm", "info", pkg.Name, "dependencies", "--json").Output()
+		if err != nil || len(out) == 0 {
+			deps[pkg.Name] = nil
+			continue
+		}
+		var depMap map[string]string
+		if err := json.Unmarshal(out, &depMap); err != nil {
+			deps[pkg.Name] = nil
+			continue
+		}
+		var pkgDeps []string
+		for name := range depMap {
+			pkgDeps = append(pkgDeps, name)
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (n *Pnpm) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	seen := make(map[string]struct{})

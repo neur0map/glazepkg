@@ -79,6 +79,38 @@ func (o *Opam) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (o *Opam) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("opam", "show", pkg.Name, "-f", "depends", "--color=never").Output()
+		if err != nil {
+			continue
+		}
+		text := strings.TrimSpace(string(out))
+		if text == "" {
+			deps[pkg.Name] = nil
+			continue
+		}
+		// Format: "dep1" {constraint} & "dep2" {constraint} & ...
+		var pkgDeps []string
+		for _, seg := range strings.Split(text, "&") {
+			seg = strings.TrimSpace(seg)
+			// Extract quoted package name
+			if idx := strings.Index(seg, "\""); idx >= 0 {
+				end := strings.Index(seg[idx+1:], "\"")
+				if end >= 0 {
+					name := seg[idx+1 : idx+1+end]
+					if name != "" {
+						pkgDeps = append(pkgDeps, name)
+					}
+				}
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (o *Opam) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {
