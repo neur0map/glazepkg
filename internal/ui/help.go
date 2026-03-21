@@ -25,6 +25,7 @@ func renderHelpOverlay(width, height int) string {
 		{"f", "Cycle filter"},
 		{"r", "Rescan all managers"},
 		{"s", "Save snapshot"},
+		{"u", "Upgrade selected package"},
 		{"d", "Diff against last snapshot"},
 		{"e", "Export packages"},
 		{"?", "Toggle this help"},

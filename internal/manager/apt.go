@@ -115,3 +115,8 @@ func (a *Apt) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (a *Apt) UpgradePackage(name string) error {
+	cmd := exec.Command("apt", "install", "--only-upgrade", "-y", name)
+	return runPrivilegedCommand(cmd)
+}

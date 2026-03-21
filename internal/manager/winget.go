@@ -231,3 +231,12 @@ func wingetExtract(line string, starts []int) []string {
 	}
 	return fields
 }
+
+func (w *Winget) UpgradePackage(name string) error {
+	cmd := exec.Command("winget", "upgrade",
+		"--accept-source-agreements",
+		"--accept-package-agreements",
+		name,
+	)
+	return cmd.Run()
+}

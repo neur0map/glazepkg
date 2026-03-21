@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -81,6 +82,11 @@ type depsDoneMsg struct {
 type exportDoneMsg struct {
 	path string
 	err  error
+}
+
+type upgradeResultMsg struct {
+	pkg model.Package
+	err error
 }
 
 type pkgHelpMsg struct {
@@ -347,6 +353,25 @@ func fetchUpdates(pkgs []model.Package, cache *manager.UpdateCache) tea.Cmd {
 	}
 }
 
+func (m *Model) UpgradeSelectedPackage() tea.Cmd {
+	pkg, ok := m.selectedPackage()
+	if !ok {
+		return nil
+	}
+
+	return func() tea.Msg {
+		mgr := manager.BySource(pkg.Source)
+		if mgr == nil {
+			return upgradeResultMsg{pkg: pkg, err: fmt.Errorf("manager not found for %s", pkg.Source)}
+		}
+		if !mgr.Available() {
+			return upgradeResultMsg{pkg: pkg, err: fmt.Errorf("%s is not available", pkg.Source)}
+		}
+		err := mgr.UpgradePackage(pkg.Name)
+		return upgradeResultMsg{pkg: pkg, err: err}
+	}
+}
+
 func doExport(pkgs []model.Package, format int) tea.Cmd {
 	return func() tea.Msg {
 		path, err := exportPackages(pkgs, format)
@@ -370,6 +395,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
+	case upgradeResultMsg:
+		if msg.err != nil {
+			if errors.Is(msg.err, manager.ErrUpgradeNotSupported) {
+				m.statusMsg = manager.ErrUpgradeNotSupported.Error()
+			} else {
+				m.statusMsg = msg.err.Error()
+			}
+		} else {
+			m.statusMsg = "Package upgraded successfully"
+		}
+		return m, nil
 
 	case scanDoneMsg:
 		m.scanning = false
@@ -695,6 +731,11 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "s":
 		m.statusMsg = "saving snapshot..."
 		return m, saveSnapshot(m.allPkgs)
+	case "u":
+		if pkg, ok := m.selectedPackage(); ok {
+			m.statusMsg = fmt.Sprintf("upgrading %s...", pkg.Name)
+			return m, m.UpgradeSelectedPackage()
+		}
 	case "d":
 		m.statusMsg = "computing diff..."
 		return m, computeDiff(m.allPkgs)
@@ -703,6 +744,13 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.exportCursor = 0
 	}
 	return m, nil
+}
+
+func (m Model) selectedPackage() (model.Package, bool) {
+	if len(m.filteredPkgs) == 0 || m.cursor >= len(m.filteredPkgs) {
+		return model.Package{}, false
+	}
+	return m.filteredPkgs[m.cursor], true
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
@@ -998,7 +1046,7 @@ func (m Model) renderStatusBar() string {
 		binds := []struct{ key, desc string }{
 			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
 			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
-			{"d", "diff"}, {"e", "export"}, {"?", "help"}, {"q", "quit"},
+			{"u", "upgrade package"}, {"d", "diff"}, {"e", "export"}, {"?", "help"}, {"q", "quit"},
 		}
 		bar := formatBinds(binds)
 		if m.sizeFilter > 0 {
