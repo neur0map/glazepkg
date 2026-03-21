@@ -65,6 +65,37 @@ func (p *Pip) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (p *Pip) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("pip", "show", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.HasPrefix(line, "Requires:") {
+				req := strings.TrimSpace(strings.TrimPrefix(line, "Requires:"))
+				if req == "" {
+					deps[pkg.Name] = nil
+				} else {
+					var pkgDeps []string
+					for _, d := range strings.Split(req, ", ") {
+						d = strings.TrimSpace(d)
+						if d != "" {
+							pkgDeps = append(pkgDeps, d)
+						}
+					}
+					deps[pkg.Name] = pkgDeps
+				}
+				break
+			}
+		}
+	}
+	return deps
+}
+
 func (p *Pip) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

@@ -86,6 +86,35 @@ func (m *MacPorts) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (m *MacPorts) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("port", "deps", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			// Lines like: "Build Dependencies: dep1, dep2"
+			// "Library Dependencies: dep3"
+			// "Runtime Dependencies: dep4, dep5"
+			if idx := strings.Index(line, "Dependencies:"); idx >= 0 {
+				rest := strings.TrimSpace(line[idx+len("Dependencies:"):])
+				for _, d := range strings.Split(rest, ",") {
+					d = strings.TrimSpace(d)
+					if d != "" {
+						pkgDeps = append(pkgDeps, d)
+					}
+				}
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (m *MacPorts) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

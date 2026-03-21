@@ -1,3 +1,4 @@
 /gpk
 *.exe
 demo.tape
+.DS_Store

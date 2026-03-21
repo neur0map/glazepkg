@@ -96,6 +96,31 @@ func (f *FreeBSDPkg) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (f *FreeBSDPkg) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("pkg", "info", "-dq", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			// Lines are "dep-name-version"
+			idx := strings.LastIndex(line, "-")
+			if idx > 0 {
+				pkgDeps = append(pkgDeps, line[:idx])
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (f *FreeBSDPkg) Describe(pkgs []model.Package) map[string]string {
 	// Descriptions are already populated during Scan.
 	return nil

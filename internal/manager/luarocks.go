@@ -70,6 +70,37 @@ func (l *Luarocks) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (l *Luarocks) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("luarocks", "show", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		inDeps := false
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.TrimSpace(line) == "Dependencies:" {
+				inDeps = true
+				continue
+			}
+			if inDeps {
+				if !strings.HasPrefix(line, "   ") && !strings.HasPrefix(line, "\t") {
+					break
+				}
+				fields := strings.Fields(strings.TrimSpace(line))
+				if len(fields) >= 1 && fields[0] != "" {
+					pkgDeps = append(pkgDeps, fields[0])
+				}
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (l *Luarocks) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

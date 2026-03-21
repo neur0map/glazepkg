@@ -92,8 +92,8 @@ func (dc *DescriptionCache) Flush() {
 	dc.save()
 }
 
-// sanitizeDesc strips HTML tags and collapses whitespace from descriptions.
-func sanitizeDesc(s string) string {
+// SanitizeDesc strips HTML tags and collapses whitespace from descriptions.
+func SanitizeDesc(s string) string {
 	s = htmlTagRe.ReplaceAllString(s, "")
 	return strings.Join(strings.Fields(s), " ")
 }
@@ -124,7 +124,7 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 		var uncached []model.Package
 		for _, p := range srcPkgs {
 			if d, ok := cache.Get(p.Key()); ok {
-				result[p.Key()] = sanitizeDesc(d)
+				result[p.Key()] = SanitizeDesc(d)
 			} else {
 				uncached = append(uncached, p)
 			}
@@ -137,7 +137,7 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 		fetched := desc.Describe(uncached)
 		for _, p := range uncached {
 			if d, ok := fetched[p.Name]; ok && d != "" {
-				d = sanitizeDesc(d)
+				d = SanitizeDesc(d)
 				result[p.Key()] = d
 				cache.Set(p.Key(), d)
 			}

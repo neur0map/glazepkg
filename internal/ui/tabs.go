@@ -63,6 +63,9 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourceNix, "nix"},
 		{model.SourceConda, "conda"},
 		{model.SourceLuarocks, "luarocks"},
+		{model.SourceXbps, "xbps"},
+		{model.SourcePortage, "portage"},
+		{model.SourceGuix, "guix"},
 	}
 
 	for _, s := range sources {

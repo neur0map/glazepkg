@@ -32,8 +32,8 @@ func renderDetail(pkg model.Package, editing bool, descInput string) string {
 		{"Installed", formatInstalled(pkg)},
 		{"Location", pkg.Location},
 		{"Size", pkg.Size},
-		{"Depends on", formatList(pkg.DependsOn)},
-		{"Required by", formatList(pkg.RequiredBy)},
+		{"Depends on", formatListShort(pkg.DependsOn)},
+		{"Required by", formatListShort(pkg.RequiredBy)},
 	}
 
 	for _, f := range fields {
@@ -93,4 +93,119 @@ func formatList(items []string) string {
 		return ""
 	}
 	return strings.Join(items, ", ")
+}
+
+func formatListShort(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) <= 3 {
+		return strings.Join(items, ", ")
+	}
+	return fmt.Sprintf("%s  +%d more", strings.Join(items[:3], ", "), len(items)-3)
+}
+
+func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
+	var b strings.Builder
+
+	// Title
+	title := fmt.Sprintf("  Dependencies — %s", pkg.Name)
+	b.WriteString(StyleOverlayTitle.Render(title))
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 46)))
+	b.WriteString("\n")
+
+	hasDeps := len(pkg.DependsOn) > 0
+	hasReqBy := len(pkg.RequiredBy) > 0
+	total := len(pkg.DependsOn) + len(pkg.RequiredBy)
+
+	if total == 0 {
+		b.WriteString("\n")
+		b.WriteString(StyleDim.Render("  No dependencies"))
+		b.WriteString("\n")
+		return renderDepsOverlayFrame(b.String(), width, height, 6)
+	}
+
+	maxVisible := height - 12
+	if maxVisible < 5 {
+		maxVisible = 5
+	}
+	if maxVisible > total {
+		maxVisible = total
+	}
+
+	// Adjust scroll window
+	start := 0
+	if cursor >= maxVisible {
+		start = cursor - maxVisible + 1
+	}
+	end := start + maxVisible
+	if end > total {
+		end = total
+		start = max(0, end-maxVisible)
+	}
+
+	// Render "Depends on" section
+	if hasDeps {
+		b.WriteString("\n")
+		b.WriteString(StyleDetailKey.Render(fmt.Sprintf("  Depends on (%d)", len(pkg.DependsOn))))
+		b.WriteString("\n")
+	}
+
+	for i := start; i < end && i < len(pkg.DependsOn); i++ {
+		name := pkg.DependsOn[i]
+		if i == cursor {
+			b.WriteString(StyleSelected.Render(fmt.Sprintf("  ▸ %-44s", name)))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(StyleDetailVal.Render(fmt.Sprintf("  %-44s", name)))
+		}
+		b.WriteString("\n")
+	}
+
+	// Render "Required by" section
+	if hasReqBy {
+		// Show header if any required-by items are visible
+		reqStart := max(0, start-len(pkg.DependsOn))
+		reqEnd := end - len(pkg.DependsOn)
+		if reqEnd > 0 {
+			b.WriteString("\n")
+			b.WriteString(StyleDetailKey.Render(fmt.Sprintf("  Required by (%d)", len(pkg.RequiredBy))))
+			b.WriteString("\n")
+
+			if reqStart < 0 {
+				reqStart = 0
+			}
+			for i := reqStart; i < reqEnd && i < len(pkg.RequiredBy); i++ {
+				globalIdx := len(pkg.DependsOn) + i
+				name := pkg.RequiredBy[i]
+				if globalIdx == cursor {
+					b.WriteString(StyleSelected.Render(fmt.Sprintf("  ▸ %-44s", name)))
+				} else {
+					b.WriteString("  ")
+					b.WriteString(StyleDetailVal.Render(fmt.Sprintf("  %-44s", name)))
+				}
+				b.WriteString("\n")
+			}
+		}
+	}
+
+	// Scroll indicator
+	b.WriteString("\n")
+	indicator := fmt.Sprintf("  %d/%d", cursor+1, total)
+	b.WriteString(StyleDim.Render(indicator))
+
+	overlayHeight := min(maxVisible+10, height-4)
+	return renderDepsOverlayFrame(b.String(), width, height, overlayHeight)
+}
+
+func renderDepsOverlayFrame(content string, width, height, overlayHeight int) string {
+	overlayWidth := 54
+
+	overlay := StyleOverlay.
+		Width(overlayWidth).
+		Height(overlayHeight).
+		Render(content)
+
+	return placeOverlay(width, height, overlay)
 }
