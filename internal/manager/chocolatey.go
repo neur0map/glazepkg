@@ -76,7 +76,8 @@ func (c *Chocolatey) parseListOutput(s string) []model.Package {
 			continue
 		}
 		name, version := parts[0], parts[1]
-		// Version should begin with a digit
+		// choco always appends a summary line like "3 packages installed";
+		// a non-digit in the version column reliably filters those out.
 		if len(version) == 0 || version[0] < '0' || version[0] > '9' {
 			continue
 		}

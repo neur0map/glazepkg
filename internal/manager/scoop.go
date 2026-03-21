@@ -30,7 +30,8 @@ func (s *Scoop) Scan() ([]model.Package, error) {
 
 	text := string(out)
 
-	// Modern tabular format: uses a separator line of dashes like winget.
+	// Modern tabular format uses the same dash-separator layout as winget;
+	// wingetIsSep/wingetColumns/wingetExtract are reused deliberately.
 	if strings.Contains(text, "----") {
 		return s.parseTabular(text)
 	}
@@ -52,7 +53,7 @@ func (s *Scoop) parseTabular(text string) ([]model.Package, error) {
 		if colStarts == nil {
 			if wingetIsSep(strings.TrimSpace(line)) {
 				colStarts = wingetColumns(strings.TrimSpace(line))
-				// Adjust starts for leading indent
+				// scoop indents its table; offset positions to match actual byte positions in each data line.
 				indent := len(line) - len(strings.TrimLeft(line, " "))
 				for i := range colStarts {
 					colStarts[i] += indent

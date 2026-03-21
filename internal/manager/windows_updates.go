@@ -46,7 +46,7 @@ $ErrorActionPreference = 'Stop'
 try {
     $session  = New-Object -ComObject "Microsoft.Update.Session"
     $searcher = $session.CreateUpdateSearcher()
-    $result   = $searcher.Search("IsInstalled=0")
+    $result   = $searcher.Search("IsInstalled=0")  # WU COM query syntax: pending (not yet installed) updates
     $list = @()
     foreach ($u in $result.Updates) {
         $kb  = if ($u.KBArticleIDs.Count -gt 0) { $u.KBArticleIDs[0] } else { "N/A" }
@@ -61,7 +61,7 @@ try {
         }
     }
     if ($list.Count -eq 0) { Write-Output "[]"; exit 0 }
-    ConvertTo-Json -InputObject @($list) -Compress
+    ConvertTo-Json -InputObject @($list) -Compress  # @() required: single item would otherwise emit an object, not an array
 } catch {
     Write-Output "[]"
     exit 0
@@ -69,7 +69,9 @@ try {
 `
 	out, err := exec.Command(w.psExe(), "-NoProfile", "-Command", script).Output()
 	if err != nil {
-		return nil, nil // WU service unavailable — degrade gracefully
+		// Deliberately nil error: WU is unreliable on corporate/offline/policy-restricted machines.
+		// A hard error would block the whole scan; returning nothing is the right degradation.
+		return nil, nil
 	}
 
 	var updates []winUpdate

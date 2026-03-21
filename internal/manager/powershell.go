@@ -11,6 +11,7 @@ import (
 
 // PowerShell surfaces installed PowerShell modules via Get-Module -ListAvailable.
 // Works with both Windows PowerShell (powershell.exe) and PowerShell Core (pwsh).
+// pwsh runs on macOS and Linux too, so this manager is not Windows-only by design.
 type PowerShell struct{}
 
 func (ps *PowerShell) Name() model.Source { return model.SourcePowerShell }
@@ -49,6 +50,8 @@ $m = Get-Module -ListAvailable | Select-Object -Property Name, Version, Descript
 if ($m -is [array]) { ConvertTo-Json -InputObject $m -Compress }
 else { ConvertTo-Json -InputObject @($m) -Compress }
 `
+	// Note: the @() wrapper in the script is required — PowerShell's ConvertTo-Json
+	// emits a bare object (not an array) when there is only one result.
 	out, err := exec.Command(ps.exe(), "-NoProfile", "-Command", script).Output()
 	if err != nil {
 		return nil, err

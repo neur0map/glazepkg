@@ -11,7 +11,8 @@ import (
 )
 
 // Nuget surfaces packages from the local NuGet global package cache (~/.nuget/packages).
-// This is cross-platform: the cache exists wherever the .NET SDK is installed.
+// This is intentionally cross-platform: the cache exists wherever the .NET SDK is installed,
+// including macOS and Linux. Do not add a runtime.GOOS == "windows" guard here.
 type Nuget struct{}
 
 func (n *Nuget) Name() model.Source { return model.SourceNuget }
@@ -64,7 +65,7 @@ func (n *Nuget) Scan() ([]model.Package, error) {
 			continue
 		}
 
-		// Find the semver-highest version (proper numeric comparison, not lexicographic)
+		// Find the semver-highest version — lexicographic sort breaks for "10.x" vs "9.x", hence nugetSemverGT.
 		latest := versionNames[0]
 		for _, v := range versionNames[1:] {
 			if nugetSemverGT(v, latest) {

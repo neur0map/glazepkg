@@ -33,7 +33,7 @@ type wingetEntry struct {
 // Tries JSON output first (winget 1.5+), then falls back to fixed-width text parsing.
 func (w *Winget) Scan() ([]model.Package, error) {
 	out, err := exec.Command("winget", "list",
-		"--accept-source-agreements",
+		"--accept-source-agreements", // without this winget blocks on an interactive EULA prompt
 		"--output", "json",
 	).Output()
 	if err == nil && len(out) > 0 {
@@ -45,7 +45,7 @@ func (w *Winget) Scan() ([]model.Package, error) {
 }
 
 // parseJSON attempts to unmarshal winget JSON output, trying multiple schema shapes
-// since the JSON format varies across winget versions.
+// since the JSON format changed across winget versions and both are in the wild.
 func (w *Winget) parseJSON(data []byte) ([]model.Package, error) {
 	// Schema A: flat array
 	var flat []wingetEntry
@@ -143,8 +143,8 @@ func (w *Winget) parseTextOutput(s string) []model.Package {
 // CheckUpdates runs `winget upgrade` and returns available version per package name.
 func (w *Winget) CheckUpdates(_ []model.Package) map[string]string {
 	out, err := exec.Command("winget", "upgrade",
-		"--include-unknown",
-		"--accept-source-agreements",
+		"--include-unknown",          // show packages whose current version winget doesn't recognise
+		"--accept-source-agreements", // same as Scan: prevents interactive blocking
 	).Output()
 	if err != nil || len(out) == 0 {
 		return nil
@@ -197,6 +197,7 @@ func wingetIsSep(line string) bool {
 }
 
 // wingetColumns derives column start byte positions from a separator line.
+// Column widths vary with content, so positions can't be hardcoded.
 func wingetColumns(sep string) []int {
 	var starts []int
 	prev := ' '
