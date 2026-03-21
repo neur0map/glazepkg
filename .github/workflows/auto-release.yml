@@ -49,6 +49,8 @@ jobs:
           GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o gpk-darwin-amd64 ./cmd/gpk
           GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o gpk-linux-amd64 ./cmd/gpk
           GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o gpk-linux-arm64 ./cmd/gpk
+          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o gpk-windows-amd64.exe ./cmd/gpk
+          GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o gpk-windows-arm64.exe ./cmd/gpk
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -60,3 +62,5 @@ jobs:
             gpk-darwin-amd64
             gpk-linux-amd64
             gpk-linux-arm64
+            gpk-windows-amd64.exe
+            gpk-windows-arm64.exe
