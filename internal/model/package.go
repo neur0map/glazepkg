@@ -29,10 +29,16 @@ const (
 	SourceApk      Source = "apk"
 	SourceNix      Source = "nix"
 	SourceConda    Source = "conda"
-	SourceLuarocks Source = "luarocks"
-	SourceXbps     Source = "xbps"
-	SourcePortage  Source = "portage"
-	SourceGuix     Source = "guix"
+	SourceLuarocks       Source = "luarocks"
+	SourceXbps           Source = "xbps"
+	SourcePortage        Source = "portage"
+	SourceGuix           Source = "guix"
+	SourceWinget         Source = "winget"
+	SourceChocolatey     Source = "chocolatey"
+	SourceNuget          Source = "nuget"
+	SourcePowerShell     Source = "powershell"
+	SourceWindowsUpdates Source = "windows-updates"
+	SourceScoop          Source = "scoop"
 )
 
 type Package struct {
