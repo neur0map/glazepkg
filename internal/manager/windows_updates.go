@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
-	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
 )
@@ -109,7 +108,6 @@ func (w *WindowsUpdates) buildPackages(updates []winUpdate) []model.Package {
 			SizeBytes:   u.Size,
 			Source:      model.SourceWindowsUpdates,
 			Repository:  u.Categories,
-			InstalledAt: time.Now(),
 		})
 	}
 	return pkgs

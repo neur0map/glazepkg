@@ -46,7 +46,13 @@ var (
 // the result for Describe() to consume.
 func (ps *PowerShell) Scan() ([]model.Package, error) {
 	script := `
-$m = Get-Module -ListAvailable | Select-Object -Property Name, Version, Description
+$m = Get-Module -ListAvailable | ForEach-Object {
+    [PSCustomObject]@{
+        Name        = $_.Name
+        Version     = if ($_.Version) { $_.Version.ToString() } else { "" }
+        Description = $_.Description
+    }
+}
 if ($m -is [array]) { ConvertTo-Json -InputObject $m -Compress }
 else { ConvertTo-Json -InputObject @($m) -Compress }
 `
