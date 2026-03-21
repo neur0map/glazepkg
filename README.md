@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **31 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **34 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml/badge.svg)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
@@ -26,7 +26,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **31 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Windows Update (+ brew dependency tracking)
+- **34 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Windows Update
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Size filter** — press `f` to cycle through size filters (< 1 MB, 1–10 MB, 10–100 MB, > 100 MB, has updates); sorted largest-first
 - **Fuzzy search** — find any package across all managers instantly with `/`
@@ -97,8 +97,9 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
-| **brew** | macOS/Linux | Explicitly installed formulae | batch via JSON |
-| **brew-deps** | macOS/Linux | Auto-installed brew dependencies | batch via JSON |
+| Manager | Platform | What it scans | Descriptions |
+|---------|----------|---------------|-------------|
+| **brew** | macOS/Linux | Installed formulae | batch via JSON |
 | **pacman** | Arch | Explicit native packages | `pacman -Qi` |
 | **AUR** | Arch | Foreign/AUR packages | `pacman -Qi` |
 | **apt** | Debian/Ubuntu | Installed packages | `apt-cache show` |
@@ -120,20 +121,24 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | **composer** | Cross-platform | Global PHP packages | inline from JSON |
 | **mas** | macOS | Mac App Store apps | — |
 | **apk** | Alpine Linux | Installed packages | `apk info` |
-| **nix** | NixOS/cross-platform | Nix packages | `nix-env -qa` |
+| **nix** | NixOS/cross-platform | Nix profile, nix-env, and NixOS system packages | `nix-env -qa` |
 | **conda/mamba** | Cross-platform | Conda environments | — |
 | **luarocks** | Cross-platform | Lua rocks | `luarocks show` |
+| **XBPS** | Void Linux | Installed packages | `xbps-query` |
+| **Portage** | Gentoo | Installed ebuilds via `qlist` | `emerge -s` |
+| **Guix** | GNU Guix | Installed packages | `guix show` |
 | **winget** | Windows | Windows Package Manager | — |
 | **chocolatey** | Windows | Chocolatey packages (v1 + v2) | — |
 | **scoop** | Windows | Scoop packages | — |
 | **nuget** | Cross-platform | NuGet global package cache | — |
-| **powershell** | Cross-platform | PowerShell modules | — |
+| **powershell** | Cross-platform | PowerShell modules | via scan |
 | **windows-updates** | Windows | Pending Windows system updates | — |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
-- Brew separates explicitly installed formulae from auto-pulled dependencies — deps go in a dedicated **deps** tab.
 - Descriptions are fetched in the background and cached for 24 hours.
 - Packages with available updates show a `↑` indicator next to their version (checked every 7 days).
+- Press `d` in the detail view to see full dependency tree for any package.
+- Press `h` in the detail view to see the package's `--help` output.
 - Press `e` in the detail view to add custom descriptions — these persist across sessions and won't be overwritten.
 
 ## Keybindings
@@ -148,6 +153,8 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | `f` | Cycle size filter |
 | `/` | Fuzzy search |
 | `Enter` | Package details |
+| `d` (detail) | View dependencies |
+| `h` (detail) | Package help/usage |
 | `e` (detail) | Edit description |
 | `s` | Save snapshot |
 | `d` | Diff against last snapshot |
