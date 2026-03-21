@@ -13,14 +13,7 @@ type Apk struct{}
 
 func (a *Apk) Name() model.Source { return model.SourceApk }
 
-func (a *Apk) Available() bool {
-	if !commandExists("apk") {
-		return false
-	}
-	// Verify it's Alpine's apk, not something else
-	err := exec.Command("apk", "info", "--help").Run()
-	return err == nil
-}
+func (a *Apk) Available() bool { return commandExists("apk") }
 
 func (a *Apk) Scan() ([]model.Package, error) {
 	// -vv gives "name-version description" per line

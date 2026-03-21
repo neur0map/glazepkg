@@ -90,7 +90,7 @@ func formatInstalled(pkg model.Package) string {
 
 func formatList(items []string) string {
 	if len(items) == 0 {
-		return "(none)"
+		return ""
 	}
 	return strings.Join(items, ", ")
 }
