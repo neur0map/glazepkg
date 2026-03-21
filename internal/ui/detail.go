@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/neur0map/glazepkg/internal/model"
 )
 
@@ -208,4 +210,118 @@ func renderDepsOverlayFrame(content string, width, height, overlayHeight int) st
 		Render(content)
 
 	return placeOverlay(width, height, overlay)
+}
+
+func renderPkgHelpOverlay(name string, lines []string, scroll, width, height int) string {
+	var b strings.Builder
+
+	overlayWidth := width - 10
+	if overlayWidth > 120 {
+		overlayWidth = 120
+	}
+	if overlayWidth < 40 {
+		overlayWidth = 40
+	}
+	contentWidth := overlayWidth - 6
+
+	// Title
+	title := fmt.Sprintf("  %s --help", name)
+	b.WriteString(StyleOverlayTitle.Render(title))
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(contentWidth, overlayWidth-4))))
+	b.WriteString("\n")
+
+	if len(lines) == 0 {
+		b.WriteString("\n")
+		b.WriteString(StyleDim.Render("  No help available"))
+		b.WriteString("\n")
+	} else {
+		visibleLines := height - 10
+		if visibleLines < 5 {
+			visibleLines = 5
+		}
+
+		end := scroll + visibleLines
+		if end > len(lines) {
+			end = len(lines)
+		}
+
+		headingStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+		flagStyle := lipgloss.NewStyle().Foreground(ColorGreen)
+		normalStyle := lipgloss.NewStyle().Foreground(ColorText)
+
+		for i := scroll; i < end; i++ {
+			line := lines[i]
+			// Truncate long lines
+			if len(line) > contentWidth {
+				line = line[:contentWidth-1] + "…"
+			}
+
+			trimmed := strings.TrimSpace(line)
+
+			// Style based on content
+			var styled string
+			switch {
+			case trimmed == "":
+				styled = ""
+			case isHelpHeading(trimmed):
+				styled = headingStyle.Render("  " + line)
+			case strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "--"):
+				styled = "  " + flagStyle.Render(line)
+			default:
+				styled = "  " + normalStyle.Render(line)
+			}
+
+			b.WriteString(styled)
+			b.WriteString("\n")
+		}
+
+		// Scroll indicator
+		if len(lines) > visibleLines {
+			pct := (scroll + visibleLines) * 100 / len(lines)
+			if pct > 100 {
+				pct = 100
+			}
+			indicator := fmt.Sprintf("  ─── %d%% ───", pct)
+			b.WriteString(StyleDim.Render(indicator))
+		}
+	}
+
+	overlayHeight := min(height-4, len(lines)+6)
+	if overlayHeight < 8 {
+		overlayHeight = 8
+	}
+	if overlayHeight > height-4 {
+		overlayHeight = height - 4
+	}
+
+	overlay := StyleOverlay.
+		Width(overlayWidth).
+		Height(overlayHeight).
+		Render(b.String())
+
+	return placeOverlay(width, height, overlay)
+}
+
+// isHelpHeading detects section headings in help output.
+func isHelpHeading(line string) bool {
+	if len(line) == 0 {
+		return false
+	}
+	// "USAGE:", "OPTIONS:", "COMMANDS:", etc.
+	if strings.ToUpper(line) == line && strings.HasSuffix(line, ":") {
+		return true
+	}
+	// "Usage:", "Options:", "Commands:", etc.
+	if line[0] >= 'A' && line[0] <= 'Z' && strings.HasSuffix(line, ":") && !strings.Contains(line, " ") {
+		return true
+	}
+	// Common patterns
+	upper := strings.ToUpper(line)
+	for _, heading := range []string{"USAGE", "OPTIONS", "COMMANDS", "FLAGS", "ARGUMENTS", "EXAMPLES", "DESCRIPTION", "SYNOPSIS", "SUBCOMMANDS", "GLOBAL OPTIONS", "AVAILABLE COMMANDS"} {
+		if strings.HasPrefix(upper, heading) {
+			return true
+		}
+	}
+	return false
 }

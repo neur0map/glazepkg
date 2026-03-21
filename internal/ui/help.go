@@ -21,6 +21,7 @@ func renderHelpOverlay(width, height int) string {
 		{"Enter", "Package details"},
 		{"e (detail)", "Edit description"},
 		{"d (detail)", "View dependencies"},
+		{"h (detail)", "Package help/usage"},
 		{"f", "Cycle filter"},
 		{"r", "Rescan all managers"},
 		{"s", "Save snapshot"},

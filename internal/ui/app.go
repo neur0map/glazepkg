@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -82,6 +83,10 @@ type exportDoneMsg struct {
 	err  error
 }
 
+type pkgHelpMsg struct {
+	lines []string
+}
+
 type Model struct {
 	width  int
 	height int
@@ -117,6 +122,9 @@ type Model struct {
 	exportCursor int
 	showDeps     bool
 	depsCursor   int
+	showPkgHelp  bool
+	pkgHelpLines []string
+	pkgHelpScroll int
 
 	// Descriptions
 	loadingDescs bool
@@ -271,6 +279,51 @@ func fetchDescriptions(pkgs []model.Package, cache *manager.DescriptionCache, sk
 	}
 }
 
+func fetchPkgHelp(name string) tea.Cmd {
+	return func() tea.Msg {
+		lines := tryPkgHelp(name)
+		return pkgHelpMsg{lines: lines}
+	}
+}
+
+func tryPkgHelp(name string) []string {
+	// Try common help flags in order
+	flags := [][]string{
+		{name, "--help"},
+		{name, "-h"},
+		{name, "help"},
+	}
+	for _, args := range flags {
+		cmd := exec.Command(args[0], args[1:]...)
+		// Many tools write help to stderr
+		out, err := cmd.CombinedOutput()
+		if len(out) > 0 {
+			return parseHelpOutput(string(out))
+		}
+		_ = err
+	}
+	return []string{"No help available for " + name}
+}
+
+func parseHelpOutput(raw string) []string {
+	var lines []string
+	for _, line := range strings.Split(raw, "\n") {
+		// Replace tabs with spaces for consistent rendering
+		line = strings.ReplaceAll(line, "\t", "    ")
+		lines = append(lines, line)
+	}
+	// Trim trailing empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	// Cap at 500 lines
+	if len(lines) > 500 {
+		lines = lines[:500]
+		lines = append(lines, "... (truncated)")
+	}
+	return lines
+}
+
 func fetchDependencies(pkgs []model.Package, cache *manager.DepsCache) tea.Cmd {
 	return func() tea.Msg {
 		// Filter out packages that already have deps (e.g., populated during scan)
@@ -381,6 +434,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.applyFilter()
+		return m, nil
+
+	case pkgHelpMsg:
+		m.pkgHelpLines = msg.lines
+		m.pkgHelpScroll = 0
+		m.showPkgHelp = true
 		return m, nil
 
 	case snapshotSavedMsg:
@@ -647,6 +706,41 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
+	// Help overlay intercepts keys
+	if m.showPkgHelp {
+		maxScroll := len(m.pkgHelpLines) - (m.height - 8)
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		switch key {
+		case "esc", "q", "h":
+			m.showPkgHelp = false
+		case "j", "down":
+			if m.pkgHelpScroll < maxScroll {
+				m.pkgHelpScroll++
+			}
+		case "k", "up":
+			if m.pkgHelpScroll > 0 {
+				m.pkgHelpScroll--
+			}
+		case "ctrl+d", "pgdown":
+			m.pkgHelpScroll += m.height / 2
+			if m.pkgHelpScroll > maxScroll {
+				m.pkgHelpScroll = maxScroll
+			}
+		case "ctrl+u", "pgup":
+			m.pkgHelpScroll -= m.height / 2
+			if m.pkgHelpScroll < 0 {
+				m.pkgHelpScroll = 0
+			}
+		case "g", "home":
+			m.pkgHelpScroll = 0
+		case "G", "end":
+			m.pkgHelpScroll = maxScroll
+		}
+		return m, nil
+	}
+
 	// Deps overlay intercepts keys
 	if m.showDeps {
 		switch key {
@@ -675,6 +769,7 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc", "q":
 		m.showDeps = false
+		m.showPkgHelp = false
 		m.view = viewList
 	case "e":
 		m.editingDesc = true
@@ -686,6 +781,9 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			m.showDeps = true
 			m.depsCursor = 0
 		}
+	case "h":
+		m.statusMsg = "loading help..."
+		return m, fetchPkgHelp(m.detailPkg.Name)
 	}
 	return m, nil
 }
@@ -799,6 +897,9 @@ func (m Model) View() string {
 	if m.showDeps {
 		return content + "\n" + renderDepsOverlay(m.detailPkg, m.depsCursor, m.width, m.height)
 	}
+	if m.showPkgHelp {
+		return content + "\n" + renderPkgHelpOverlay(m.detailPkg.Name, m.pkgHelpLines, m.pkgHelpScroll, m.width, m.height)
+	}
 
 	return content
 }
@@ -911,6 +1012,11 @@ func (m Model) renderStatusBar() string {
 				{"enter", "save"}, {"esc", "cancel"},
 			})
 		}
+		if m.showPkgHelp {
+			return " " + formatBinds([]struct{ key, desc string }{
+				{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
+			})
+		}
 		if m.showDeps {
 			return " " + formatBinds([]struct{ key, desc string }{
 				{"j/k", "navigate"}, {"esc", "close"},
@@ -922,6 +1028,7 @@ func (m Model) renderStatusBar() string {
 		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
 			binds = append(binds, struct{ key, desc string }{"d", "dependencies"})
 		}
+		binds = append(binds, struct{ key, desc string }{"h", "help/usage"})
 		binds = append(binds, struct{ key, desc string }{"esc", "back"}, struct{ key, desc string }{"q", "quit"})
 		return " " + formatBinds(binds)
 	case viewDiff:
