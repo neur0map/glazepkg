@@ -16,6 +16,48 @@ func (a *Apt) Name() model.Source { return model.SourceApt }
 func (a *Apt) Available() bool { return commandExists("dpkg-query") }
 
 func (a *Apt) Scan() ([]model.Package, error) {
+	// Get explicitly installed packages only
+	manualOut, err := exec.Command("apt-mark", "showmanual").Output()
+	if err != nil {
+		// Fallback to all packages if apt-mark fails
+		return a.scanAll()
+	}
+
+	manual := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(string(manualOut)))
+	for scanner.Scan() {
+		name := strings.TrimSpace(scanner.Text())
+		if name != "" {
+			manual[name] = true
+		}
+	}
+
+	out, err := exec.Command("dpkg-query", "-W", "-f=${Package} ${Version}\n").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var pkgs []model.Package
+	scanner = bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		if !manual[fields[0]] {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        fields[0],
+			Version:     fields[1],
+			Source:      model.SourceApt,
+			InstalledAt: time.Now(),
+		})
+	}
+	return pkgs, nil
+}
+
+func (a *Apt) scanAll() ([]model.Package, error) {
 	out, err := exec.Command("dpkg-query", "-W", "-f=${Package} ${Version}\n").Output()
 	if err != nil {
 		return nil, err
