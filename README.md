@@ -10,7 +10,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config
 [![CI](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml/badge.svg)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg)](https://go.dev/)
 [![Release](https://img.shields.io/github/v/release/neur0map/glazepkg)](https://github.com/neur0map/glazepkg/releases)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/neur0map/glazepkg/total)](https://github.com/neur0map/glazepkg/releases)
 [![Stars](https://img.shields.io/github/stars/neur0map/glazepkg)](https://github.com/neur0map/glazepkg/stargazers)
 
@@ -203,4 +203,4 @@ All data lives under `~/.local/share/glazepkg/` (respects `XDG_DATA_HOME`):
 
 ## License
 
-[MIT](LICENSE)
+[GPL-3.0](LICENSE)
