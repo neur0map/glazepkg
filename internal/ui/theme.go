@@ -103,7 +103,6 @@ var (
 // ManagerColors maps each source to its badge color.
 var ManagerColors = map[model.Source]lipgloss.Color{
 	model.SourceBrew:     ColorYellow,
-	model.SourceBrewDeps: ColorSubtext,
 	model.SourcePacman:  ColorBlue,
 	model.SourceAUR:     ColorCyan,
 	model.SourceApt:     ColorGreen,

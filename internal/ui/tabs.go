@@ -13,10 +13,8 @@ type tabItem struct {
 	Count  int
 }
 
-// depSources are sources hidden from the ALL tab.
-var depSources = map[model.Source]bool{
-	model.SourceBrewDeps: true,
-}
+// depSources are sources hidden from the ALL tab (none currently).
+var depSources = map[model.Source]bool{}
 
 func buildTabs(pkgs []model.Package) []tabItem {
 	counts := make(map[string]int)
@@ -38,7 +36,6 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		label  string
 	}{
 		{model.SourceBrew, "brew"},
-		{model.SourceBrewDeps, "deps"},
 		{model.SourcePacman, "pacman"},
 		{model.SourceAUR, "aur"},
 		{model.SourceApt, "apt"},

@@ -80,35 +80,23 @@ func (b *Brew) Scan() ([]model.Package, error) {
 			continue
 		}
 		inst := f.Installed[0]
+		if !inst.InstalledOnRequest {
+			continue // skip auto-installed dependencies
+		}
 		sizeBytes := sizes[f.Name]
 		sizeStr := FormatBytes(sizeBytes)
 
-		if inst.InstalledOnRequest {
-			// Explicit package → goes in "brew" tab
-			pkgs = append(pkgs, model.Package{
-				Name:        f.Name,
-				Version:     inst.Version,
-				Description: f.Desc,
-				Source:      model.SourceBrew,
-				DependsOn:   f.Dependencies,
-				InstalledAt: time.Now(),
-				Size:        sizeStr,
-				SizeBytes:   sizeBytes,
-			})
-		} else {
-			// Auto-installed dependency → goes in "brew-deps" tab
-			pkgs = append(pkgs, model.Package{
-				Name:        f.Name,
-				Version:     inst.Version,
-				Description: f.Desc,
-				Source:      model.SourceBrewDeps,
-				DependsOn:   f.Dependencies,
-				RequiredBy:  requiredBy[f.Name],
-				InstalledAt: time.Now(),
-				Size:        sizeStr,
-				SizeBytes:   sizeBytes,
-			})
-		}
+		pkgs = append(pkgs, model.Package{
+			Name:        f.Name,
+			Version:     inst.Version,
+			Description: f.Desc,
+			Source:      model.SourceBrew,
+			DependsOn:   f.Dependencies,
+			RequiredBy:  requiredBy[f.Name],
+			InstalledAt: time.Now(),
+			Size:        sizeStr,
+			SizeBytes:   sizeBytes,
+		})
 	}
 	return pkgs, nil
 }

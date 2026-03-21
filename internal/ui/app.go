@@ -562,7 +562,11 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "esc":
-		if m.filterInput.Value() != "" {
+		if m.sizeFilter > 0 {
+			m.sizeFilter = 0
+			m.statusMsg = ""
+			m.applyFilter()
+		} else if m.filterInput.Value() != "" {
 			m.filterInput.SetValue("")
 			m.applyFilter()
 		}
