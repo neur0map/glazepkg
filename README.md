@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **25 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **31 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml/badge.svg)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
@@ -26,7 +26,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **25 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks (+ brew dependency tracking)
+- **31 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Windows Update (+ brew dependency tracking)
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Size filter** — press `f` to cycle through size filters (< 1 MB, 1–10 MB, 10–100 MB, > 100 MB, has updates); sorted largest-first
 - **Fuzzy search** — find any package across all managers instantly with `/`
@@ -39,7 +39,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Tokyo Night theme** — carefully designed color palette with per-manager color coding
 - **Vim keybindings** — `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u` — feels like home
 - **Zero dependencies** — single static Go binary, no runtime requirements
-- **Cross-platform** — works on macOS and Linux; skips managers that aren't installed
+- **Cross-platform** — works on macOS, Linux, and Windows; skips managers that aren't installed
 
 ## Install
 
@@ -118,6 +118,12 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | **nix** | NixOS/cross-platform | Nix packages | `nix-env -qa` |
 | **conda/mamba** | Cross-platform | Conda environments | — |
 | **luarocks** | Cross-platform | Lua rocks | `luarocks show` |
+| **winget** | Windows | Windows Package Manager | — |
+| **chocolatey** | Windows | Chocolatey packages (v1 + v2) | — |
+| **scoop** | Windows | Scoop packages | — |
+| **nuget** | Cross-platform | NuGet global package cache | — |
+| **powershell** | Cross-platform | PowerShell modules | — |
+| **windows-update** | Windows | Pending Windows system updates | — |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Brew separates explicitly installed formulae from auto-pulled dependencies — deps go in a dedicated **deps** tab.
