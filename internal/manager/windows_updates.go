@@ -12,6 +12,8 @@ import (
 
 // WindowsUpdates surfaces pending Windows system updates via the Windows Update API.
 // Requires Windows 10/11 and PowerShell; gracefully returns nothing on other platforms.
+const maxWindowsUpdates = 50 // guard against unexpectedly large update lists
+
 type WindowsUpdates struct{}
 
 func (w *WindowsUpdates) Name() model.Source { return model.SourceWindowsUpdates }
@@ -86,7 +88,7 @@ try {
 func (w *WindowsUpdates) buildPackages(updates []winUpdate) []model.Package {
 	pkgs := make([]model.Package, 0, len(updates))
 	for i, u := range updates {
-		if i >= 50 { // guard against unexpectedly large update lists
+		if i >= maxWindowsUpdates {
 			break
 		}
 		name := u.Title

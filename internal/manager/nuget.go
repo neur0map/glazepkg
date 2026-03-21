@@ -90,8 +90,12 @@ func nugetSemverGT(a, b string) bool {
 }
 
 func nugetCompare(a, b string) int {
-	aParts := strings.Split(a, ".")
-	bParts := strings.Split(b, ".")
+	// Strip prerelease suffix first so "6.0.0-preview.5" doesn't gain a phantom 4th segment.
+	aBase, aPrerel, _ := strings.Cut(a, "-")
+	bBase, bPrerel, _ := strings.Cut(b, "-")
+
+	aParts := strings.Split(aBase, ".")
+	bParts := strings.Split(bBase, ".")
 	n := len(aParts)
 	if len(bParts) > n {
 		n = len(bParts)
@@ -99,12 +103,10 @@ func nugetCompare(a, b string) int {
 	for i := 0; i < n; i++ {
 		ai, bi := 0, 0
 		if i < len(aParts) {
-			s := strings.SplitN(aParts[i], "-", 2)[0]
-			ai, _ = strconv.Atoi(s)
+			ai, _ = strconv.Atoi(aParts[i])
 		}
 		if i < len(bParts) {
-			s := strings.SplitN(bParts[i], "-", 2)[0]
-			bi, _ = strconv.Atoi(s)
+			bi, _ = strconv.Atoi(bParts[i])
 		}
 		if ai < bi {
 			return -1
@@ -112,6 +114,13 @@ func nugetCompare(a, b string) int {
 		if ai > bi {
 			return 1
 		}
+	}
+	// Base versions equal: stable release beats prerelease.
+	if aPrerel == "" && bPrerel != "" {
+		return 1
+	}
+	if aPrerel != "" && bPrerel == "" {
+		return -1
 	}
 	return 0
 }

@@ -19,10 +19,8 @@ func TestWingetIsSep(t *testing.T) {
 		{"Git   Git.Git  2.44.0", false},
 		{"   ", false},
 		{"--  -- x", false},
-		{"  --  --  --  ", false}, // leading/trailing spaces contain non-dash non-space? No — spaces are ok
+		{"  --  --  --  ", true}, // leading/trailing spaces are fine; space is an allowed character
 	}
-	// Fix: leading/trailing spaces are fine since space is allowed
-	tests[len(tests)-1].want = true
 
 	for _, tt := range tests {
 		got := wingetIsSep(tt.input)

@@ -150,12 +150,13 @@ func TestChocolateyIsV2Detection(t *testing.T) {
 		{"2.3.0", true},
 		{"2.0.0", true},
 		{"9.1.2", true},
+		{"10.0.0", true}, // double-digit major must not be misclassified
 		{"1.4.0", false},
 		{"1.0.0", false},
 		{"0.9.0", false},
 	}
 	for _, tt := range tests {
-		got := len(tt.version) > 0 && tt.version[0] >= '2'
+		got := chocoIsV2OrLater(tt.version)
 		if got != tt.want {
 			t.Errorf("version %q: isV2 = %v, want %v", tt.version, got, tt.want)
 		}

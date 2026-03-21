@@ -72,6 +72,9 @@ func TestScoopParseTabularDateOnlyTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if len(pkgs) == 0 {
+		t.Fatal("expected at least 1 package, got 0")
+	}
 	want, _ := time.ParseInLocation("2006-01-02", "2024-03-15", time.Local)
 	if !pkgs[0].InstalledAt.Equal(want) {
 		t.Errorf("InstalledAt = %v, want %v", pkgs[0].InstalledAt, want)

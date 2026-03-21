@@ -198,10 +198,12 @@ func wingetIsSep(line string) bool {
 
 // wingetColumns derives column start byte positions from a separator line.
 // Column widths vary with content, so positions can't be hardcoded.
+// Uses byte iteration (not rune) to stay consistent with the byte-based slicing in wingetExtract.
 func wingetColumns(sep string) []int {
 	var starts []int
-	prev := ' '
-	for i, c := range sep {
+	prev := byte(' ')
+	for i := 0; i < len(sep); i++ {
+		c := sep[i]
 		if c == '-' && prev == ' ' {
 			starts = append(starts, i)
 		}

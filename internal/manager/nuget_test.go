@@ -29,9 +29,10 @@ func TestNugetCompare(t *testing.T) {
 		{"1.0", "1.0.0", 0},
 		{"1.1", "1.0.0", 1},
 		{"1.0", "1.0.1", -1},
-		// Pre-release suffixes are stripped
-		{"2.0.0-preview1", "1.9.9", 1},
-		{"1.0.0-beta", "1.0.0", 0}, // stripped to "1.0.0" vs "1.0.0"
+		// Pre-release: stable beats prerelease of same base version
+		{"2.0.0-preview1", "1.9.9", 1},  // higher major wins regardless of prerelease
+		{"1.0.0-beta", "1.0.0", -1},     // prerelease < stable of same version
+		{"1.0.0", "1.0.0-beta", 1},      // stable > prerelease of same version
 		// Four-part NuGet versions
 		{"4.8.1.0", "4.8.0.1", 1},
 		{"4.8.0.1", "4.8.1.0", -1},
@@ -70,7 +71,7 @@ func TestNugetComparePicksLatest(t *testing.T) {
 }
 
 func TestNugetComparePicksLatestPreRelease(t *testing.T) {
-	// Pre-release tags stripped: "6.0.0-preview.5" should beat "5.0.2"
+	// "6.0.0-preview.5" beats "5.0.2" because 6 > 5 (higher major wins)
 	versions := []string{"5.0.2", "6.0.0-preview.5", "4.8.1"}
 	latest := versions[0]
 	for _, v := range versions[1:] {

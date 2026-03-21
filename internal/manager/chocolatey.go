@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,9 +36,21 @@ func (c *Chocolatey) isV2() bool {
 	if err != nil {
 		return false
 	}
-	v := strings.TrimSpace(string(out))
-	// First character of "2.x.x" is >= '2'; covers v2 through v9
-	return len(v) > 0 && v[0] >= '2'
+	return chocoIsV2OrLater(strings.TrimSpace(string(out)))
+}
+
+// chocoIsV2OrLater parses a Chocolatey version string and returns true for v2+.
+// Extracted so tests can exercise the logic without invoking the choco binary.
+func chocoIsV2OrLater(v string) bool {
+	parts := strings.SplitN(v, ".", 2)
+	if len(parts) == 0 {
+		return false
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false
+	}
+	return major >= 2
 }
 
 // runList runs `choco list` and delegates to parseListOutput.

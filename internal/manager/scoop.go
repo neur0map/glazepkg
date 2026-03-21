@@ -99,6 +99,9 @@ func (s *Scoop) parseTabular(text string) ([]model.Package, error) {
 
 		pkgs = append(pkgs, pkg)
 	}
+	if err := scanner.Err(); err != nil {
+		return pkgs, err
+	}
 	return pkgs, nil
 }
 
@@ -129,6 +132,9 @@ func (s *Scoop) parseLegacy(text string) ([]model.Package, error) {
 			Source:      model.SourceScoop,
 			InstalledAt: time.Now(),
 		})
+	}
+	if err := scanner.Err(); err != nil {
+		return pkgs, err
 	}
 	return pkgs, nil
 }
