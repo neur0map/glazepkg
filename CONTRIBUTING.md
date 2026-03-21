@@ -44,3 +44,9 @@ go test ./...
 - Add tests for any new parsing logic
 - Make sure `go vet ./...` passes
 - If you're adding a package manager you can't test, note that in the PR
+
+## AI-assisted contributions
+
+If you used Claude, Copilot, ChatGPT, or any other coding agent to help write your code, mention it in the PR description. Just a short note like "used Claude for the initial scaffold" is fine. We want to know what was human-reviewed vs generated.
+
+Do not include `Co-Authored-By` lines from AI tools in your commits. Keep commit authorship to actual humans.
