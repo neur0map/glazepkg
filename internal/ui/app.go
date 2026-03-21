@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 	"time"
@@ -73,9 +74,17 @@ type updatesDoneMsg struct {
 	updates map[string]string // key → latest version
 }
 
+type depsDoneMsg struct {
+	deps map[string][]string // key → dependency list
+}
+
 type exportDoneMsg struct {
 	path string
 	err  error
+}
+
+type pkgHelpMsg struct {
+	lines []string
 }
 
 type Model struct {
@@ -111,6 +120,11 @@ type Model struct {
 	showHelp     bool
 	showExport   bool
 	exportCursor int
+	showDeps     bool
+	depsCursor   int
+	showPkgHelp  bool
+	pkgHelpLines []string
+	pkgHelpScroll int
 
 	// Descriptions
 	loadingDescs bool
@@ -119,6 +133,10 @@ type Model struct {
 	// Updates
 	loadingUpdates bool
 	updateCache    *manager.UpdateCache
+
+	// Dependencies
+	loadingDeps bool
+	depsCache   *manager.DepsCache
 
 	// Update banner
 	version      string
@@ -155,6 +173,7 @@ func NewModel(version string) Model {
 		scanning:    true,
 		descCache:   manager.NewDescriptionCache(),
 		updateCache: manager.NewUpdateCache(),
+		depsCache:   manager.NewDepsCache(),
 		userNotes:   snapshot.LoadNotes(),
 		version:     version,
 	}
@@ -260,6 +279,66 @@ func fetchDescriptions(pkgs []model.Package, cache *manager.DescriptionCache, sk
 	}
 }
 
+func fetchPkgHelp(name string) tea.Cmd {
+	return func() tea.Msg {
+		lines := tryPkgHelp(name)
+		return pkgHelpMsg{lines: lines}
+	}
+}
+
+func tryPkgHelp(name string) []string {
+	// Try common help flags in order
+	flags := [][]string{
+		{name, "--help"},
+		{name, "-h"},
+		{name, "help"},
+	}
+	for _, args := range flags {
+		cmd := exec.Command(args[0], args[1:]...)
+		// Many tools write help to stderr
+		out, err := cmd.CombinedOutput()
+		if len(out) > 0 {
+			return parseHelpOutput(string(out))
+		}
+		_ = err
+	}
+	return []string{"No help available for " + name}
+}
+
+func parseHelpOutput(raw string) []string {
+	var lines []string
+	for _, line := range strings.Split(raw, "\n") {
+		// Replace tabs with spaces for consistent rendering
+		line = strings.ReplaceAll(line, "\t", "    ")
+		lines = append(lines, line)
+	}
+	// Trim trailing empty lines
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	// Cap at 500 lines
+	if len(lines) > 500 {
+		lines = lines[:500]
+		lines = append(lines, "... (truncated)")
+	}
+	return lines
+}
+
+func fetchDependencies(pkgs []model.Package, cache *manager.DepsCache) tea.Cmd {
+	return func() tea.Msg {
+		// Filter out packages that already have deps (e.g., populated during scan)
+		var toFetch []model.Package
+		for _, p := range pkgs {
+			if len(p.DependsOn) == 0 {
+				toFetch = append(toFetch, p)
+			}
+		}
+		mgrs := manager.All()
+		deps := manager.FetchDependencies(mgrs, toFetch, cache)
+		return depsDoneMsg{deps: deps}
+	}
+}
+
 func fetchUpdates(pkgs []model.Package, cache *manager.UpdateCache) tea.Cmd {
 	return func() tea.Msg {
 		mgrs := manager.All()
@@ -286,7 +365,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		if m.scanning || m.loadingDescs || m.loadingUpdates {
+		if m.scanning || m.loadingDescs || m.loadingUpdates || m.loadingDeps {
 			var cmd tea.Cmd
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
@@ -328,9 +407,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.applyFilter()
-		// Dispatch background update check
+		// Dispatch background update check and dependency fetch in parallel
 		m.loadingUpdates = true
-		return m, fetchUpdates(m.allPkgs, m.updateCache)
+		m.loadingDeps = true
+		return m, tea.Batch(
+			fetchUpdates(m.allPkgs, m.updateCache),
+			fetchDependencies(m.allPkgs, m.depsCache),
+		)
 
 	case updatesDoneMsg:
 		m.loadingUpdates = false
@@ -340,6 +423,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.applyFilter()
+		return m, nil
+
+	case depsDoneMsg:
+		m.loadingDeps = false
+		for i := range m.allPkgs {
+			key := m.allPkgs[i].Key()
+			if deps, ok := msg.deps[key]; ok && len(deps) > 0 {
+				m.allPkgs[i].DependsOn = deps
+			}
+		}
+		m.applyFilter()
+		return m, nil
+
+	case pkgHelpMsg:
+		m.pkgHelpLines = msg.lines
+		m.pkgHelpScroll = 0
+		m.showPkgHelp = true
 		return m, nil
 
 	case snapshotSavedMsg:
@@ -521,7 +621,11 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "q":
 		return m, tea.Quit
 	case "esc":
-		if m.filterInput.Value() != "" {
+		if m.sizeFilter > 0 {
+			m.sizeFilter = 0
+			m.statusMsg = ""
+			m.applyFilter()
+		} else if m.filterInput.Value() != "" {
 			m.filterInput.SetValue("")
 			m.applyFilter()
 		}
@@ -602,14 +706,84 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
+	// Help overlay intercepts keys
+	if m.showPkgHelp {
+		maxScroll := len(m.pkgHelpLines) - (m.height - 8)
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		switch key {
+		case "esc", "q", "h":
+			m.showPkgHelp = false
+		case "j", "down":
+			if m.pkgHelpScroll < maxScroll {
+				m.pkgHelpScroll++
+			}
+		case "k", "up":
+			if m.pkgHelpScroll > 0 {
+				m.pkgHelpScroll--
+			}
+		case "ctrl+d", "pgdown":
+			m.pkgHelpScroll += m.height / 2
+			if m.pkgHelpScroll > maxScroll {
+				m.pkgHelpScroll = maxScroll
+			}
+		case "ctrl+u", "pgup":
+			m.pkgHelpScroll -= m.height / 2
+			if m.pkgHelpScroll < 0 {
+				m.pkgHelpScroll = 0
+			}
+		case "g", "home":
+			m.pkgHelpScroll = 0
+		case "G", "end":
+			m.pkgHelpScroll = maxScroll
+		}
+		return m, nil
+	}
+
+	// Deps overlay intercepts keys
+	if m.showDeps {
+		switch key {
+		case "esc", "q", "d":
+			m.showDeps = false
+		case "j", "down":
+			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
+			if m.depsCursor < total-1 {
+				m.depsCursor++
+			}
+		case "k", "up":
+			if m.depsCursor > 0 {
+				m.depsCursor--
+			}
+		case "g", "home":
+			m.depsCursor = 0
+		case "G", "end":
+			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
+			if total > 0 {
+				m.depsCursor = total - 1
+			}
+		}
+		return m, nil
+	}
+
 	switch key {
 	case "esc", "q":
+		m.showDeps = false
+		m.showPkgHelp = false
 		m.view = viewList
 	case "e":
 		m.editingDesc = true
 		m.descInput.SetValue(m.detailPkg.Description)
 		m.descInput.Focus()
 		return m, textinput.Blink
+	case "d":
+		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
+			m.showDeps = true
+			m.depsCursor = 0
+		}
+	case "h":
+		m.statusMsg = "loading help..."
+		return m, fetchPkgHelp(m.detailPkg.Name)
 	}
 	return m, nil
 }
@@ -720,6 +894,12 @@ func (m Model) View() string {
 	if m.showExport {
 		return content + "\n" + renderExportOverlay(m.exportCursor, m.width, m.height)
 	}
+	if m.showDeps {
+		return content + "\n" + renderDepsOverlay(m.detailPkg, m.depsCursor, m.width, m.height)
+	}
+	if m.showPkgHelp {
+		return content + "\n" + renderPkgHelpOverlay(m.detailPkg.Name, m.pkgHelpLines, m.pkgHelpScroll, m.width, m.height)
+	}
 
 	return content
 }
@@ -768,10 +948,10 @@ func (m Model) renderListView(b *strings.Builder) {
 		b.WriteString("\n  ")
 		b.WriteString(m.spinner.View())
 		b.WriteString(StyleDim.Render(" Loading descriptions..."))
-	} else if m.loadingUpdates {
+	} else if m.loadingUpdates || m.loadingDeps {
 		b.WriteString("\n  ")
 		b.WriteString(m.spinner.View())
-		b.WriteString(StyleDim.Render(" Checking for updates..."))
+		b.WriteString(StyleDim.Render(" Loading details..."))
 	}
 }
 
@@ -832,9 +1012,25 @@ func (m Model) renderStatusBar() string {
 				{"enter", "save"}, {"esc", "cancel"},
 			})
 		}
-		return " " + formatBinds([]struct{ key, desc string }{
-			{"e", "edit description"}, {"esc", "back"}, {"q", "quit"},
-		})
+		if m.showPkgHelp {
+			return " " + formatBinds([]struct{ key, desc string }{
+				{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
+			})
+		}
+		if m.showDeps {
+			return " " + formatBinds([]struct{ key, desc string }{
+				{"j/k", "navigate"}, {"esc", "close"},
+			})
+		}
+		binds := []struct{ key, desc string }{
+			{"e", "edit description"},
+		}
+		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
+			binds = append(binds, struct{ key, desc string }{"d", "dependencies"})
+		}
+		binds = append(binds, struct{ key, desc string }{"h", "help/usage"})
+		binds = append(binds, struct{ key, desc string }{"esc", "back"}, struct{ key, desc string }{"q", "quit"})
+		return " " + formatBinds(binds)
 	case viewDiff:
 		return " " + formatBinds([]struct{ key, desc string }{
 			{"esc", "back"}, {"q", "quit"},

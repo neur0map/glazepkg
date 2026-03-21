@@ -40,7 +40,12 @@ func (w *Winget) Scan() ([]model.Package, error) {
 		if pkgs, err := w.parseJSON(out); err == nil && len(pkgs) > 0 {
 			return pkgs, nil
 		}
+		// JSON unrecognized — try parsing the same output as text
+		if pkgs := w.parseTextOutput(string(out)); len(pkgs) > 0 {
+			return pkgs, nil
+		}
 	}
+	// No output at all from JSON attempt — run plain text mode
 	return w.parseText()
 }
 

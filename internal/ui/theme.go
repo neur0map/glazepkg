@@ -103,7 +103,6 @@ var (
 // ManagerColors maps each source to its badge color.
 var ManagerColors = map[model.Source]lipgloss.Color{
 	model.SourceBrew:     ColorYellow,
-	model.SourceBrewDeps: ColorSubtext,
 	model.SourcePacman:  ColorBlue,
 	model.SourceAUR:     ColorCyan,
 	model.SourceApt:     ColorGreen,
@@ -128,7 +127,9 @@ var ManagerColors = map[model.Source]lipgloss.Color{
 	model.SourceNix:      ColorBlue,
 	model.SourceConda:    ColorGreen,
 	model.SourceLuarocks: ColorBlue,
-	// Windows managers
+	model.SourceXbps:           ColorGreen,
+	model.SourcePortage:        ColorPurple,
+	model.SourceGuix:           ColorYellow,
 	model.SourceWinget:         ColorCyan,
 	model.SourceChocolatey:     ColorOrange,
 	model.SourceScoop:          ColorGreen,

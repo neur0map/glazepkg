@@ -70,6 +70,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 	lines = append(lines, StyleDim.Render("  "+strings.Repeat("─", min(usable, width-4))))
 
 	updateIndicator := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
+	sizeStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
 
 	for i := start; i < end; i++ {
 		p := pkgs[i]
@@ -96,27 +97,34 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		desc := truncate(lastText, colDesc-1)
 
 		if i == cursor {
-			// Selected: highlight name+version+desc, badge stays colored
 			verCell := StyleSelected.Render(ver)
 			if hasUpdate {
 				verCell += " " + updateIndicator.Render("↑")
+			}
+			lastCell := StyleSelected.Render(desc)
+			if showSize && p.Size != "" {
+				lastCell = sizeStyle.Render(desc)
 			}
 			line := "  " +
 				padCell(StyleSelected.Render(name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
-				StyleSelected.Render(desc)
+				lastCell
 			lines = append(lines, line)
 		} else {
 			verCell := StyleDim.Render(ver)
 			if hasUpdate {
 				verCell += " " + updateIndicator.Render("↑")
 			}
+			lastCell := StyleDim.Render(desc)
+			if showSize && p.Size != "" {
+				lastCell = sizeStyle.Render(desc)
+			}
 			line := "  " +
 				padCell(StyleNormal.Render(name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
-				StyleDim.Render(desc)
+				lastCell
 			lines = append(lines, line)
 		}
 	}

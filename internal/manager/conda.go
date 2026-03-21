@@ -2,7 +2,10 @@ package manager
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -48,6 +51,57 @@ func (c *Conda) Scan() ([]model.Package, error) {
 		})
 	}
 	return pkgs, nil
+}
+
+func (c *Conda) ListDependencies(pkgs []model.Package) map[string][]string {
+	// Read dependency info from conda-meta JSON files in the active prefix
+	prefix := os.Getenv("CONDA_PREFIX")
+	if prefix == "" {
+		return nil
+	}
+	metaDir := filepath.Join(prefix, "conda-meta")
+	entries, err := os.ReadDir(metaDir)
+	if err != nil {
+		return nil
+	}
+
+	// Build a map of package name → deps from conda-meta files
+	type metaInfo struct {
+		Name    string   `json:"name"`
+		Depends []string `json:"depends"`
+	}
+
+	metaMap := make(map[string][]string)
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(metaDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var m metaInfo
+		if err := json.Unmarshal(data, &m); err != nil {
+			continue
+		}
+		var depNames []string
+		for _, d := range m.Depends {
+			// Format: "name version build" — take just the name
+			name := strings.Fields(d)[0]
+			if name != "" {
+				depNames = append(depNames, name)
+			}
+		}
+		metaMap[m.Name] = depNames
+	}
+
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		if d, ok := metaMap[pkg.Name]; ok {
+			deps[pkg.Name] = d
+		}
+	}
+	return deps
 }
 
 func (c *Conda) CheckUpdates(pkgs []model.Package) map[string]string {

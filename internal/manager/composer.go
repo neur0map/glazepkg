@@ -70,6 +70,28 @@ func (c *Composer) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (c *Composer) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("composer", "global", "show", pkg.Name, "--format=json").Output()
+		if err != nil {
+			continue
+		}
+		var info struct {
+			Requires map[string]string `json:"requires"`
+		}
+		if err := json.Unmarshal(out, &info); err != nil {
+			continue
+		}
+		var pkgDeps []string
+		for name := range info.Requires {
+			pkgDeps = append(pkgDeps, name)
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
 func (c *Composer) Describe(pkgs []model.Package) map[string]string {
 	// Descriptions are already populated during Scan.
 	return nil

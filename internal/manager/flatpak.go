@@ -60,6 +60,25 @@ func (f *Flatpak) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (f *Flatpak) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("flatpak", "info", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			key, val, ok := parseField(scanner.Text())
+			if ok && key == "Runtime" && val != "" {
+				deps[pkg.Name] = []string{val}
+				break
+			}
+		}
+	}
+	return deps
+}
+
 func (f *Flatpak) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

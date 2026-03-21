@@ -92,6 +92,32 @@ func QueryDetail(name string) (model.Package, error) {
 	return pkg, nil
 }
 
+func (p *Pacman) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("pacman", "-Qi", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			key, val, ok := parseField(scanner.Text())
+			if !ok {
+				continue
+			}
+			if key == "Depends On" {
+				if val != "None" {
+					deps[pkg.Name] = strings.Fields(val)
+				} else {
+					deps[pkg.Name] = nil
+				}
+				break
+			}
+		}
+	}
+	return deps
+}
+
 func (p *Pacman) CheckUpdates(pkgs []model.Package) map[string]string {
 	// checkupdates (from pacman-contrib) is preferred as it doesn't need root
 	// and doesn't modify the sync database. Falls back to pacman -Qu.

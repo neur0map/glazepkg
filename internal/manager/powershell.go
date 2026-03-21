@@ -49,7 +49,7 @@ func (ps *PowerShell) Scan() ([]model.Package, error) {
 $m = Get-Module -ListAvailable | ForEach-Object {
     [PSCustomObject]@{
         Name        = $_.Name
-        Version     = if ($_.Version) { $_.Version.ToString() } else { "" }
+        Version     = $(if ($_.Version) { $_.Version.ToString() } else { "" })
         Description = $_.Description
     }
 }

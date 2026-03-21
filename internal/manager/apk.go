@@ -13,14 +13,7 @@ type Apk struct{}
 
 func (a *Apk) Name() model.Source { return model.SourceApk }
 
-func (a *Apk) Available() bool {
-	if !commandExists("apk") {
-		return false
-	}
-	// Verify it's Alpine's apk, not something else
-	err := exec.Command("apk", "info", "--help").Run()
-	return err == nil
-}
+func (a *Apk) Available() bool { return commandExists("apk") }
 
 func (a *Apk) Scan() ([]model.Package, error) {
 	// -vv gives "name-version description" per line
@@ -53,7 +46,7 @@ func (a *Apk) Scan() ([]model.Package, error) {
 			}
 		}
 
-		name, version := splitApkNameVersion(nameVer)
+		name, version := SplitApkNameVersion(nameVer)
 		if name == "" {
 			continue
 		}
@@ -131,10 +124,52 @@ func (a *Apk) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
-// splitApkNameVersion splits "name-version-rN" by finding the version boundary.
+func (a *Apk) ListDependencies(pkgs []model.Package) map[string][]string {
+	deps := make(map[string][]string, len(pkgs))
+	for _, pkg := range pkgs {
+		out, err := exec.Command("apk", "info", "-R", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		var pkgDeps []string
+		headerSeen := false
+		scanner := bufio.NewScanner(strings.NewReader(string(out)))
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			if strings.HasSuffix(line, "depends on:") {
+				headerSeen = true
+				continue
+			}
+			if headerSeen {
+				name := strings.Fields(line)[0]
+				// Skip shared library / command / pkg-config deps
+				if strings.HasPrefix(name, "so:") || strings.HasPrefix(name, "cmd:") || strings.HasPrefix(name, "pc:") {
+					continue
+				}
+				// Strip version operators
+				for i, c := range name {
+					if c == '>' || c == '<' || c == '=' || c == '~' {
+						name = name[:i]
+						break
+					}
+				}
+				if name != "" {
+					pkgDeps = append(pkgDeps, name)
+				}
+			}
+		}
+		deps[pkg.Name] = pkgDeps
+	}
+	return deps
+}
+
+// SplitApkNameVersion splits "name-version-rN" by finding the version boundary.
 // Alpine package names can contain hyphens, so we look for the last hyphen
 // that is followed by a digit.
-func splitApkNameVersion(s string) (string, string) {
+func SplitApkNameVersion(s string) (string, string) {
 	for i := len(s) - 1; i > 0; i-- {
 		if s[i] == '-' && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
 			return s[:i], s[i+1:]

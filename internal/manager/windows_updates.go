@@ -50,9 +50,9 @@ try {
     $result   = $searcher.Search("IsInstalled=0")  # WU COM query syntax: pending (not yet installed) updates
     $list = @()
     foreach ($u in $result.Updates) {
-        $kb  = if ($u.KBArticleIDs.Count -gt 0) { $u.KBArticleIDs[0] } else { "N/A" }
-        $sev = if ($u.MsrcSeverity)              { $u.MsrcSeverity }    else { "Unspecified" }
-        $cat = if ($u.Categories.Count -gt 0)   { $u.Categories[0].Name } else { "System Update" }
+        $kb  = $(if ($u.KBArticleIDs.Count -gt 0) { $u.KBArticleIDs[0] } else { "N/A" })
+        $sev = $(if ($u.MsrcSeverity)              { $u.MsrcSeverity }    else { "Unspecified" })
+        $cat = $(if ($u.Categories.Count -gt 0)   { $u.Categories[0].Name } else { "System Update" })
         $list += @{
             Title      = $u.Title
             KBArticle  = $kb
