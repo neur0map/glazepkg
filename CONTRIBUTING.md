@@ -1,0 +1,46 @@
+# Contributing to GlazePKG
+
+Thanks for wanting to help! Here's how to get started.
+
+## Adding a new package manager
+
+Each manager is a single Go file in `internal/manager/`. Look at any existing one (e.g., `snap.go` or `gem.go`) for the pattern.
+
+You need to implement:
+
+```go
+type YourManager struct{}
+
+func (m *YourManager) Name() model.Source      { return model.SourceYourManager }
+func (m *YourManager) Available() bool         { return commandExists("your-tool") }
+func (m *YourManager) Scan() ([]model.Package, error) { /* ... */ }
+```
+
+Optional interfaces:
+- `CheckUpdates(pkgs []model.Package) map[string]string` — update detection
+- `Describe(pkgs []model.Package) map[string]string` — package descriptions
+- `ListDependencies(pkgs []model.Package) map[string][]string` — dependency info
+
+Then register it in:
+1. `internal/model/package.go` — add `SourceYourManager` constant
+2. `internal/manager/manager.go` — add to `All()`
+3. `internal/ui/tabs.go` — add to the sources list
+4. `internal/ui/theme.go` — pick a badge color
+
+## Adding tests
+
+Put parsing tests in `tests/parsing/` with mock CLI output. This lets CI verify your parser without the actual tool installed.
+
+## Building and testing
+
+```bash
+go build ./cmd/gpk
+go test ./...
+```
+
+## Pull requests
+
+- Keep PRs focused on one thing
+- Add tests for any new parsing logic
+- Make sure `go vet ./...` passes
+- If you're adding a package manager you can't test, note that in the PR

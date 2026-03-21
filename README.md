@@ -197,6 +197,10 @@ All data lives under `~/.local/share/glazepkg/` (respects `XDG_DATA_HOME`):
 - [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
 - [Fuzzy](https://github.com/sahilm/fuzzy) — fuzzy matching
 
+## Contributing
+
+Want to add a package manager or fix a bug? Check out [CONTRIBUTING.md](CONTRIBUTING.md). Each manager is a single Go file — easy to add.
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=neur0map/glazepkg&type=Date)](https://star-history.com/#neur0map/glazepkg&Date)
