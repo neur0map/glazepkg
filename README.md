@@ -98,8 +98,6 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
-| Manager | Platform | What it scans | Descriptions |
-|---------|----------|---------------|-------------|
 | **brew** | macOS/Linux | Installed formulae | batch via JSON |
 | **pacman** | Arch | Explicit native packages | `pacman -Qi` |
 | **AUR** | Arch | Foreign/AUR packages | `pacman -Qi` |
