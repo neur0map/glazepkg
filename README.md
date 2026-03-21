@@ -11,6 +11,8 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config
 [![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg)](https://go.dev/)
 [![Release](https://img.shields.io/github/v/release/neur0map/glazepkg)](https://github.com/neur0map/glazepkg/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/neur0map/glazepkg/total)](https://github.com/neur0map/glazepkg/releases)
+[![Stars](https://img.shields.io/github/stars/neur0map/glazepkg)](https://github.com/neur0map/glazepkg/stargazers)
 
 ![demo](demo.gif)
 
@@ -194,6 +196,10 @@ All data lives under `~/.local/share/glazepkg/` (respects `XDG_DATA_HOME`):
 - [Lip Gloss](https://github.com/charmbracelet/lipgloss) — terminal styling
 - [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
 - [Fuzzy](https://github.com/sahilm/fuzzy) — fuzzy matching
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=neur0map/glazepkg&type=Date)](https://star-history.com/#neur0map/glazepkg&Date)
 
 ## License
 
