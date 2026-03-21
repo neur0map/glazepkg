@@ -60,6 +60,11 @@ source ~/.bashrc
 fish_add_path ~/go/bin
 ```
 
+```powershell
+# PowerShell (Windows)
+$env:PATH += ";$env:USERPROFILE\go\bin"
+```
+
 Or grab a [pre-built binary](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel) or Linux (x64/ARM).
 
 Or build from source:
@@ -123,7 +128,7 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | **scoop** | Windows | Scoop packages | — |
 | **nuget** | Cross-platform | NuGet global package cache | — |
 | **powershell** | Cross-platform | PowerShell modules | — |
-| **windows-update** | Windows | Pending Windows system updates | — |
+| **windows-updates** | Windows | Pending Windows system updates | — |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Brew separates explicitly installed formulae from auto-pulled dependencies — deps go in a dedicated **deps** tab.

@@ -70,13 +70,18 @@ try {
 `
 	out, err := exec.Command(w.psExe(), "-NoProfile", "-Command", script).Output()
 	if err != nil {
-		// Deliberately nil error: WU is unreliable on corporate/offline/policy-restricted machines.
-		// A hard error would block the whole scan; returning nothing is the right degradation.
+		// WU is unreliable on corporate/offline/policy-restricted machines.
+		// A PowerShell execution failure is expected degradation — return nothing silently.
 		return nil, nil
 	}
 
 	var updates []winUpdate
-	if err := json.Unmarshal(out, &updates); err != nil || len(updates) == 0 {
+	if err := json.Unmarshal(out, &updates); err != nil {
+		// JSON parse failure is unexpected: the script returned malformed output.
+		// Surface this so callers can distinguish it from a clean empty result.
+		return nil, err
+	}
+	if len(updates) == 0 {
 		return nil, nil
 	}
 	return w.buildPackages(updates), nil
@@ -100,9 +105,14 @@ func (w *WindowsUpdates) buildPackages(updates []winUpdate) []model.Package {
 			desc = fmt.Sprintf("%s — %s", u.Severity, u.Categories)
 		}
 
+		version := u.KBArticle
+		if version == "" || version == "N/A" {
+			version = "unknown"
+		}
+
 		pkgs = append(pkgs, model.Package{
 			Name:        name,
-			Version:     u.KBArticle,
+			Version:     version,
 			Description: desc,
 			Size:        FormatBytes(u.Size),
 			SizeBytes:   u.Size,

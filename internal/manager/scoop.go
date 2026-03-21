@@ -32,8 +32,12 @@ func (s *Scoop) Scan() ([]model.Package, error) {
 
 	// Modern tabular format uses the same dash-separator layout as winget;
 	// wingetIsSep/wingetColumns/wingetExtract are reused deliberately.
-	if strings.Contains(text, "----") {
-		return s.parseTabular(text)
+	// We check line-by-line with wingetIsSep rather than strings.Contains("----")
+	// to avoid misidentifying a package name that contains four dashes as a separator.
+	for _, line := range strings.Split(text, "\n") {
+		if wingetIsSep(strings.TrimSpace(line)) {
+			return s.parseTabular(text)
+		}
 	}
 	return s.parseLegacy(text)
 }

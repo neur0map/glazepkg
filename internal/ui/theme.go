@@ -128,6 +128,13 @@ var ManagerColors = map[model.Source]lipgloss.Color{
 	model.SourceNix:      ColorBlue,
 	model.SourceConda:    ColorGreen,
 	model.SourceLuarocks: ColorBlue,
+	// Windows managers
+	model.SourceWinget:         ColorCyan,
+	model.SourceChocolatey:     ColorOrange,
+	model.SourceScoop:          ColorGreen,
+	model.SourceNuget:          ColorPurple,
+	model.SourcePowerShell:     ColorBlue,
+	model.SourceWindowsUpdates: ColorRed,
 }
 
 // RenderBadge returns a styled pill for a package source (used in detail view).

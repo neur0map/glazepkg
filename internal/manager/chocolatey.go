@@ -126,7 +126,9 @@ func (c *Chocolatey) parseOutdatedOutput(s string) map[string]string {
 			strings.HasPrefix(line, "Output is") {
 			continue
 		}
-		parts := strings.Split(line, "|")
+		// SplitN caps at 5 to prevent unbounded field explosion from unexpected output.
+		// Expected format: name|currentVersion|availableVersion|pinned
+		parts := strings.SplitN(line, "|", 5)
 		if len(parts) < 3 {
 			continue
 		}

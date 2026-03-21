@@ -38,7 +38,7 @@ type psModule struct {
 // without spawning a second PowerShell process.
 var (
 	psModCache   map[string]psModule
-	psModCacheMu sync.Mutex
+	psModCacheMu sync.RWMutex
 )
 
 // Scan lists installed PowerShell modules.
@@ -104,9 +104,9 @@ else { ConvertTo-Json -InputObject @($m) -Compress }
 // Describe returns module descriptions, reusing cached Scan() data when available
 // to avoid spawning a second PowerShell process.
 func (ps *PowerShell) Describe(pkgs []model.Package) map[string]string {
-	psModCacheMu.Lock()
+	psModCacheMu.RLock()
 	cache := psModCache
-	psModCacheMu.Unlock()
+	psModCacheMu.RUnlock()
 
 	if cache != nil {
 		descs := make(map[string]string, len(pkgs))
