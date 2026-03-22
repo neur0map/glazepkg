@@ -140,3 +140,7 @@ func (c *Chocolatey) parseOutdatedOutput(s string) map[string]string {
 	}
 	return updates
 }
+
+func (c *Chocolatey) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("choco", "upgrade", name, "--yes")
+}

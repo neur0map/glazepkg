@@ -166,6 +166,10 @@ func (a *Apk) ListDependencies(pkgs []model.Package) map[string][]string {
 	return deps
 }
 
+func (a *Apk) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("apk", "add", "--upgrade", name)
+}
+
 // SplitApkNameVersion splits "name-version-rN" by finding the version boundary.
 // Alpine package names can contain hyphens, so we look for the last hyphen
 // that is followed by a digit.

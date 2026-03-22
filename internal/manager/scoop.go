@@ -187,3 +187,7 @@ func (s *Scoop) parseStatusOutput(text string) map[string]string {
 	}
 	return updates
 }
+
+func (s *Scoop) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("scoop", "update", name)
+}

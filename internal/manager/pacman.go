@@ -146,6 +146,10 @@ func (p *Pacman) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (p *Pacman) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-S", name)
+}
+
 func parseField(line string) (key, val string, ok bool) {
 	idx := strings.Index(line, ":")
 	if idx < 0 {

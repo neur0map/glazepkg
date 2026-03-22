@@ -231,3 +231,13 @@ func wingetExtract(line string, starts []int) []string {
 	}
 	return fields
 }
+
+func (w *Winget) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("winget", "upgrade",
+		"--id", name,
+		"--exact",
+		"--accept-source-agreements",
+		"--accept-package-agreements",
+		"--disable-interactivity",
+	)
+}

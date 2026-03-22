@@ -7,12 +7,12 @@
 A beautiful TUI that unifies **34 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
-[![CI](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml/badge.svg)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
-[![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg)](https://go.dev/)
-[![Release](https://img.shields.io/github/v/release/neur0map/glazepkg)](https://github.com/neur0map/glazepkg/releases)
-[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue.svg)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/neur0map/glazepkg/total)](https://github.com/neur0map/glazepkg/releases)
-[![Stars](https://img.shields.io/github/stars/neur0map/glazepkg)](https://github.com/neur0map/glazepkg/stargazers)
+[![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg?style=for-the-badge&color=00ADD8)](https://go.dev/)
+[![Release](https://img.shields.io/github/v/release/neur0map/glazepkg?style=for-the-badge&color=4c1)](https://github.com/neur0map/glazepkg/releases)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue?style=for-the-badge)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/neur0map/glazepkg/total?style=for-the-badge&color=orange)](https://github.com/neur0map/glazepkg/releases)
+[![Stars](https://img.shields.io/github/stars/neur0map/glazepkg?style=for-the-badge&color=yellow)](https://github.com/neur0map/glazepkg/stargazers)
 
 ![demo](demo.gif)
 
@@ -34,6 +34,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
 - **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
+- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS) surface a confirmation overlay so the upgrade never runs on a single keypress, and even gem/flatpak/pipx/opam/apk/XBPS/conda/luarocks ship native commands so the flow never leaves `gpk`
 - **Custom descriptions** — press `e` in the detail view to annotate any package; persists across sessions
 - **Background descriptions** — package summaries load asynchronously and cache for 24 hours
 - **Export** — dump your full package list to JSON or text for backup, migration, or dotfile tracking
@@ -92,7 +93,17 @@ gpk version      Show current version
 gpk --help       Show keybind reference
 ```
 
-Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Press `?` for the full keybind reference.
+Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Open a package with `Enter` and press `u` to upgrade it. Press `?` for the full keybind reference.
+
+## Upgrading Packages
+
+1. Launch `gpk` and navigate to the package you want to upgrade.
+2. Press `Enter` to open the package detail view.
+3. Press `u` to upgrade. A confirmation overlay shows the exact command that will run.
+4. Select `Yes` or `No` with arrow keys / Tab and press `Enter` to confirm.
+5. The upgrade runs in the background — a notification appears in the corner showing progress and result. You can keep navigating the TUI while it runs.
+
+Works on Windows, Linux, and macOS — `u` maps to the correct command for the selected manager automatically.
 
 ## Supported Package Managers
 
@@ -156,6 +167,7 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 | `h` (detail) | Package help/usage |
 | `e` (detail) | Edit description |
 | `s` | Save snapshot |
+| `u` (detail) | Upgrade package (shows confirmation with command preview) |
 | `d` | Diff against last snapshot |
 | `e` | Export (JSON or text) |
 | `r` | Force rescan |

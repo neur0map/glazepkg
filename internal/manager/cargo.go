@@ -50,3 +50,7 @@ func (c *Cargo) Scan() ([]model.Package, error) {
 	}
 	return pkgs, nil
 }
+
+func (c *Cargo) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("cargo", "install", name)
+}

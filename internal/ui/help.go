@@ -19,6 +19,7 @@ func renderHelpOverlay(width, height int) string {
 		{"/", "Fuzzy search"},
 		{"Esc", "Clear search / close overlay"},
 		{"Enter", "Package details"},
+		{"u (detail)", "Upgrade package"},
 		{"e (detail)", "Edit description"},
 		{"d (detail)", "View dependencies"},
 		{"h (detail)", "Package help/usage"},
