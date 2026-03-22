@@ -46,35 +46,34 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Install
 
+### Arch Linux (AUR)
+
+```bash
+yay -S gpk-bin
+```
+
+### Go
+
 ```bash
 go install github.com/neur0map/glazepkg/cmd/gpk@latest
 ```
 
-If `gpk` is not found after installing, add Go's bin directory to your PATH:
+### Pre-built binaries
 
-```bash
-# bash (~/.bashrc) or zsh (~/.zshrc)
-echo 'export PATH="$PATH:$HOME/go/bin"' >> ~/.bashrc
-source ~/.bashrc
-```
+Grab a binary from [releases](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel), Linux (x64/ARM), or Windows (x64/ARM).
 
-```fish
-# fish
-fish_add_path ~/go/bin
-```
-
-```powershell
-# PowerShell (Windows)
-$env:PATH += ";$env:USERPROFILE\go\bin"
-```
-
-Or grab a [pre-built binary](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel) or Linux (x64/ARM).
-
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/neur0map/glazepkg.git
 cd glazepkg && go build ./cmd/gpk
+```
+
+If `gpk` is not found after installing via `go install`, add Go's bin directory to your PATH:
+
+```bash
+# bash/zsh
+export PATH="$PATH:$HOME/go/bin"
 ```
 
 ## Update
@@ -108,8 +107,6 @@ The same flow works on Windows, Linux, and macOS — `u` maps to the correct com
 
 ## Supported Package Managers
 
-| Manager | Platform | What it scans | Descriptions |
-|---------|----------|---------------|-------------|
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
 | **brew** | macOS/Linux | Installed formulae | batch via JSON |
