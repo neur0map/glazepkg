@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -152,6 +153,7 @@ type Model struct {
 	pendingUpgrade    *upgradeRequest
 	passwordInput     textinput.Model
 	upgradeInFlight   bool
+	upgradeCancel     context.CancelFunc
 	upgradeNotifMsg   string
 	upgradeNotifErr   bool
 
@@ -486,6 +488,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case upgradeResultMsg:
 		m.upgradeInFlight = false
+		m.upgradeCancel = nil
 		if msg.err != nil {
 			errMsg := msg.err.Error()
 			if len(errMsg) > 120 {
@@ -706,8 +709,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Clear status message on any keypress
 	m.statusMsg = ""
 
-	// Quit always works
+	// Quit — cancel any in-flight upgrade first
 	if key == "ctrl+c" {
+		if m.upgradeCancel != nil {
+			m.upgradeCancel()
+			m.upgradeCancel = nil
+		}
 		return m, tea.Quit
 	}
 
@@ -815,6 +822,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q":
+		if m.upgradeInFlight {
+			m.statusMsg = "upgrade in progress — press ctrl+c to force quit"
+			return m, nil
+		}
 		return m, tea.Quit
 	case "esc":
 		if m.sizeFilter > 0 {
@@ -1280,12 +1291,19 @@ func (m Model) renderStatusBar() string {
 }
 
 func (m *Model) runUpgradeRequest(req upgradeRequest) tea.Cmd {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.upgradeCancel = cancel
+	// Rebuild the command with context so it can be cancelled on quit
+	ctxCmd := exec.CommandContext(ctx, req.cmd.Args[0], req.cmd.Args[1:]...)
+	ctxCmd.Dir = req.cmd.Dir
+	ctxCmd.Env = req.cmd.Env
 	return func() tea.Msg {
+		defer cancel()
 		if req.password != "" {
-			req.cmd.Stdin = strings.NewReader(req.password + "\n")
+			ctxCmd.Stdin = strings.NewReader(req.password + "\n")
 			req.password = ""
 		}
-		out, err := req.cmd.CombinedOutput()
+		out, err := ctxCmd.CombinedOutput()
 		if err != nil {
 			msg := strings.TrimSpace(string(out))
 			// Strip the sudo password prompt from the error output
