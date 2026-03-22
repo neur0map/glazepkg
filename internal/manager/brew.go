@@ -196,3 +196,7 @@ func brewCellarSizes() map[string]int64 {
 	return sizes
 }
 
+func (b *Brew) UpgradePackage(name string) error {
+	cmd := exec.Command("brew", "upgrade", name)
+	return runCommand(cmd)
+}

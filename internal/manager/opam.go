@@ -125,3 +125,7 @@ func (o *Opam) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (o *Opam) UpgradePackage(name string) error {
+	return runCommand(exec.Command("opam", "upgrade", "--yes", name))
+}

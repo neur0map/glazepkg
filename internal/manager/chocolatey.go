@@ -140,3 +140,8 @@ func (c *Chocolatey) parseOutdatedOutput(s string) map[string]string {
 	}
 	return updates
 }
+
+func (c *Chocolatey) UpgradePackage(name string) error {
+	cmd := exec.Command("choco", "upgrade", name, "--yes")
+	return runCommand(cmd)
+}

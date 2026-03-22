@@ -119,3 +119,8 @@ func (d *Dnf) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (d *Dnf) UpgradePackage(name string) error {
+	cmd := exec.Command("dnf", "upgrade", "-y", name)
+	return runPrivilegedCommand(cmd)
+}
