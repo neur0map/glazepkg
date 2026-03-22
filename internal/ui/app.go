@@ -1086,17 +1086,30 @@ func (m Model) View() string {
 
 	// Upgrade notification (above the status bar)
 	if m.upgradeNotifMsg != "" {
-		icon := "✓ "
+		icon := " ✓ "
 		color := ColorGreen
+		label := "DONE"
 		if m.upgradeNotifErr {
-			icon = "✗ "
+			icon = " ✗ "
 			color = ColorRed
+			label = "FAIL"
 		} else if m.upgradeInFlight {
-			icon = m.spinner.View() + " "
+			icon = " " + m.spinner.View() + " "
 			color = ColorCyan
+			label = "UPGRADE"
 		}
-		notifStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
-		b.WriteString("\n " + notifStyle.Render(icon+m.upgradeNotifMsg))
+		badge := lipgloss.NewStyle().
+			Background(color).
+			Foreground(lipgloss.Color("#1a1b26")).
+			Bold(true).
+			Render(" " + label + " ")
+		msgStyle := lipgloss.NewStyle().Foreground(color)
+		notif := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(color).
+			Padding(0, 1).
+			Render(badge + icon + msgStyle.Render(m.upgradeNotifMsg))
+		b.WriteString("\n " + notif)
 	}
 
 	// Status bar
