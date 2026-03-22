@@ -1115,12 +1115,7 @@ func (m Model) View() string {
 			Bold(true).
 			Render(" " + label + " ")
 		msgStyle := lipgloss.NewStyle().Foreground(color)
-		notif := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(color).
-			Padding(0, 1).
-			Render(badge + icon + msgStyle.Render(m.upgradeNotifMsg))
-		b.WriteString("\n " + notif)
+		b.WriteString("\n  " + badge + icon + msgStyle.Render(m.upgradeNotifMsg))
 	}
 
 	// Status bar
