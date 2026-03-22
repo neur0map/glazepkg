@@ -124,7 +124,14 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 		var uncached []model.Package
 		for _, p := range srcPkgs {
 			if d, ok := cache.Get(p.Key()); ok {
-				result[p.Key()] = SanitizeDesc(d)
+				// Cached hit (including negative cache with empty string)
+				if d != "" {
+					result[p.Key()] = SanitizeDesc(d)
+				}
+			} else if p.Description != "" {
+				// Package already has a description from Scan() — seed cache
+				cache.Set(p.Key(), p.Description)
+				result[p.Key()] = SanitizeDesc(p.Description)
 			} else {
 				uncached = append(uncached, p)
 			}
@@ -140,6 +147,9 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 				d = SanitizeDesc(d)
 				result[p.Key()] = d
 				cache.Set(p.Key(), d)
+			} else {
+				// Negative cache: tried and got nothing, don't retry next time
+				cache.Set(p.Key(), "")
 			}
 		}
 	}
