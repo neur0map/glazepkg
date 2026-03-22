@@ -127,6 +127,11 @@ func (x *Xbps) ListDependencies(pkgs []model.Package) map[string][]string {
 	return deps
 }
 
+func (x *Xbps) UpgradePackage(name string) error {
+	cmd := exec.Command("xbps-install", "-S", "--yes", name)
+	return runPrivilegedCommand(cmd)
+}
+
 // SplitXbpsNameVersion splits "name-version_revision" by the last hyphen
 // before a digit.
 func SplitXbpsNameVersion(s string) (string, string) {

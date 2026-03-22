@@ -14,19 +14,24 @@ type YourManager struct{}
 func (m *YourManager) Name() model.Source      { return model.SourceYourManager }
 func (m *YourManager) Available() bool         { return commandExists("your-tool") }
 func (m *YourManager) Scan() ([]model.Package, error) { /* ... */ }
+```
+
+If the tool supports single-package upgrades, implement the optional `manager.Upgrader` interface:
+
+```go
 func (m *YourManager) UpgradePackage(name string) error {
-	// Run the manager's single-package upgrade command.
-	// If the tool doesn't support one, return manager.ErrUpgradeNotSupported.
-	return manager.ErrUpgradeNotSupported
+	return exec.Command("your-tool", "upgrade", name).Run()
 }
 ```
 
+If it can't upgrade individual packages, just omit this method and the UI will surface `manager.ErrUpgradeNotSupported`.
+
 Optional interfaces:
+- `manager.Upgrader` — implements `UpgradePackage(name string)` to run a single-package upgrade command
 - `CheckUpdates(pkgs []model.Package) map[string]string` — update detection
 - `Describe(pkgs []model.Package) map[string]string` — package descriptions
 - `ListDependencies(pkgs []model.Package) map[string][]string` — dependency info
 
-If your manager cannot upgrade packages individually, just return `manager.ErrUpgradeNotSupported` from `UpgradePackage`.
 
 Then register it in:
 1. `internal/model/package.go` — add `SourceYourManager` constant

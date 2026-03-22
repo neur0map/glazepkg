@@ -1,22 +1,42 @@
 # Upgrade system
 
-The new `u` keybinding wires a single, manager-aware upgrade flow into the heart of the UI:
+Pressing `u` wires a manager-aware upgrade path into the UI.
 
-1. `handleListKey` intercepts `u` while the list view is active, grabs the highlighted package, updates the status bar to `upgrading <name>...`, and calls `Model.UpgradeSelectedPackage()`.
-2. `UpgradeSelectedPackage` is the central coordinator. It reuses `selectedPackage()` to read the current package, looks up the responsible manager through `manager.BySource`, and calls the manager’s `UpgradePackage(name string) error` implementation.
-3. Each manager now implements `Manager.UpgradePackage`. Supported managers run the native single-package command (e.g., `apt install --only-upgrade`, `brew upgrade`, `winget upgrade`, `pip install --upgrade`, `npm update -g`, etc.). Managers that can’t do single-package upgrades simply return `manager.ErrUpgradeNotSupported`.
-4. The goroutine returned by `UpgradeSelectedPackage` emits an `upgradeResultMsg`. `Update` translates that message into user feedback: success yields `Package upgraded successfully`, failures surface the raw error, and `ErrUpgradeNotSupported` renders the literal `"This package manager does not support upgrading a single package."` so the UI never falls back to a bulk upgrade.
+1. `handleListKey` catches the `u` key while the package list is focused and calls `Model.UpgradeSelectedPackage()`.
+2. `UpgradeSelectedPackage` reuses `selectedPackage()` to read the current entry, looks up the responsible manager via `manager.BySource`, and verifies the manager is available.
+3. The manager is type asserted to the optional `manager.Upgrader` interface; only managers that implement it can receive commands.
+4. If the manager is privileged (apt, dnf, pacman, snap, apk, or XBPS), `UpgradeSelectedPackage` saves an `upgradeRequest` and sets `confirmingUpgrade`, which renders a centered overlay describing the command and waits for `y`/`Enter` or `n`/`Esc` so that `u` never runs a privileged upgrade on a single keypress.
+5. On confirmation (or immediately for non-privileged managers) the UI schedules `runUpgradeRequest`, which executes `UpgradePackage(name string)` and emits an `upgradeResultMsg`.
+6. `Update` turns that message into user feedback: success becomes `Package upgraded successfully`, failures show the native error, and missing `Upgrader` implementations fall back to `manager.ErrUpgradeNotSupported`.
+7. Because `manager.BySource` always returns the active manager for the current platform, `u` works the same way on macOS, Linux, and Windows without platform-specific hacks.
+
+### Confirmation for privileged managers
+
+The overlay reminds the user which package and manager are involved, notes that the command requires elevated privileges, and repeats the key hints (`y`/`Enter` to proceed, `n`/`Esc` to cancel). This guard prevents accidentally running a privileged command from the default `u` key binding. Privileged managers include apt, dnf, pacman, snap, apk, and XBPS because their native upgrade commands run as root.
 
 ### Supporting a new manager
 
-To teach a manager about upgrades, implement:
+Implement the standard `manager.Manager` methods (`Name`, `Available`, `Scan`). If your tool can upgrade single packages, implement `manager.Upgrader` by adding:
 
 ```go
 func (m *YourManager) UpgradePackage(name string) error {
-    return exec.Command("your-tool", "upgrade", name).Run()
+	return exec.Command("your-tool", "upgrade", name).Run()
 }
 ```
 
-Return `manager.ErrUpgradeNotSupported` if the manager only supports global upgrades. Once your manager is registered in `manager.All()` and the source constant is added to `model`, the existing `u` flow automatically invokes your implementation.
+Either the UI will run that command directly, or it will show the confirmation overlay if the manager is privileged. If your manager cannot upgrade packages individually, simply omit this method and `gpk` will automatically show `manager.ErrUpgradeNotSupported` instead of running a command.
 
-The same `u` key binding is shared across Windows, macOS, and Linux; the code path selects the right command for the active manager, so users never leave the unified UI to do a single-package upgrade.
+### Manager coverage
+
+In addition to the existing managers, the following now ship single-package upgrade commands:
+
+- `gem update <name>`
+- `flatpak update <name>`
+- `pipx upgrade <name>`
+- `opam upgrade --yes <name>`
+- `apk add --upgrade <name>`
+- `xbps-install -S --yes <name>`
+- `conda/mamba update --yes <name>`
+- `luarocks upgrade <name>`
+
+Each command runs inside the same goroutine as other package manager upgrades so the user interface always reports completion, success, or failure.

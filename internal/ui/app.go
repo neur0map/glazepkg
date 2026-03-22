@@ -33,12 +33,12 @@ var sizeFilters = []struct {
 	MinBytes int64
 	MaxBytes int64
 }{
-	{"All", 0, 0},                             // no filter
-	{"< 1 MB", 0, 1 << 20},                   // 0 – 1 MB
-	{"1–10 MB", 1 << 20, 10 << 20},           // 1 – 10 MB
-	{"10–100 MB", 10 << 20, 100 << 20},       // 10 – 100 MB
-	{"> 100 MB", 100 << 20, 0},               // 100 MB+
-	{"Has updates", -1, -1},                   // special: only packages with updates
+	{"All", 0, 0},                      // no filter
+	{"< 1 MB", 0, 1 << 20},             // 0 – 1 MB
+	{"1–10 MB", 1 << 20, 10 << 20},     // 1 – 10 MB
+	{"10–100 MB", 10 << 20, 100 << 20}, // 10 – 100 MB
+	{"> 100 MB", 100 << 20, 0},         // 100 MB+
+	{"Has updates", -1, -1},            // special: only packages with updates
 }
 
 type updateAvailableMsg struct {
@@ -89,8 +89,20 @@ type upgradeResultMsg struct {
 	err error
 }
 
+type managerRescanMsg struct {
+	source  model.Source
+	pkgs    []model.Package
+	updates map[string]string
+	err     error
+}
+
 type pkgHelpMsg struct {
 	lines []string
+}
+
+type upgradeRequest struct {
+	pkg      model.Package
+	upgrader manager.Upgrader
 }
 
 type Model struct {
@@ -108,10 +120,10 @@ type Model struct {
 	statusMsg    string
 
 	// Detail
-	detailPkg    model.Package
-	editingDesc  bool
-	descInput    textinput.Model
-	userNotes    map[string]string
+	detailPkg   model.Package
+	editingDesc bool
+	descInput   textinput.Model
+	userNotes   map[string]string
 
 	// Diff
 	currentDiff model.Diff
@@ -123,14 +135,16 @@ type Model struct {
 	sizeFilter  int // 0=all, cycles through sizeFilterLabels
 
 	// Overlays
-	showHelp     bool
-	showExport   bool
-	exportCursor int
-	showDeps     bool
-	depsCursor   int
-	showPkgHelp  bool
-	pkgHelpLines []string
-	pkgHelpScroll int
+	showHelp          bool
+	showExport        bool
+	exportCursor      int
+	showDeps          bool
+	depsCursor        int
+	showPkgHelp       bool
+	pkgHelpLines      []string
+	pkgHelpScroll     int
+	confirmingUpgrade bool
+	pendingUpgrade    *upgradeRequest
 
 	// Descriptions
 	loadingDescs bool
@@ -359,16 +373,63 @@ func (m *Model) UpgradeSelectedPackage() tea.Cmd {
 		return nil
 	}
 
+	mgr := manager.BySource(pkg.Source)
+	if mgr == nil {
+		m.statusMsg = fmt.Sprintf("manager not found for %s", pkg.Source)
+		return nil
+	}
+	if !mgr.Available() {
+		m.statusMsg = fmt.Sprintf("%s is not available", pkg.Source)
+		return nil
+	}
+
+	upgrader, ok := mgr.(manager.Upgrader)
+	if !ok {
+		m.statusMsg = manager.ErrUpgradeNotSupported.Error()
+		return nil
+	}
+
+	req := &upgradeRequest{
+		pkg:      pkg,
+		upgrader: upgrader,
+	}
+
+	if requiresUpgradeConfirmation(pkg.Source) {
+		m.pendingUpgrade = req
+		m.confirmingUpgrade = true
+		m.statusMsg = fmt.Sprintf("confirm upgrade %s (%s) — press y/n", pkg.Name, pkg.Source)
+		return nil
+	}
+
+	m.statusMsg = fmt.Sprintf("upgrading %s...", pkg.Name)
+	return m.runUpgradeRequest(*req)
+}
+
+func (m *Model) rescanManager(source model.Source) tea.Cmd {
+	cache := m.updateCache
+	var keys []string
+	for _, p := range m.allPkgs {
+		if p.Source == source {
+			keys = append(keys, p.Key())
+		}
+	}
 	return func() tea.Msg {
-		mgr := manager.BySource(pkg.Source)
+		mgr := manager.BySource(source)
 		if mgr == nil {
-			return upgradeResultMsg{pkg: pkg, err: fmt.Errorf("manager not found for %s", pkg.Source)}
+			return managerRescanMsg{source: source, err: fmt.Errorf("manager not found for %s", source)}
 		}
 		if !mgr.Available() {
-			return upgradeResultMsg{pkg: pkg, err: fmt.Errorf("%s is not available", pkg.Source)}
+			return managerRescanMsg{source: source, err: fmt.Errorf("%s is not available", source)}
 		}
-		err := mgr.UpgradePackage(pkg.Name)
-		return upgradeResultMsg{pkg: pkg, err: err}
+		pkgs, err := mgr.Scan()
+		if err != nil {
+			return managerRescanMsg{source: source, err: err}
+		}
+		if cache != nil {
+			cache.Invalidate(keys)
+		}
+		updates := manager.FetchUpdates([]manager.Manager{mgr}, pkgs, cache)
+		return managerRescanMsg{source: source, pkgs: pkgs, updates: updates}
 	}
 }
 
@@ -403,8 +464,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = msg.err.Error()
 			}
 		} else {
-			m.statusMsg = "Package upgraded successfully"
+			m.statusMsg = "Package upgraded successfully — refreshing list..."
+			return m, m.rescanManager(msg.pkg.Source)
 		}
+		return m, nil
+	case managerRescanMsg:
+		if msg.err != nil {
+			m.statusMsg = "refresh error: " + msg.err.Error()
+			return m, nil
+		}
+		// Replace packages for the refreshed source.
+		var next []model.Package
+		for _, p := range m.allPkgs {
+			if p.Source != msg.source {
+				next = append(next, p)
+			}
+		}
+		for _, p := range msg.pkgs {
+			if note, ok := m.userNotes[p.Key()]; ok {
+				p.Description = note
+			}
+			if latest, ok := msg.updates[p.Key()]; ok {
+				p.LatestVersion = latest
+			}
+			next = append(next, p)
+		}
+		sort.Slice(next, func(i, j int) bool {
+			return next[i].Name < next[j].Name
+		})
+		m.allPkgs = next
+		manager.SaveScanCache(m.allPkgs)
+		m.tabs = buildTabs(m.allPkgs)
+		m.applyFilter()
+		m.statusMsg = fmt.Sprintf("refreshed %s packages", msg.source)
 		return m, nil
 
 	case scanDoneMsg:
@@ -553,6 +645,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Quit always works
 	if key == "ctrl+c" {
 		return m, tea.Quit
+	}
+
+	if m.confirmingUpgrade {
+		return m.handleUpgradeConfirmKey(key)
 	}
 
 	// Help overlay intercepts all keys
@@ -732,8 +828,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.statusMsg = "saving snapshot..."
 		return m, saveSnapshot(m.allPkgs)
 	case "u":
-		if pkg, ok := m.selectedPackage(); ok {
-			m.statusMsg = fmt.Sprintf("upgrading %s...", pkg.Name)
+		if _, ok := m.selectedPackage(); ok {
 			return m, m.UpgradeSelectedPackage()
 		}
 	case "d":
@@ -936,6 +1031,9 @@ func (m Model) View() string {
 	content := b.String()
 
 	// Render overlays on top
+	if m.confirmingUpgrade {
+		return content + "\n" + renderUpgradeConfirmOverlay(m.pendingUpgrade, m.width, m.height)
+	}
 	if m.showHelp {
 		return content + "\n" + renderHelpOverlay(m.width, m.height)
 	}
@@ -1085,4 +1183,71 @@ func (m Model) renderStatusBar() string {
 		})
 	}
 	return ""
+}
+
+func (m *Model) runUpgradeRequest(req upgradeRequest) tea.Cmd {
+	return func() tea.Msg {
+		err := req.upgrader.UpgradePackage(req.pkg.Name)
+		return upgradeResultMsg{pkg: req.pkg, err: err}
+	}
+}
+
+func (m *Model) executePendingUpgrade() tea.Cmd {
+	if m.pendingUpgrade == nil {
+		m.confirmingUpgrade = false
+		return nil
+	}
+	req := *m.pendingUpgrade
+	m.pendingUpgrade = nil
+	m.confirmingUpgrade = false
+	m.statusMsg = fmt.Sprintf("upgrading %s...", req.pkg.Name)
+	return m.runUpgradeRequest(req)
+}
+
+func (m *Model) handleUpgradeConfirmKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "y", "enter":
+		return m, m.executePendingUpgrade()
+	case "n", "esc":
+		m.confirmingUpgrade = false
+		m.pendingUpgrade = nil
+		m.statusMsg = "upgrade cancelled"
+	}
+	return m, nil
+}
+
+func renderUpgradeConfirmOverlay(req *upgradeRequest, width, height int) string {
+	if req == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(StyleOverlayTitle.Render("  Confirm Upgrade"))
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 32)))
+	b.WriteString("\n\n")
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("Upgrade %s (%s)?", req.pkg.Name, req.pkg.Source)))
+	b.WriteString("\n")
+	if requiresUpgradeConfirmation(req.pkg.Source) {
+		b.WriteString(StyleDim.Render("  This command requires elevated privileges."))
+		b.WriteString("\n")
+	}
+	b.WriteString(StyleDim.Render("  y/Enter to proceed · n/Esc to cancel"))
+
+	content := b.String()
+	overlay := StyleOverlay.
+		Width(42).
+		Height(7).
+		Render(content)
+
+	return placeOverlay(width, height, overlay)
+}
+
+func requiresUpgradeConfirmation(source model.Source) bool {
+	switch source {
+	case model.SourceApt, model.SourceDnf, model.SourcePacman, model.SourceSnap, model.SourceApk, model.SourceXbps:
+		return true
+	default:
+		return false
+	}
 }

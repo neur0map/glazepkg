@@ -12,7 +12,7 @@ import (
 // runPrivilegedCommand runs cmd, automatically prefixing with sudo for non-root users on Unix.
 func runPrivilegedCommand(cmd *exec.Cmd) error {
 	if os.Geteuid() == 0 {
-		return cmd.Run()
+		return runCommand(cmd)
 	}
 	if commandExists("sudo") {
 		sudoArgs := append([]string{cmd.Path}, cmd.Args[1:]...)
@@ -22,10 +22,10 @@ func runPrivilegedCommand(cmd *exec.Cmd) error {
 		sudoCmd.Stdin = cmd.Stdin
 		sudoCmd.Stdout = cmd.Stdout
 		sudoCmd.Stderr = cmd.Stderr
-		return sudoCmd.Run()
+		return runCommand(sudoCmd)
 	}
 
-	if err := cmd.Run(); err != nil {
+	if err := runCommand(cmd); err != nil {
 		return fmt.Errorf("%w (requires root privileges; run gpk with sudo)", err)
 	}
 	return nil

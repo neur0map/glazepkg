@@ -34,7 +34,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
 - **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
-- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager without leaving the UI
+- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS) surface a confirmation overlay so the upgrade never runs on a single keypress, and even gem/flatpak/pipx/opam/apk/XBPS/conda/luarocks ship native commands so the flow never leaves `gpk`
 - **Custom descriptions** — press `e` in the detail view to annotate any package; persists across sessions
 - **Background descriptions** — package summaries load asynchronously and cache for 24 hours
 - **Export** — dump your full package list to JSON or text for backup, migration, or dotfile tracking
@@ -100,7 +100,7 @@ Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`
 
 1. Launch `gpk` and pick a manager tab with `Tab`/`Shift+Tab`.
 2. Highlight the package you want to upgrade with `j`/`k`.
-3. Press `u` to trigger a single-package upgrade for the active manager.
+3. Press `u` to trigger a single-package upgrade for the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS) show a confirmation overlay asking for `y`/`Enter` before the command runs so the upgrade never happens on a single keypress, and the flow now includes native support for gem, flatpak, pipx, opam, apk, XBPS, conda, and luarocks.
 4. The status bar reports `upgrading <name>...` while the command runs; it ends with `Package upgraded successfully` on success or the terminal error on failure.
 5. If the manager cannot upgrade individual packages you see: `This package manager does not support upgrading a single package.` which keeps the UI responsive.
 
@@ -170,7 +170,7 @@ The same flow works on Windows, Linux, and macOS — `u` maps to the correct com
 | `h` (detail) | Package help/usage |
 | `e` (detail) | Edit description |
 | `s` | Save snapshot |
-| `u` | Upgrade selected package |
+| `u` | Upgrade selected package (privileged managers show a y/n overlay before the command runs) |
 | `d` | Diff against last snapshot |
 | `e` | Export (JSON or text) |
 | `r` | Force rescan |

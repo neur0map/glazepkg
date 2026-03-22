@@ -98,3 +98,7 @@ func (f *Flatpak) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (f *Flatpak) UpgradePackage(name string) error {
+	return runCommand(exec.Command("flatpak", "update", "-y", name))
+}

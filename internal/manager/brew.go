@@ -198,5 +198,5 @@ func brewCellarSizes() map[string]int64 {
 
 func (b *Brew) UpgradePackage(name string) error {
 	cmd := exec.Command("brew", "upgrade", name)
-	return cmd.Run()
+	return runCommand(cmd)
 }

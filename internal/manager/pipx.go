@@ -44,3 +44,7 @@ func (p *Pipx) Scan() ([]model.Package, error) {
 	}
 	return pkgs, nil
 }
+
+func (p *Pipx) UpgradePackage(name string) error {
+	return runCommand(exec.Command("pipx", "upgrade", name))
+}

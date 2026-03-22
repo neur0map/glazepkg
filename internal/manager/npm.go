@@ -109,5 +109,5 @@ func (n *Npm) Describe(pkgs []model.Package) map[string]string {
 
 func (n *Npm) UpgradePackage(name string) error {
 	cmd := exec.Command("npm", "update", "-g", name)
-	return cmd.Run()
+	return runCommand(cmd)
 }

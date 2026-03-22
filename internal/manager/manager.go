@@ -15,7 +15,6 @@ type Manager interface {
 	Name() model.Source
 	Available() bool
 	Scan() ([]model.Package, error)
-	UpgradePackage(name string) error
 }
 
 // All returns every known manager.

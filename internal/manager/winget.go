@@ -238,5 +238,5 @@ func (w *Winget) UpgradePackage(name string) error {
 		"--accept-package-agreements",
 		name,
 	)
-	return cmd.Run()
+	return runCommand(cmd)
 }
