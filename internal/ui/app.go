@@ -1084,6 +1084,21 @@ func (m Model) View() string {
 		b.WriteString(renderDiffView(m.currentDiff, m.diffSince))
 	}
 
+	// Upgrade notification (above the status bar)
+	if m.upgradeNotifMsg != "" {
+		icon := "✓ "
+		color := ColorGreen
+		if m.upgradeNotifErr {
+			icon = "✗ "
+			color = ColorRed
+		} else if m.upgradeInFlight {
+			icon = m.spinner.View() + " "
+			color = ColorCyan
+		}
+		notifStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
+		b.WriteString("\n " + notifStyle.Render(icon+m.upgradeNotifMsg))
+	}
+
 	// Status bar
 	b.WriteString("\n")
 	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
@@ -1184,20 +1199,6 @@ func formatDuration(d time.Duration) string {
 }
 
 func (m Model) renderStatusBar() string {
-	if m.upgradeNotifMsg != "" {
-		icon := "✓ "
-		color := ColorGreen
-		if m.upgradeNotifErr {
-			icon = "✗ "
-			color = ColorRed
-		} else if m.upgradeInFlight {
-			icon = m.spinner.View() + " "
-			color = ColorCyan
-		}
-		notifStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
-		return " " + notifStyle.Render(icon+m.upgradeNotifMsg)
-	}
-
 	if m.statusMsg != "" {
 		return StyleStatusBar.Render(m.statusMsg)
 	}
