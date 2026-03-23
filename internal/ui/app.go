@@ -153,6 +153,7 @@ type Model struct {
 	pendingUpgrade    *upgradeRequest
 	passwordInput     textinput.Model
 	upgradeInFlight   bool
+	upgradingPkgName  string
 	upgradeCancel     context.CancelFunc
 	upgradeNotifMsg   string
 	upgradeNotifErr   bool
@@ -488,6 +489,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case upgradeResultMsg:
 		m.upgradeInFlight = false
+		m.upgradingPkgName = ""
 		m.upgradeCancel = nil
 		if msg.err != nil {
 			errMsg := msg.err.Error()
@@ -1183,7 +1185,7 @@ func (m Model) renderListView(b *strings.Builder) {
 		listHeight = 5
 	}
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize))
+	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName))
 
 	// Loading indicators
 	if m.loadingDescs {
@@ -1330,6 +1332,7 @@ func (m *Model) executePendingUpgrade() tea.Cmd {
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
+	m.upgradingPkgName = req.pkg.Name
 	m.upgradeNotifMsg = fmt.Sprintf("upgrading %s...", req.pkg.Name)
 	m.upgradeNotifErr = false
 	return tea.Batch(m.spinner.Tick, m.runUpgradeRequest(req))
