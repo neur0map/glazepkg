@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg, removingPkg string) string {
+func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg, removingPkg string, selections map[string]bool) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -76,7 +76,15 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 
 	for i := start; i < end; i++ {
 		p := pkgs[i]
-		name := truncate(p.Name, colName-2)
+		nameStr := p.Name
+		if len(selections) > 0 {
+			if selections[p.Key()] {
+				nameStr = "☑ " + nameStr
+			} else {
+				nameStr = "☐ " + nameStr
+			}
+		}
+		name := truncate(nameStr, colName-2)
 		hasUpdate := p.LatestVersion != "" && p.LatestVersion != p.Version
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
