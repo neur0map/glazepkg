@@ -59,6 +59,13 @@ func (y *YourPkg) Scan() ([]model.Package, error) {
 You can also implement any of these:
 
 ```go
+// Single-package upgrade (press u in detail view)
+func (y *YourPkg) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("yourpkg", "upgrade", name)
+}
+// If the tool requires root, use privilegedCmd instead:
+// return privilegedCmd("yourpkg", "upgrade", name)
+
 // Update detection
 func (y *YourPkg) CheckUpdates(pkgs []model.Package) map[string]string {
 	// return map of name → latest version
@@ -74,6 +81,8 @@ func (y *YourPkg) ListDependencies(pkgs []model.Package) map[string][]string {
 	// return map of name → list of dependency names
 }
 ```
+
+If a manager can't upgrade individual packages, just omit `UpgradeCmd` — the UI will show a message saying it's not supported.
 
 ### 3. Register it
 
@@ -94,27 +103,6 @@ SourceYourPkg Source = "yourpkg"
 {model.SourceYourPkg, "yourpkg"},
 ```
 
-If the tool supports single-package upgrades, implement the optional `manager.Upgrader` interface:
-
-```go
-func (m *YourManager) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("your-tool", "upgrade", name)
-}
-```
-
-If it can't upgrade individual packages, just omit this method and the UI will surface `manager.ErrUpgradeNotSupported`. If the tool requires root, use `privilegedCmd("your-tool", "upgrade", name)` instead.
-
-Optional interfaces:
-- `manager.Upgrader` — implements `UpgradeCmd(name string) *exec.Cmd` to build a single-package upgrade command
-- `CheckUpdates(pkgs []model.Package) map[string]string` — update detection
-- `Describe(pkgs []model.Package) map[string]string` — package descriptions
-- `ListDependencies(pkgs []model.Package) map[string][]string` — dependency info
-
-Then register it in:
-1. `internal/model/package.go` — add `SourceYourManager` constant
-2. `internal/manager/manager.go` — add to `All()`
-3. `internal/ui/tabs.go` — add to the sources list
-4. `internal/ui/theme.go` — pick a badge color
 **`internal/ui/theme.go`** — pick a badge color from the palette (`ColorBlue`, `ColorGreen`, `ColorRed`, `ColorCyan`, `ColorPurple`, `ColorOrange`, `ColorYellow`):
 ```go
 model.SourceYourPkg: ColorCyan,
