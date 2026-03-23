@@ -170,13 +170,15 @@ func brewCellarSizes() map[string]int64 {
 	}
 	cellar := strings.TrimSpace(string(cellarOut))
 
-	out, err := exec.Command("du", "-sk", cellar+"/*").Output()
+	entries, err := filepath.Glob(filepath.Join(cellar, "*"))
+	if err != nil || len(entries) == 0 {
+		return nil
+	}
+
+	args := append([]string{"-sk"}, entries...)
+	out, err := exec.Command("du", args...).Output()
 	if err != nil {
-		// Shell glob won't expand; use shell
-		out, err = exec.Command("sh", "-c", "du -sk "+cellar+"/*").Output()
-		if err != nil {
-			return nil
-		}
+		return nil
 	}
 
 	sizes := make(map[string]int64)
