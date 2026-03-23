@@ -146,9 +146,8 @@ func (p *Pacman) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
-func (p *Pacman) UpgradePackage(name string) error {
-	cmd := exec.Command("pacman", "-S", "--noconfirm", name)
-	return runPrivilegedCommand(cmd)
+func (p *Pacman) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-S", name)
 }
 
 func parseField(line string) (key, val string, ok bool) {

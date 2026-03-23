@@ -114,7 +114,6 @@ func (s *Snap) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
-func (s *Snap) UpgradePackage(name string) error {
-	cmd := exec.Command("snap", "refresh", name)
-	return runPrivilegedCommand(cmd)
+func (s *Snap) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("snap", "refresh", name)
 }

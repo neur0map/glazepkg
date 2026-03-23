@@ -115,7 +115,6 @@ func (p *Pip) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
-func (p *Pip) UpgradePackage(name string) error {
-	cmd := exec.Command("pip", "install", "--upgrade", name)
-	return runCommand(cmd)
+func (p *Pip) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("pip", "install", "--upgrade", name)
 }

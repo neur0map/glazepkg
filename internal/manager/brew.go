@@ -109,8 +109,8 @@ func (b *Brew) CheckUpdates(pkgs []model.Package) map[string]string {
 
 	var outdated struct {
 		Formulae []struct {
-			Name           string   `json:"name"`
-			CurrentVersion string   `json:"current_version"`
+			Name              string   `json:"name"`
+			CurrentVersion    string   `json:"current_version"`
 			InstalledVersions []string `json:"installed_versions"`
 		} `json:"formulae"`
 	}
@@ -196,7 +196,6 @@ func brewCellarSizes() map[string]int64 {
 	return sizes
 }
 
-func (b *Brew) UpgradePackage(name string) error {
-	cmd := exec.Command("brew", "upgrade", name)
-	return runCommand(cmd)
+func (b *Brew) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("brew", "upgrade", name)
 }

@@ -6,47 +6,158 @@ Thanks for wanting to help! Here's how to get started.
 
 Each manager is a single Go file in `internal/manager/`. Look at any existing one (e.g., `snap.go` or `gem.go`) for the pattern.
 
-You need to implement:
+### 1. Create the manager file
+
+Create `internal/manager/yourpkg.go`:
 
 ```go
-type YourManager struct{}
+package manager
 
-func (m *YourManager) Name() model.Source      { return model.SourceYourManager }
-func (m *YourManager) Available() bool         { return commandExists("your-tool") }
-func (m *YourManager) Scan() ([]model.Package, error) { /* ... */ }
-```
+import (
+	"bufio"
+	"os/exec"
+	"strings"
+	"time"
 
-If the tool supports single-package upgrades, implement the optional `manager.Upgrader` interface:
+	"github.com/neur0map/glazepkg/internal/model"
+)
 
-```go
-func (m *YourManager) UpgradePackage(name string) error {
-	return exec.Command("your-tool", "upgrade", name).Run()
+type YourPkg struct{}
+
+func (y *YourPkg) Name() model.Source { return model.SourceYourPkg }
+
+func (y *YourPkg) Available() bool { return commandExists("yourpkg") }
+
+func (y *YourPkg) Scan() ([]model.Package, error) {
+	out, err := exec.Command("yourpkg", "list").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		// parse name and version from the line
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        fields[0],
+			Version:     fields[1],
+			Source:      model.SourceYourPkg,
+			InstalledAt: time.Now(),
+		})
+	}
+	return pkgs, nil
 }
 ```
 
-If it can't upgrade individual packages, just omit this method and the UI will surface `manager.ErrUpgradeNotSupported`.
+### 2. Optional interfaces
 
-Optional interfaces:
-- `manager.Upgrader` — implements `UpgradePackage(name string)` to run a single-package upgrade command
-- `CheckUpdates(pkgs []model.Package) map[string]string` — update detection
-- `Describe(pkgs []model.Package) map[string]string` — package descriptions
-- `ListDependencies(pkgs []model.Package) map[string][]string` — dependency info
+You can implement any of these to extend functionality:
 
+```go
+// Single-package upgrade (press u in detail view)
+func (y *YourPkg) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("yourpkg", "upgrade", name)
+}
+// If the tool requires root/Administrator, use privilegedCmd instead:
+// return privilegedCmd("yourpkg", "upgrade", name)
 
-Then register it in:
-1. `internal/model/package.go` — add `SourceYourManager` constant
-2. `internal/manager/manager.go` — add to `All()`
-3. `internal/ui/tabs.go` — add to the sources list
-4. `internal/ui/theme.go` — pick a badge color
+// Pre-upgrade cleanup (runs before UpgradeCmd inside the upgrade goroutine)
+// Use this to remove stale lock files or other artifacts that block upgrades.
+// Always return nil — non-fatal; let the command surface real errors.
+func (y *YourPkg) PrepareUpgrade(name string) error {
+	_ = os.Remove(lockFilePath(name))
+	return nil
+}
 
-## Adding tests
+// Update detection
+func (y *YourPkg) CheckUpdates(pkgs []model.Package) map[string]string {
+	// return map of name → latest version
+}
 
-Put parsing tests in `tests/parsing/` with mock CLI output. This lets CI verify your parser without the actual tool installed.
+// Package descriptions
+func (y *YourPkg) Describe(pkgs []model.Package) map[string]string {
+	// return map of name → description
+}
+
+// Dependency info (shown when pressing d in detail view)
+func (y *YourPkg) ListDependencies(pkgs []model.Package) map[string][]string {
+	// return map of name → list of dependency names
+}
+```
+
+If a manager can't upgrade individual packages, omit `UpgradeCmd` — the UI will show a message saying it's not supported.
+
+`PrepareUpgrade` (the `manager.PreUpgrader` interface) is optional and exists for managers that need to remove stale lock files or do other idempotent cleanup before the upgrade command runs. Chocolatey implements this to clear `.chocolateyPending` markers — see [`docs/upgrade.md`](docs/upgrade.md#why-it-exists--the-chocolatey-chocolateypending-bug) for the full root-cause analysis.
+
+### 3. Register it
+
+Four files need a one-line addition each:
+
+**`internal/model/package.go`** — add a source constant:
+```go
+SourceYourPkg Source = "yourpkg"
+```
+
+**`internal/manager/manager.go`** — add to the `All()` slice:
+```go
+&YourPkg{},
+```
+
+**`internal/ui/tabs.go`** — add to the sources list:
+```go
+{model.SourceYourPkg, "yourpkg"},
+```
+
+**`internal/ui/theme.go`** — pick a badge color from the palette (`ColorBlue`, `ColorGreen`, `ColorRed`, `ColorCyan`, `ColorPurple`, `ColorOrange`, `ColorYellow`):
+```go
+model.SourceYourPkg: ColorCyan,
+```
+
+### 4. Add a parsing test
+
+Create `tests/parsing/yourpkg_test.go` with mock CLI output so CI can verify your parser without the tool installed:
+
+```go
+package parsing
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestYourPkgListParsing(t *testing.T) {
+	// Paste real output from `yourpkg list` here
+	output := `package-a 1.0.0
+package-b 2.3.1`
+
+	type pkg struct{ name, version string }
+	var pkgs []pkg
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 {
+			pkgs = append(pkgs, pkg{fields[0], fields[1]})
+		}
+	}
+
+	if len(pkgs) != 2 {
+		t.Fatalf("expected 2 packages, got %d", len(pkgs))
+	}
+	if pkgs[0].name != "package-a" || pkgs[0].version != "1.0.0" {
+		t.Errorf("pkg 0: %+v", pkgs[0])
+	}
+}
+```
 
 ## Building and testing
 
 ```bash
 go build ./cmd/gpk
+go vet ./...
 go test ./...
 ```
 

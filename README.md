@@ -34,47 +34,48 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
 - **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
-- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS) surface a confirmation overlay so the upgrade never runs on a single keypress, and even gem/flatpak/pipx/opam/apk/XBPS/conda/luarocks ship native commands so the flow never leaves `gpk`
+- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS, Chocolatey) surface a confirmation overlay so the upgrade never runs on a single keypress; Chocolatey upgrades automatically clear stale `.chocolateyPending` lock files before running, permanently fixing the "Access is denied" failure that previously broke every subsequent upgrade after an interrupted run
 - **Custom descriptions** — press `e` in the detail view to annotate any package; persists across sessions
 - **Background descriptions** — package summaries load asynchronously and cache for 24 hours
 - **Export** — dump your full package list to JSON or text for backup, migration, or dotfile tracking
 - **Self-updating** — run `gpk update` to grab the latest release automatically
-- **Tokyo Night theme** — carefully designed color palette with per-manager color coding
+- **Full theme system** — 7 bundled themes (Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox Dark, Nord, One Dark, Solarized Light); press `t` to open the live picker, or `gpk --theme <name>` from the CLI; add your own TOML themes in `~/.glazepkg/themes/`
+- **Theme snapshots** — capture and restore any theme state with `gpk snapshot save/list/load`
+- **Polished TUI** — centered rainbow-gradient title with a slow, tasteful color sweep that reacts to terminal width; contextual rotating status messages during scan, description fetch, and update checks; color-coded loading indicators; fine-grained update banner in the detail view showing exact version delta with upgrade hint
 - **Vim keybindings** — `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u` — feels like home
 - **Zero dependencies** — single static Go binary, no runtime requirements
 - **Cross-platform** — works on macOS, Linux, and Windows; skips managers that aren't installed
 
 ## Install
 
+### Arch Linux (AUR)
+
+```bash
+yay -S gpk-bin
+```
+
+### Go
+
 ```bash
 go install github.com/neur0map/glazepkg/cmd/gpk@latest
 ```
 
-If `gpk` is not found after installing, add Go's bin directory to your PATH:
+### Pre-built binaries
 
-```bash
-# bash (~/.bashrc) or zsh (~/.zshrc)
-echo 'export PATH="$PATH:$HOME/go/bin"' >> ~/.bashrc
-source ~/.bashrc
-```
+Grab a binary from [releases](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel), Linux (x64/ARM), or Windows (x64/ARM).
 
-```fish
-# fish
-fish_add_path ~/go/bin
-```
-
-```powershell
-# PowerShell (Windows)
-$env:PATH += ";$env:USERPROFILE\go\bin"
-```
-
-Or grab a [pre-built binary](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel) or Linux (x64/ARM).
-
-Or build from source:
+### Build from source
 
 ```bash
 git clone https://github.com/neur0map/glazepkg.git
 cd glazepkg && go build ./cmd/gpk
+```
+
+If `gpk` is not found after installing via `go install`, add Go's bin directory to your PATH:
+
+```bash
+# bash/zsh
+export PATH="$PATH:$HOME/go/bin"
 ```
 
 ## Update
@@ -94,22 +95,43 @@ gpk version      Show current version
 gpk --help       Show keybind reference
 ```
 
-Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export, `u` to upgrade the selected package. Press `?` for the full keybind reference.
+Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Open a package with `Enter` and press `u` to upgrade it. Press `?` for the full keybind reference.
 
-## Usage
+## Upgrading Packages
 
-1. Launch `gpk` and pick a manager tab with `Tab`/`Shift+Tab`.
-2. Highlight the package you want to upgrade with `j`/`k`.
-3. Press `u` to trigger a single-package upgrade for the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS) show a confirmation overlay asking for `y`/`Enter` before the command runs so the upgrade never happens on a single keypress, and the flow now includes native support for gem, flatpak, pipx, opam, apk, XBPS, conda, and luarocks.
-4. The status bar reports `upgrading <name>...` while the command runs; it ends with `Package upgraded successfully` on success or the terminal error on failure.
-5. If the manager cannot upgrade individual packages you see: `This package manager does not support upgrading a single package.` which keeps the UI responsive.
+1. Launch `gpk` and navigate to the package you want to upgrade.
+2. Press `Enter` to open the package detail view.
+3. Press `u` to upgrade. A confirmation overlay shows the exact command that will run.
+4. Select `Yes` or `No` with arrow keys / Tab and press `Enter` to confirm.
+5. The upgrade runs in the background — a notification appears in the corner showing progress and result. You can keep navigating the TUI while it runs.
 
-The same flow works on Windows, Linux, and macOS — `u` maps to the correct command for the selected manager automatically.
+Works on Windows, Linux, and macOS — `u` maps to the correct command for the selected manager automatically.
+
+### Windows (Chocolatey, winget)
+
+Chocolatey upgrades require an elevated session. GlazePKG handles this in two
+ways — pick whichever fits your workflow:
+
+**Option A — always run from an elevated terminal**
+Right-click your terminal → "Run as Administrator", then launch `gpk` normally.
+
+**Option B — install gsudo (recommended)**
+```powershell
+choco install gsudo
+```
+With gsudo on `PATH`, GlazePKG elevates Chocolatey upgrades automatically
+without restarting the session.
+
+**Stale `.chocolateyPending` fix** — GlazePKG automatically removes any
+leftover Chocolatey lock files before every upgrade. This permanently fixes the
+`Access to the path '.chocolateyPending' is denied` error that previously
+broke every subsequent upgrade after a crash or interrupted run. No manual
+cleanup is ever needed.
+
+See [`docs/upgrade.md`](docs/upgrade.md) for full internals and [`docs/windows.md`](docs/windows.md) for the complete Windows guide.
 
 ## Supported Package Managers
 
-| Manager | Platform | What it scans | Descriptions |
-|---------|----------|---------------|-------------|
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
 | **brew** | macOS/Linux | Installed formulae | batch via JSON |
@@ -170,12 +192,22 @@ The same flow works on Windows, Linux, and macOS — `u` maps to the correct com
 | `h` (detail) | Package help/usage |
 | `e` (detail) | Edit description |
 | `s` | Save snapshot |
-| `u` | Upgrade selected package (privileged managers show a y/n overlay before the command runs) |
+| `u` (detail) | Upgrade package (shows confirmation with command preview) |
 | `d` | Diff against last snapshot |
 | `e` | Export (JSON or text) |
+| `t` | Open theme picker / cycle to next theme |
 | `r` | Force rescan |
 | `?` | Help overlay |
 | `q` | Quit |
+
+**Theme Picker (`t` key):**
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Navigate theme list |
+| `Enter` | Apply selected theme (persists) |
+| `t` | Cycle to next theme live |
+| `Esc` | Close without changing |
 
 ## Snapshots & Diffs
 
@@ -188,6 +220,71 @@ GlazePKG can track how your system changes over time:
    - **Upgraded** packages (version changes)
 
 Use this to audit what changed after a `brew upgrade`, track drift across machines, or catch unexpected installs.
+
+## Theming
+
+GlazePKG ships with **7 bundled themes** and a full theme system — no config needed to get started.
+
+### Built-in themes
+
+| Theme | Type |
+|-------|------|
+| Tokyo Night | dark |
+| Catppuccin Mocha | dark |
+| Dracula | dark |
+| Gruvbox Dark | dark |
+| Nord | dark |
+| One Dark | dark |
+| Solarized Light | light |
+
+### TUI
+
+Press **`t`** to open the live theme picker. Navigate with `j`/`k`, confirm with `Enter`. The choice persists immediately to `~/.glazepkg/config.toml`.
+
+### CLI
+
+```bash
+gpk themes                   # list all themes (active marked with ✓)
+gpk --theme "Nord"           # apply theme and launch TUI
+gpk --theme "Catppuccin Mocha"
+```
+
+### Custom themes
+
+Drop any `.toml` file in `~/.glazepkg/themes/`:
+
+```toml
+name        = "My Theme"
+type        = "dark"
+background  = "#1e1e2e"
+foreground  = "#cdd6f4"
+accent      = "#cba6f7"
+cursor      = "#f5e0dc"
+highlight   = "#b4befe"
+border      = "#585b70"
+selection   = "#313244"
+surface     = "#313244"
+subtext     = "#6c7086"
+text        = "#cdd6f4"
+blue        = "#89b4fa"
+purple      = "#cba6f7"
+green       = "#a6e3a1"
+red         = "#f38ba8"
+yellow      = "#f9e2af"
+cyan        = "#89dceb"
+orange      = "#fab387"
+white       = "#bac2de"
+```
+
+### Theme snapshots
+
+```bash
+gpk snapshot save "my-tweaks"          # snapshot current theme
+gpk snapshot list                      # list saved snapshots
+gpk snapshot load ~/.glazepkg/theme_snapshots/my-tweaks_20250101T120000.toml
+```
+
+See [`docs/theming.md`](docs/theming.md) for full documentation.
 
 ## Data Storage
 

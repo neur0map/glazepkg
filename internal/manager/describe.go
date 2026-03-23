@@ -70,7 +70,7 @@ func (dc *DescriptionCache) save() {
 // Get returns a cached description if it exists and hasn't expired.
 func (dc *DescriptionCache) Get(key string) (string, bool) {
 	dc.mu.RLock()
-	defer dc.mu.RUnlock()
+	defer dc.mu.RUnlock() //nolint:errcheck
 	e, ok := dc.entries[key]
 	if !ok || time.Since(e.Fetched) > cacheTTL {
 		return "", false
@@ -81,14 +81,14 @@ func (dc *DescriptionCache) Get(key string) (string, bool) {
 // Set stores a description in the cache.
 func (dc *DescriptionCache) Set(key, desc string) {
 	dc.mu.Lock()
-	defer dc.mu.Unlock()
+	defer dc.mu.Unlock() //nolint:errcheck
 	dc.entries[key] = cacheEntry{Desc: desc, Fetched: time.Now()}
 }
 
 // Flush writes the cache to disk.
 func (dc *DescriptionCache) Flush() {
 	dc.mu.RLock()
-	defer dc.mu.RUnlock()
+	defer dc.mu.RUnlock() //nolint:errcheck
 	dc.save()
 }
 
@@ -101,21 +101,22 @@ func SanitizeDesc(s string) string {
 // FetchDescriptions fetches descriptions for all packages, using the cache
 // where possible and falling back to the manager's Describer interface.
 func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionCache) map[string]string {
-	result := make(map[string]string)
-
 	// Group packages by source
 	bySource := make(map[model.Source][]model.Package)
 	for _, p := range pkgs {
 		bySource[p.Source] = append(bySource[p.Source], p)
 	}
 
+	var mu sync.Mutex
+	result := make(map[string]string)
+	var wg sync.WaitGroup
+
 	for _, mgr := range mgrs {
 		desc, ok := mgr.(Describer)
 		if !ok {
 			continue
 		}
-		source := mgr.Name()
-		srcPkgs := bySource[source]
+		srcPkgs := bySource[mgr.Name()]
 		if len(srcPkgs) == 0 {
 			continue
 		}
@@ -124,7 +125,16 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 		var uncached []model.Package
 		for _, p := range srcPkgs {
 			if d, ok := cache.Get(p.Key()); ok {
-				result[p.Key()] = SanitizeDesc(d)
+				if d != "" {
+					mu.Lock()
+					result[p.Key()] = SanitizeDesc(d)
+					mu.Unlock()
+				}
+			} else if p.Description != "" {
+				cache.Set(p.Key(), p.Description)
+				mu.Lock()
+				result[p.Key()] = SanitizeDesc(p.Description)
+				mu.Unlock()
 			} else {
 				uncached = append(uncached, p)
 			}
@@ -134,16 +144,25 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 			continue
 		}
 
-		fetched := desc.Describe(uncached)
-		for _, p := range uncached {
-			if d, ok := fetched[p.Name]; ok && d != "" {
-				d = SanitizeDesc(d)
-				result[p.Key()] = d
-				cache.Set(p.Key(), d)
+		wg.Add(1)
+		go func(d Describer, pkgs []model.Package) {
+			defer wg.Done() //nolint:errcheck
+			fetched := d.Describe(pkgs)
+			mu.Lock()
+			for _, p := range pkgs {
+				if desc, ok := fetched[p.Name]; ok && desc != "" {
+					desc = SanitizeDesc(desc)
+					result[p.Key()] = desc
+					cache.Set(p.Key(), desc)
+				} else {
+					cache.Set(p.Key(), "")
+				}
 			}
-		}
+			mu.Unlock()
+		}(desc, uncached)
 	}
 
+	wg.Wait()
 	cache.Flush()
 	return result
 }

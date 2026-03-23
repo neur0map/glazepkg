@@ -17,24 +17,24 @@ var exportFormats = []string{"Text", "JSON"}
 func renderExportOverlay(cursor, width, height int) string {
 	var b strings.Builder
 	b.WriteString(StyleOverlayTitle.Render("  Export Packages"))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 30)))
-	b.WriteString("\n\n")
+	b.WriteString(StyleOverlayBase.Render("\n"))
+	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  " + strings.Repeat("─", 30)))
+	b.WriteString(StyleOverlayBase.Render("\n\n"))
 
 	for i, format := range exportFormats {
-		prefix := "  "
-		style := StyleNormal
+		prefix := StyleOverlayBase.Render("  ")
+		style := StyleOverlayBase.Copy().Foreground(ColorText)
 		if i == cursor {
 			prefix = StyleSelected.Render(" > ")
 			style = StyleSelected
 		}
 		b.WriteString(prefix)
 		b.WriteString(style.Render(format))
-		b.WriteString("\n")
+		b.WriteString(StyleOverlayBase.Render("\n"))
 	}
 
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  Enter: export  Esc: cancel"))
+	b.WriteString(StyleOverlayBase.Render("\n"))
+	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  Enter: export  Esc: cancel"))
 
 	content := b.String()
 	overlay := StyleOverlay.

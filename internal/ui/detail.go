@@ -12,15 +12,23 @@ import (
 func renderDetail(pkg model.Package, editing bool, descInput string) string {
 	var b strings.Builder
 
-	// Header
-	title := fmt.Sprintf("  ← %s", pkg.Name)
+	// Header: package name + badge on the same line, full-width separator below.
+	// We use a fixed separator width of 78 to stay within standard 80-col terminals
+	// while looking intentional rather than clipped.
+	const sepWidth = 78
+
 	badge := RenderBadge(pkg.Source)
-	b.WriteString(StyleNormal.Bold(true).Render(title))
-	b.WriteString(strings.Repeat(" ", max(2, 60-len(title)-8)))
-	b.WriteString(badge)
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 75)))
-	b.WriteString("\n\n")
+	nameStyle := StyleNormal.Copy().Bold(true)
+	backStyle := StyleDim.Copy()
+
+	nameStr := pkg.Name
+	back := backStyle.Render("← ")
+	name := nameStyle.Render(nameStr)
+	spacer := strings.Repeat(" ", max(2, sepWidth-len(nameStr)-lipgloss.Width(badge)-4))
+	b.WriteString("  " + back + name + spacer + badge)
+	b.WriteString(StyleNormal.Render("\n"))
+	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", sepWidth)))
+	b.WriteString(StyleNormal.Render("\n\n"))
 
 	hasUpdate := pkg.LatestVersion != "" && pkg.LatestVersion != pkg.Version
 
@@ -42,35 +50,41 @@ func renderDetail(pkg model.Package, editing bool, descInput string) string {
 		if f.val == "" {
 			continue
 		}
-		b.WriteString("  ")
+		b.WriteString(StyleNormal.Render("  "))
 		b.WriteString(StyleDetailKey.Render(f.key))
 		b.WriteString(StyleDetailVal.Render(f.val))
-		b.WriteString("\n")
+		b.WriteString(StyleNormal.Render("\n"))
 	}
 
 	// Update available banner
 	if hasUpdate {
-		b.WriteString("\n")
-		updateLine := fmt.Sprintf("  ↑ Update available: %s → %s", pkg.Version, pkg.LatestVersion)
-		b.WriteString(StyleUpdateBanner.Render(updateLine))
-		b.WriteString("\n")
+		b.WriteString(StyleNormal.Render("\n"))
+		arrow := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true).Render("  ↑ ")
+		fromVer := lipgloss.NewStyle().Foreground(ColorSubtext).Render(pkg.Version)
+		arrow2 := lipgloss.NewStyle().Foreground(ColorSubtext).Render(" → ")
+		toVer := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true).Render(pkg.LatestVersion)
+		label := lipgloss.NewStyle().Foreground(ColorSubtext).Render(" available — press ")
+		key := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true).Render("u")
+		hint := lipgloss.NewStyle().Foreground(ColorSubtext).Render(" to upgrade")
+		b.WriteString(arrow + fromVer + arrow2 + toVer + label + key + hint)
+		b.WriteString(StyleNormal.Render("\n"))
 	}
 
 	// Description field (always shown)
 	if editing {
-		b.WriteString("  ")
+		b.WriteString(StyleNormal.Render("  "))
 		b.WriteString(descInput)
-		b.WriteString("\n")
+		b.WriteString(StyleNormal.Render("\n"))
 	} else if pkg.Description != "" {
-		b.WriteString("  ")
+		b.WriteString(StyleNormal.Render("  "))
 		b.WriteString(StyleDetailKey.Render("Description"))
 		b.WriteString(StyleDetailVal.Render(pkg.Description))
-		b.WriteString("\n")
+		b.WriteString(StyleNormal.Render("\n"))
 	} else {
-		b.WriteString("  ")
+		b.WriteString(StyleNormal.Render("  "))
 		b.WriteString(StyleDetailKey.Render("Description"))
 		b.WriteString(StyleDim.Render("(none) — press e to add"))
-		b.WriteString("\n")
+		b.WriteString(StyleNormal.Render("\n"))
 	}
 
 	return b.String()
@@ -113,18 +127,18 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 	// Title
 	title := fmt.Sprintf("  Dependencies — %s", pkg.Name)
 	b.WriteString(StyleOverlayTitle.Render(title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 46)))
-	b.WriteString("\n")
+	b.WriteString(StyleOverlayBase.Render("\n"))
+	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  " + strings.Repeat("─", 46)))
+	b.WriteString(StyleOverlayBase.Render("\n"))
 
 	hasDeps := len(pkg.DependsOn) > 0
 	hasReqBy := len(pkg.RequiredBy) > 0
 	total := len(pkg.DependsOn) + len(pkg.RequiredBy)
 
 	if total == 0 {
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  No dependencies"))
-		b.WriteString("\n")
+		b.WriteString(StyleOverlayBase.Render("\n"))
+		b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  No dependencies"))
+		b.WriteString(StyleOverlayBase.Render("\n"))
 		return renderDepsOverlayFrame(b.String(), width, height, 6)
 	}
 
@@ -149,9 +163,9 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 
 	// Render "Depends on" section
 	if hasDeps {
-		b.WriteString("\n")
-		b.WriteString(StyleDetailKey.Render(fmt.Sprintf("  Depends on (%d)", len(pkg.DependsOn))))
-		b.WriteString("\n")
+		b.WriteString(StyleOverlayBase.Render("\n"))
+		b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render(fmt.Sprintf("  Depends on (%d)", len(pkg.DependsOn))))
+		b.WriteString(StyleOverlayBase.Render("\n"))
 	}
 
 	for i := start; i < end && i < len(pkg.DependsOn); i++ {
@@ -159,10 +173,10 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 		if i == cursor {
 			b.WriteString(StyleSelected.Render(fmt.Sprintf("  ▸ %-44s", name)))
 		} else {
-			b.WriteString("  ")
-			b.WriteString(StyleDetailVal.Render(fmt.Sprintf("  %-44s", name)))
+			b.WriteString(StyleOverlayBase.Render("  "))
+			b.WriteString(StyleOverlayBase.Copy().Foreground(ColorText).Render(fmt.Sprintf("  %-44s", name)))
 		}
-		b.WriteString("\n")
+		b.WriteString(StyleOverlayBase.Render("\n"))
 	}
 
 	// Render "Required by" section
@@ -171,9 +185,9 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 		reqStart := max(0, start-len(pkg.DependsOn))
 		reqEnd := end - len(pkg.DependsOn)
 		if reqEnd > 0 {
-			b.WriteString("\n")
-			b.WriteString(StyleDetailKey.Render(fmt.Sprintf("  Required by (%d)", len(pkg.RequiredBy))))
-			b.WriteString("\n")
+			b.WriteString(StyleOverlayBase.Render("\n"))
+			b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render(fmt.Sprintf("  Required by (%d)", len(pkg.RequiredBy))))
+			b.WriteString(StyleOverlayBase.Render("\n"))
 
 			if reqStart < 0 {
 				reqStart = 0
@@ -184,18 +198,18 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 				if globalIdx == cursor {
 					b.WriteString(StyleSelected.Render(fmt.Sprintf("  ▸ %-44s", name)))
 				} else {
-					b.WriteString("  ")
-					b.WriteString(StyleDetailVal.Render(fmt.Sprintf("  %-44s", name)))
+					b.WriteString(StyleOverlayBase.Render("  "))
+					b.WriteString(StyleOverlayBase.Copy().Foreground(ColorText).Render(fmt.Sprintf("  %-44s", name)))
 				}
-				b.WriteString("\n")
+				b.WriteString(StyleOverlayBase.Render("\n"))
 			}
 		}
 	}
 
 	// Scroll indicator
-	b.WriteString("\n")
+	b.WriteString(StyleOverlayBase.Render("\n"))
 	indicator := fmt.Sprintf("  %d/%d", cursor+1, total)
-	b.WriteString(StyleDim.Render(indicator))
+	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render(indicator))
 
 	overlayHeight := min(maxVisible+10, height-4)
 	return renderDepsOverlayFrame(b.String(), width, height, overlayHeight)
@@ -227,14 +241,14 @@ func renderPkgHelpOverlay(name string, lines []string, scroll, width, height int
 	// Title
 	title := fmt.Sprintf("  %s --help", name)
 	b.WriteString(StyleOverlayTitle.Render(title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(contentWidth, overlayWidth-4))))
-	b.WriteString("\n")
+	b.WriteString(StyleOverlayBase.Render("\n"))
+	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  " + strings.Repeat("─", min(contentWidth, overlayWidth-4))))
+	b.WriteString(StyleOverlayBase.Render("\n"))
 
 	if len(lines) == 0 {
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  No help available"))
-		b.WriteString("\n")
+		b.WriteString(StyleOverlayBase.Render("\n"))
+		b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  No help available"))
+		b.WriteString(StyleOverlayBase.Render("\n"))
 	} else {
 		visibleLines := height - 10
 		if visibleLines < 5 {
@@ -246,9 +260,9 @@ func renderPkgHelpOverlay(name string, lines []string, scroll, width, height int
 			end = len(lines)
 		}
 
-		headingStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
-		flagStyle := lipgloss.NewStyle().Foreground(ColorGreen)
-		normalStyle := lipgloss.NewStyle().Foreground(ColorText)
+		headingStyle := lipgloss.NewStyle().Foreground(ColorCyan).Background(ColorOverlay).Bold(true)
+		flagStyle := lipgloss.NewStyle().Foreground(ColorGreen).Background(ColorOverlay)
+		normalStyle := lipgloss.NewStyle().Foreground(ColorText).Background(ColorOverlay)
 
 		for i := scroll; i < end; i++ {
 			line := lines[i]
@@ -263,17 +277,17 @@ func renderPkgHelpOverlay(name string, lines []string, scroll, width, height int
 			var styled string
 			switch {
 			case trimmed == "":
-				styled = ""
+				styled = StyleOverlayBase.Render("")
 			case isHelpHeading(trimmed):
 				styled = headingStyle.Render("  " + line)
 			case strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "--"):
-				styled = "  " + flagStyle.Render(line)
+				styled = StyleOverlayBase.Render("  ") + flagStyle.Render(line)
 			default:
-				styled = "  " + normalStyle.Render(line)
+				styled = StyleOverlayBase.Render("  ") + normalStyle.Render(line)
 			}
 
 			b.WriteString(styled)
-			b.WriteString("\n")
+			b.WriteString(StyleOverlayBase.Render("\n"))
 		}
 
 		// Scroll indicator
@@ -283,7 +297,7 @@ func renderPkgHelpOverlay(name string, lines []string, scroll, width, height int
 				pct = 100
 			}
 			indicator := fmt.Sprintf("  ─── %d%% ───", pct)
-			b.WriteString(StyleDim.Render(indicator))
+			b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render(indicator))
 		}
 	}
 

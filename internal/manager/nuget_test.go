@@ -30,9 +30,9 @@ func TestNugetCompare(t *testing.T) {
 		{"1.1", "1.0.0", 1},
 		{"1.0", "1.0.1", -1},
 		// Pre-release: stable beats prerelease of same base version
-		{"2.0.0-preview1", "1.9.9", 1},  // higher major wins regardless of prerelease
-		{"1.0.0-beta", "1.0.0", -1},     // prerelease < stable of same version
-		{"1.0.0", "1.0.0-beta", 1},      // stable > prerelease of same version
+		{"2.0.0-preview1", "1.9.9", 1}, // higher major wins regardless of prerelease
+		{"1.0.0-beta", "1.0.0", -1},    // prerelease < stable of same version
+		{"1.0.0", "1.0.0-beta", 1},     // stable > prerelease of same version
 		// Four-part NuGet versions
 		{"4.8.1.0", "4.8.0.1", 1},
 		{"4.8.0.1", "4.8.1.0", -1},

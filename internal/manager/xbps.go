@@ -127,9 +127,8 @@ func (x *Xbps) ListDependencies(pkgs []model.Package) map[string][]string {
 	return deps
 }
 
-func (x *Xbps) UpgradePackage(name string) error {
-	cmd := exec.Command("xbps-install", "-S", "--yes", name)
-	return runPrivilegedCommand(cmd)
+func (x *Xbps) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("xbps-install", "-S", name)
 }
 
 // SplitXbpsNameVersion splits "name-version_revision" by the last hyphen

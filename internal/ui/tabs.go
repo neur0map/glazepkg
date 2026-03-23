@@ -94,5 +94,5 @@ func renderTabs(tabs []tabItem, active int) string {
 			parts = append(parts, StyleInactiveTab.Render(label))
 		}
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, StyleNormal.Render("  "))
 }

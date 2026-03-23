@@ -53,8 +53,8 @@ func (c *Composer) CheckUpdates(pkgs []model.Package) map[string]string {
 
 	var result struct {
 		Installed []struct {
-			Name    string `json:"name"`
-			Latest  string `json:"latest"`
+			Name   string `json:"name"`
+			Latest string `json:"latest"`
 		} `json:"installed"`
 	}
 	if err := json.Unmarshal(out, &result); err != nil {

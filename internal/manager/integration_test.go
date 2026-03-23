@@ -69,12 +69,14 @@ func TestIntegration_AvailableNoPanic(t *testing.T) {
 		&Winget{}, &Chocolatey{}, &Scoop{},
 		&Nuget{}, &PowerShell{}, &WindowsUpdates{},
 	} {
+		m := m
 		func(m Manager) {
 			defer func() {
 				if r := recover(); r != nil {
 					t.Errorf("%s Available() panicked: %v", m.Name(), r)
 				}
-			}()
+			}() // nolint:errcheck
+
 			_ = m.Available()
 		}(m)
 	}

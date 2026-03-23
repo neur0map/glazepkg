@@ -22,8 +22,8 @@ func (n *Pnpm) Scan() ([]model.Package, error) {
 	}
 
 	var stores []struct {
-		Path         string                 `json:"path"`
-		Private      bool                   `json:"private"`
+		Path         string `json:"path"`
+		Private      bool   `json:"private"`
 		Dependencies map[string]struct {
 			Version string `json:"version"`
 			From    string `json:"from,omitempty"`

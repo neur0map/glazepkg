@@ -8,7 +8,7 @@ import (
 )
 
 // ErrUpgradeNotSupported is returned when a manager cannot upgrade a single package.
-var ErrUpgradeNotSupported = errors.New("This package manager does not support upgrading a single package.")
+var ErrUpgradeNotSupported = errors.New("this package manager does not support upgrading a single package")
 
 // Manager scans a package manager and returns its installed packages.
 type Manager interface {

@@ -23,12 +23,14 @@ jobs:
           latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
           if [ -z "$latest" ]; then
             echo "new_tag=v0.1.1" >> "$GITHUB_OUTPUT"
+            echo "ver=0.1.1" >> "$GITHUB_OUTPUT"
           else
             major=$(echo "$latest" | sed 's/v//' | cut -d. -f1)
             minor=$(echo "$latest" | sed 's/v//' | cut -d. -f2)
             patch=$(echo "$latest" | sed 's/v//' | cut -d. -f3)
             patch=$((patch + 1))
             echo "new_tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+            echo "ver=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create and push tag
@@ -64,3 +66,46 @@ jobs:
             gpk-linux-arm64
             gpk-windows-amd64.exe
             gpk-windows-arm64.exe
+
+      - name: Generate AUR PKGBUILD
+        run: |
+          SHA_AMD64=$(sha256sum gpk-linux-amd64 | cut -d' ' -f1)
+          SHA_ARM64=$(sha256sum gpk-linux-arm64 | cut -d' ' -f1)
+          VER="${{ steps.bump.outputs.ver }}"
+          cat > PKGBUILD << EOF
+          # Maintainer: neur0map <90535780+neur0map@users.noreply.github.com>
+          pkgname=gpk-bin
+          pkgver=${VER}
+          pkgrel=1
+          pkgdesc="TUI dashboard that unifies 34 package managers into one searchable view"
+          arch=('x86_64' 'aarch64')
+          url="https://github.com/neur0map/glazepkg"
+          license=('GPL-3.0-or-later')
+          depends=()
+          provides=('gpk')
+          conflicts=('gpk')
+          source_x86_64=("\${url}/releases/download/v\${pkgver}/gpk-linux-amd64")
+          source_aarch64=("\${url}/releases/download/v\${pkgver}/gpk-linux-arm64")
+          sha256sums_x86_64=('${SHA_AMD64}')
+          sha256sums_aarch64=('${SHA_ARM64}')
+
+          package() {
+              if [[ "\$CARCH" == "x86_64" ]]; then
+                  install -Dm755 "gpk-linux-amd64" "\${pkgdir}/usr/bin/gpk"
+              elif [[ "\$CARCH" == "aarch64" ]]; then
+                  install -Dm755 "gpk-linux-arm64" "\${pkgdir}/usr/bin/gpk"
+              fi
+          }
+          EOF
+          sed -i 's/^          //' PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: gpk-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: neur0map
+          commit_email: 90535780+neur0map@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ steps.bump.outputs.new_tag }}"
+          force_push: true

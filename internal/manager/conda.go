@@ -142,6 +142,6 @@ func (c *Conda) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
-func (c *Conda) UpgradePackage(name string) error {
-	return runCommand(exec.Command(c.condaCmd(), "update", "--yes", name))
+func (c *Conda) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command(c.condaCmd(), "update", "--yes", name)
 }

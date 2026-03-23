@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool) string {
+func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg string) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -44,7 +44,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 	if showSize {
 		lastCol = "SIZE"
 	}
-	header := "  " +
+	header := StyleNormal.Render("  ") +
 		padCell(StyleTableHeader.Render("PACKAGE"), colName) +
 		padCell(StyleTableHeader.Render("VERSION"), colVer) +
 		padCell(StyleTableHeader.Render("MANAGER"), colBadge) +
@@ -69,8 +69,10 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 	lines = append(lines, header)
 	lines = append(lines, StyleDim.Render("  "+strings.Repeat("─", min(usable, width-4))))
 
-	updateIndicator := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
-	sizeStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+	updateIndicator := lipgloss.NewStyle().Foreground(ColorGreen).Background(ColorBase).Bold(true)
+	sizeStyle := lipgloss.NewStyle().Foreground(ColorYellow).Background(ColorBase).Bold(true)
+
+	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Background(ColorBase).Bold(true)
 
 	for i := start; i < end; i++ {
 		p := pkgs[i]
@@ -78,6 +80,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		hasUpdate := p.LatestVersion != "" && p.LatestVersion != p.Version
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
+		isUpgrading := upgradingPkg != "" && p.Name == upgradingPkg
 
 		// Last column: show size when filtering by size, otherwise description
 		var lastText string
@@ -99,14 +102,26 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		if i == cursor {
 			verCell := StyleSelected.Render(ver)
 			if hasUpdate {
-				verCell += " " + updateIndicator.Render("↑")
+				verCell += StyleSelected.Render(" ") + updateIndicator.Render("↑")
 			}
 			lastCell := StyleSelected.Render(desc)
 			if showSize && p.Size != "" {
 				lastCell = sizeStyle.Render(desc)
 			}
-			line := "  " +
+			line := StyleNormal.Render("  ") +
 				padCell(StyleSelected.Render(name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isUpgrading {
+			verCell := upgradingStyle.Render(ver)
+			if hasUpdate {
+				verCell += StyleNormal.Render(" ") + upgradingStyle.Render("↑")
+			}
+			lastCell := upgradingStyle.Render(desc)
+			line := StyleNormal.Render("  ") +
+				padCell(upgradingStyle.Render("▸ "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
 				lastCell
@@ -114,13 +129,13 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		} else {
 			verCell := StyleDim.Render(ver)
 			if hasUpdate {
-				verCell += " " + updateIndicator.Render("↑")
+				verCell += StyleNormal.Render(" ") + updateIndicator.Render("↑")
 			}
 			lastCell := StyleDim.Render(desc)
 			if showSize && p.Size != "" {
 				lastCell = sizeStyle.Render(desc)
 			}
-			line := "  " +
+			line := StyleNormal.Render("  ") +
 				padCell(StyleNormal.Render(name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
@@ -146,7 +161,7 @@ func padCell(s string, width int) string {
 	if vis >= width {
 		return s
 	}
-	return s + strings.Repeat(" ", width-vis)
+	return s + StyleNormal.Render(strings.Repeat(" ", width-vis))
 }
 
 // renderFixedBadge returns a badge padded to badgeWidth visual characters.
@@ -164,8 +179,9 @@ func renderFixedBadge(source model.Source) string {
 		right := pad - left
 		label = strings.Repeat(" ", left) + label + strings.Repeat(" ", right)
 	}
+	fg := badgeForeground(color)
 	return StyleBadge.
-		Foreground(lipgloss.Color("#1a1b26")).
+		Foreground(fg).
 		Background(color).
 		Render(label)
 }

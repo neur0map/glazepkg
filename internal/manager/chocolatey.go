@@ -2,7 +2,9 @@ package manager
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -141,7 +143,60 @@ func (c *Chocolatey) parseOutdatedOutput(s string) map[string]string {
 	return updates
 }
 
-func (c *Chocolatey) UpgradePackage(name string) error {
-	cmd := exec.Command("choco", "upgrade", name, "--yes")
-	return runCommand(cmd)
+// PrepareUpgrade removes any stale .chocolateyPending marker left behind by a
+// previous interrupted or failed Chocolatey upgrade.
+//
+// Root cause
+// ----------
+// Chocolatey creates <chocoLib>/<package>/.chocolateyPending at the start of
+// every upgrade as an in-progress sentinel and normally deletes it on
+// completion.  When an upgrade is interrupted — by a crash, forced process
+// kill, power loss, or a previous run that itself failed with the access-
+// denied error — the file is left on disk.  On the next upgrade attempt
+// Chocolatey tries to recreate the same file.  Because the stale copy was
+// created by a *different* elevated process, its DACL (Windows access-control
+// list) may deny write access even to the current elevated session, producing:
+//
+//	Access to the path 'C:\ProgramData\chocolatey\lib\<pkg>\.chocolateyPending'
+//	is denied.
+//
+// This error affects every subsequent upgrade of the package — including
+// upgrading Chocolatey itself — until the marker is removed.
+//
+// Fix
+// ---
+// Deleting the stale marker before the upgrade command runs restores the
+// expected clean state.  Chocolatey will recreate it during the new run and
+// remove it on success.  The file contains no package data; it is purely a
+// lock sentinel whose presence means "upgrade in progress".
+//
+// If deletion fails (e.g. the process still lacks sufficient rights), the
+// method returns nil so that the upgrade command proceeds and Chocolatey
+// surfaces the authoritative error to the user rather than a secondary one
+// from GlazePKG.
+func (c *Chocolatey) PrepareUpgrade(name string) error {
+	progData := os.Getenv("ProgramData")
+	if progData == "" {
+		progData = `C:\ProgramData`
+	}
+	pending := filepath.Join(progData, "chocolatey", "lib", name, ".chocolateyPending")
+	if err := os.Remove(pending); err != nil && !os.IsNotExist(err) {
+		// Non-fatal: allow the upgrade to run; Chocolatey will report the
+		// real error if elevated rights are still insufficient.
+		return nil
+	}
+	return nil
+}
+
+func (c *Chocolatey) UpgradeCmd(name string) *exec.Cmd {
+	// privilegedCmd handles Windows elevation transparently:
+	//   · already-elevated process  → exec.Command directly (no wrapper)
+	//   · gsudo on PATH             → wrapped with "gsudo --wait"
+	//   · neither                   → tagged with GLAZEPKG_NEEDS_ELEVATION=1
+	//     so runUpgradeRequest can surface a clear actionable error before
+	//     choco reaches C:\ProgramData\chocolatey\lib\<pkg>\.chocolateyPending
+	//     and emits the cryptic "Access is denied" failure.
+	// --no-progress suppresses the ASCII progress bar Chocolatey emits when
+	// running non-interactively, keeping the combined output clean.
+	return privilegedCmd("choco", "upgrade", name, "--yes", "--no-progress")
 }

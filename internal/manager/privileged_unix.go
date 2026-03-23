@@ -1,32 +1,19 @@
 //go:build !windows
-// +build !windows
 
 package manager
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 )
 
-// runPrivilegedCommand runs cmd, automatically prefixing with sudo for non-root users on Unix.
-func runPrivilegedCommand(cmd *exec.Cmd) error {
+// privilegedCmd wraps args with sudo -S when the current user is not root.
+// The -S flag makes sudo read the password from stdin, which allows the TUI
+// to pipe it from the confirmation modal's password field.
+func privilegedCmd(name string, args ...string) *exec.Cmd {
 	if os.Geteuid() == 0 {
-		return runCommand(cmd)
+		return exec.Command(name, args...)
 	}
-	if commandExists("sudo") {
-		sudoArgs := append([]string{cmd.Path}, cmd.Args[1:]...)
-		sudoCmd := exec.Command("sudo", sudoArgs...)
-		sudoCmd.Dir = cmd.Dir
-		sudoCmd.Env = cmd.Env
-		sudoCmd.Stdin = cmd.Stdin
-		sudoCmd.Stdout = cmd.Stdout
-		sudoCmd.Stderr = cmd.Stderr
-		return runCommand(sudoCmd)
-	}
-
-	if err := runCommand(cmd); err != nil {
-		return fmt.Errorf("%w (requires root privileges; run gpk with sudo)", err)
-	}
-	return nil
+	sudoArgs := append([]string{"-S", name}, args...)
+	return exec.Command("sudo", sudoArgs...)
 }

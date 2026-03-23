@@ -40,7 +40,7 @@ func Update(currentVersion string) (string, error) {
 	}
 
 	latest := rel.TagName
-	if latest == currentVersion {
+	if strings.TrimPrefix(latest, "v") == strings.TrimPrefix(currentVersion, "v") {
 		return latest, fmt.Errorf("already up to date (%s)", latest)
 	}
 
@@ -78,7 +78,7 @@ func fetchRelease() (*ghRelease, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("github API returned %s", resp.Status)
@@ -92,7 +92,11 @@ func fetchRelease() (*ghRelease, error) {
 }
 
 func binaryName() string {
-	return fmt.Sprintf("gpk-%s-%s", runtime.GOOS, runtime.GOARCH)
+	name := fmt.Sprintf("gpk-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
 }
 
 func resolveExecPath(execPath string) (string, error) {
@@ -115,7 +119,7 @@ func downloadAndReplace(url, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("download returned %s", resp.Status)
@@ -133,15 +137,15 @@ func downloadAndReplace(url, destPath string) error {
 	}
 
 	if _, err := io.Copy(f, resp.Body); err != nil {
-		f.Close()
-		os.Remove(tmpPath)
+		_ = f.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("download interrupted: %w", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	// Atomic replace
 	if err := os.Rename(tmpPath, destPath); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("cannot replace binary: %w", err)
 	}
 

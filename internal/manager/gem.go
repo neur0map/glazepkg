@@ -125,6 +125,6 @@ func (g *Gem) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
-func (g *Gem) UpgradePackage(name string) error {
-	return runCommand(exec.Command("gem", "update", name))
+func (g *Gem) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("gem", "update", name)
 }

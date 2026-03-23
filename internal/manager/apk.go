@@ -166,9 +166,8 @@ func (a *Apk) ListDependencies(pkgs []model.Package) map[string][]string {
 	return deps
 }
 
-func (a *Apk) UpgradePackage(name string) error {
-	cmd := exec.Command("apk", "add", "--upgrade", name)
-	return runPrivilegedCommand(cmd)
+func (a *Apk) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("apk", "add", "--upgrade", name)
 }
 
 // SplitApkNameVersion splits "name-version-rN" by finding the version boundary.
