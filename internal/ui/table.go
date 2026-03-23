@@ -74,17 +74,12 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 
 	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
 
+	selectedStyle := lipgloss.NewStyle().Foreground(ColorPurple)
+
 	for i := start; i < end; i++ {
 		p := pkgs[i]
-		nameStr := p.Name
-		if len(selections) > 0 {
-			if selections[p.Key()] {
-				nameStr = "☑ " + nameStr
-			} else {
-				nameStr = "☐ " + nameStr
-			}
-		}
-		name := truncate(nameStr, colName-2)
+		name := truncate(p.Name, colName-2)
+		isSelected := len(selections) > 0 && selections[p.Key()]
 		hasUpdate := p.LatestVersion != "" && p.LatestVersion != p.Version
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
@@ -108,7 +103,21 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		}
 		desc := truncate(lastText, colDesc-1)
 
-		if i == cursor {
+		if i == cursor && isSelected {
+			// Cursor + selected: bright purple highlight
+			curSelStyle := lipgloss.NewStyle().Foreground(ColorPurple).Bold(true).Underline(true)
+			verCell := curSelStyle.Render(ver)
+			if hasUpdate {
+				verCell += " " + updateIndicator.Render("↑")
+			}
+			lastCell := curSelStyle.Render(desc)
+			line := "  " +
+				padCell(curSelStyle.Render("● "+name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if i == cursor {
 			verCell := StyleSelected.Render(ver)
 			if hasUpdate {
 				verCell += " " + updateIndicator.Render("↑")
@@ -117,8 +126,24 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			if showSize && p.Size != "" {
 				lastCell = sizeStyle.Render(desc)
 			}
+			namePrefix := name
+			if len(selections) > 0 {
+				namePrefix = "○ " + name
+			}
 			line := "  " +
-				padCell(StyleSelected.Render(name), colName) +
+				padCell(StyleSelected.Render(namePrefix), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isSelected {
+			verCell := selectedStyle.Render(ver)
+			if hasUpdate {
+				verCell += " " + updateIndicator.Render("↑")
+			}
+			lastCell := selectedStyle.Render(desc)
+			line := "  " +
+				padCell(selectedStyle.Render("● "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
 				lastCell
