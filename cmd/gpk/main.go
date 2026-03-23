@@ -66,9 +66,11 @@ Keybinds:
   Esc              Clear search / close overlay
   Enter            Package details
   u (detail)       Upgrade package
+  x (detail)       Remove package
   e (detail)       Edit description
   r                Rescan all managers
   s                Save snapshot
+  i                Search + install packages
   d                Diff against last snapshot
   e                Export packages
   ?                Toggle help overlay

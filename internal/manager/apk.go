@@ -170,6 +170,10 @@ func (a *Apk) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("apk", "add", "--upgrade", name)
 }
 
+func (a *Apk) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("apk", "del", name)
+}
+
 // SplitApkNameVersion splits "name-version-rN" by finding the version boundary.
 // Alpine package names can contain hyphens, so we look for the last hyphen
 // that is followed by a digit.

@@ -129,3 +129,7 @@ func (o *Opam) Describe(pkgs []model.Package) map[string]string {
 func (o *Opam) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("opam", "upgrade", "--yes", name)
 }
+
+func (o *Opam) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("opam", "remove", "--yes", name)
+}

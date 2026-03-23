@@ -150,6 +150,56 @@ func (p *Pacman) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("pacman", "-S", name)
 }
 
+func (p *Pacman) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-R", name)
+}
+
+func (p *Pacman) RemoveCmdWithDeps(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-Rns", name)
+}
+
+func (p *Pacman) Search(query string) ([]model.Package, error) {
+	// Run: pacman -Ss query
+	// Output format pairs of lines:
+	//   repo/name version [optional info]
+	//       description text
+	out, err := exec.Command("pacman", "-Ss", query).Output()
+	if err != nil {
+		return nil, err
+	}
+	var pkgs []model.Package
+	lines := strings.Split(string(out), "\n")
+	for i := 0; i < len(lines)-1; i += 2 {
+		header := strings.TrimSpace(lines[i])
+		desc := strings.TrimSpace(lines[i+1])
+		if header == "" {
+			continue
+		}
+		// Parse "repo/name version [installed]"
+		parts := strings.Fields(header)
+		if len(parts) < 2 {
+			continue
+		}
+		nameWithRepo := parts[0]
+		version := parts[1]
+		// Strip repo prefix
+		if idx := strings.Index(nameWithRepo, "/"); idx >= 0 {
+			nameWithRepo = nameWithRepo[idx+1:]
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        nameWithRepo,
+			Version:     version,
+			Source:      model.SourcePacman,
+			Description: desc,
+		})
+	}
+	return pkgs, nil
+}
+
+func (p *Pacman) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-S", name)
+}
+
 func parseField(line string) (key, val string, ok bool) {
 	idx := strings.Index(line, ":")
 	if idx < 0 {

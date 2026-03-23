@@ -118,3 +118,41 @@ func (p *Pip) Describe(pkgs []model.Package) map[string]string {
 func (p *Pip) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("pip", "install", "--upgrade", name)
 }
+
+func (p *Pip) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("pip", "uninstall", "-y", name)
+}
+
+func (p *Pip) Search(query string) ([]model.Package, error) {
+	// pip doesn't have a real search. Use pip index versions for exact match.
+	out, err := exec.Command("pip", "index", "versions", query).Output()
+	if err != nil {
+		return nil, nil // no results, not an error
+	}
+	// Output: "package-name (latest-version)"
+	// Then: "Available versions: 1.0, 0.9, ..."
+	line := strings.SplitN(string(out), "\n", 2)[0]
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return nil, nil
+	}
+	// Parse "name (version)"
+	name := query
+	version := ""
+	if idx := strings.Index(line, "("); idx > 0 {
+		name = strings.TrimSpace(line[:idx])
+		end := strings.Index(line, ")")
+		if end > idx {
+			version = line[idx+1 : end]
+		}
+	}
+	return []model.Package{{
+		Name:    name,
+		Version: version,
+		Source:  model.SourcePip,
+	}}, nil
+}
+
+func (p *Pip) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("pip", "install", name)
+}

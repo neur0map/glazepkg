@@ -128,3 +128,7 @@ func (g *Gem) Describe(pkgs []model.Package) map[string]string {
 func (g *Gem) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("gem", "update", name)
 }
+
+func (g *Gem) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("gem", "uninstall", name, "-x")
+}

@@ -102,3 +102,38 @@ func (f *Flatpak) Describe(pkgs []model.Package) map[string]string {
 func (f *Flatpak) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("flatpak", "update", "-y", name)
 }
+
+func (f *Flatpak) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("flatpak", "uninstall", "-y", name)
+}
+
+func (f *Flatpak) Search(query string) ([]model.Package, error) {
+	// Run: flatpak search query
+	// Output is tab-separated: Name\tDescription\tApplication ID\tVersion\tBranch\tRemotes
+	out, err := exec.Command("flatpak", "search", query).Output()
+	if err != nil {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Split(scanner.Text(), "\t")
+		if len(fields) < 4 {
+			continue
+		}
+		name := strings.TrimSpace(fields[0])
+		desc := strings.TrimSpace(fields[1])
+		version := strings.TrimSpace(fields[3])
+		pkgs = append(pkgs, model.Package{
+			Name:        name,
+			Version:     version,
+			Source:      model.SourceFlatpak,
+			Description: desc,
+		})
+	}
+	return pkgs, nil
+}
+
+func (f *Flatpak) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("flatpak", "install", "-y", name)
+}

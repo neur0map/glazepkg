@@ -34,7 +34,9 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
 - **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
-- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS) surface a confirmation overlay so the upgrade never runs on a single keypress, and even gem/flatpak/pipx/opam/apk/XBPS/conda/luarocks ship native commands so the flow never leaves `gpk`
+- **Package operations** — upgrade, remove, and install packages without leaving the TUI. Every operation shows a confirmation with the exact command before running.
+- **Search + install** — press `i` to search across all installed managers in parallel, browse deduplicated results, expand to see all sources, and install with one keypress
+- **Multi-select** — press `m` to select multiple packages, then batch upgrade or remove them all at once with smart sudo batching
 - **Custom descriptions** — press `e` in the detail view to annotate any package; persists across sessions
 - **Background descriptions** — package summaries load asynchronously and cache for 24 hours
 - **Export** — dump your full package list to JSON or text for backup, migration, or dotfile tracking
@@ -93,17 +95,27 @@ gpk version      Show current version
 gpk --help       Show keybind reference
 ```
 
-Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Open a package with `Enter` and press `u` to upgrade it. Press `?` for the full keybind reference.
+Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Press `?` for the full keybind reference.
 
-## Upgrading Packages
+## Package Operations
 
-1. Launch `gpk` and navigate to the package you want to upgrade.
-2. Press `Enter` to open the package detail view.
-3. Press `u` to upgrade. A confirmation overlay shows the exact command that will run.
-4. Select `Yes` or `No` with arrow keys / Tab and press `Enter` to confirm.
-5. The upgrade runs in the background — a notification appears in the corner showing progress and result. You can keep navigating the TUI while it runs.
+### Upgrade (`u` in detail view)
 
-Works on Windows, Linux, and macOS — `u` maps to the correct command for the selected manager automatically.
+Open a package with `Enter`, then press `u`. A confirmation modal shows the exact command. Privileged managers (apt, pacman, dnf, snap, apk, xbps) include a password field for sudo. The upgrade runs in the background while you keep using the TUI.
+
+### Remove (`x` in detail view)
+
+Open a package with `Enter`, then press `x`. Managers that support it (apt, pacman, dnf, xbps) offer two modes: remove package only, or remove package with orphaned dependencies. If the package is required by other packages, a warning is shown before proceeding.
+
+### Search + Install (`i`)
+
+Press `i` from the package list to open the search view. Type a query and results stream in from all installed managers in parallel. Results are deduplicated by name — expand a row to see all available sources and versions. Press `i` on a result to install it. Already-installed packages are marked.
+
+### Multi-Select (`m`)
+
+Press `m` to enter selection mode. Use `Space` to toggle packages, navigate and search normally — selections persist across tabs and searches. Press `u` to upgrade all selected or `x` to remove all selected. The confirmation modal groups operations by privilege level so you only enter your password once.
+
+All operations work on macOS, Linux, and Windows. Each manager maps to its correct native command automatically.
 
 ## Supported Package Managers
 
@@ -163,11 +175,15 @@ Works on Windows, Linux, and macOS — `u` maps to the correct command for the s
 | `f` | Cycle size filter |
 | `/` | Fuzzy search |
 | `Enter` | Package details |
+| `u` (detail) | Upgrade package |
+| `x` (detail) | Remove package |
 | `d` (detail) | View dependencies |
 | `h` (detail) | Package help/usage |
 | `e` (detail) | Edit description |
+| `i` | Search + install packages |
+| `m` | Toggle multi-select mode |
+| `Space` (multi-select) | Toggle package selection |
 | `s` | Save snapshot |
-| `u` (detail) | Upgrade package (shows confirmation with command preview) |
 | `d` | Diff against last snapshot |
 | `e` | Export (JSON or text) |
 | `r` | Force rescan |
