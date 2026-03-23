@@ -1302,20 +1302,58 @@ func (m *Model) runUpgradeRequest(req upgradeRequest) tea.Cmd {
 		}
 		out, err := ctxCmd.CombinedOutput()
 		if err != nil {
-			msg := strings.TrimSpace(string(out))
-			// Strip the sudo password prompt from the error output
-			if idx := strings.Index(msg, "\n"); idx > 0 && strings.Contains(msg[:idx], "password") {
-				msg = strings.TrimSpace(msg[idx+1:])
-			}
+			msg := extractErrorLines(string(out))
 			if msg != "" {
-				if len(msg) > 800 {
-					msg = msg[:800] + "..."
-				}
 				err = fmt.Errorf("%w: %s", err, msg)
 			}
 		}
 		return upgradeResultMsg{pkg: req.pkg, err: err}
 	}
+}
+
+// extractErrorLines pulls the meaningful error from command output.
+// Looks for lines starting with "E:", "error:", "Error:", "fatal:", or
+// "Sorry," (sudo). Falls back to the last non-empty line if nothing
+// matches. Strips sudo password prompts.
+func extractErrorLines(raw string) string {
+	lines := strings.Split(raw, "\n")
+	var errLines []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Skip sudo password prompts
+		if strings.Contains(line, "password") && strings.Contains(line, ":") && len(line) < 80 {
+			continue
+		}
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "e:") ||
+			strings.HasPrefix(lower, "error:") ||
+			strings.HasPrefix(lower, "error -") ||
+			strings.HasPrefix(lower, "fatal:") ||
+			strings.HasPrefix(lower, "sorry,") {
+			errLines = append(errLines, line)
+		}
+	}
+	if len(errLines) > 0 {
+		msg := strings.Join(errLines, "; ")
+		if len(msg) > 200 {
+			msg = msg[:200] + "..."
+		}
+		return msg
+	}
+	// Fallback: last non-empty line
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" && !strings.Contains(line, "password") {
+			if len(line) > 200 {
+				line = line[:200] + "..."
+			}
+			return line
+		}
+	}
+	return ""
 }
 
 func (m *Model) executePendingUpgrade() tea.Cmd {
