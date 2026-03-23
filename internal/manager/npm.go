@@ -110,3 +110,37 @@ func (n *Npm) Describe(pkgs []model.Package) map[string]string {
 func (n *Npm) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("npm", "install", "-g", name+"@latest")
 }
+
+func (n *Npm) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("npm", "uninstall", "-g", name)
+}
+
+func (n *Npm) Search(query string) ([]model.Package, error) {
+	// Run: npm search query --json
+	out, err := exec.Command("npm", "search", query, "--json").Output()
+	if err != nil {
+		return nil, err
+	}
+	var results []struct {
+		Name        string `json:"name"`
+		Version     string `json:"version"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(out, &results); err != nil {
+		return nil, err
+	}
+	var pkgs []model.Package
+	for _, r := range results {
+		pkgs = append(pkgs, model.Package{
+			Name:        r.Name,
+			Version:     r.Version,
+			Source:      model.SourceNpm,
+			Description: r.Description,
+		})
+	}
+	return pkgs, nil
+}
+
+func (n *Npm) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("npm", "install", "-g", name)
+}

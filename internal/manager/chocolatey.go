@@ -144,3 +144,38 @@ func (c *Chocolatey) parseOutdatedOutput(s string) map[string]string {
 func (c *Chocolatey) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("choco", "upgrade", name, "--yes")
 }
+
+func (c *Chocolatey) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("choco", "uninstall", name, "--yes")
+}
+
+func (c *Chocolatey) Search(query string) ([]model.Package, error) {
+	// Run: choco search query
+	// Output: "name version" per line, with a summary line at the end
+	out, err := exec.Command("choco", "search", query).Output()
+	if err != nil {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.Contains(line, " packages found") || strings.Contains(line, "Chocolatey") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:    fields[0],
+			Version: fields[1],
+			Source:  model.SourceChocolatey,
+		})
+	}
+	return pkgs, nil
+}
+
+func (c *Chocolatey) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("choco", "install", name, "--yes")
+}

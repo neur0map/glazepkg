@@ -199,3 +199,32 @@ func brewCellarSizes() map[string]int64 {
 func (b *Brew) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("brew", "upgrade", name)
 }
+
+func (b *Brew) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("brew", "uninstall", name)
+}
+
+func (b *Brew) Search(query string) ([]model.Package, error) {
+	// Run: brew search --formulae query, which returns names one per line
+	out, err := exec.Command("brew", "search", "--formulae", query).Output()
+	if err != nil {
+		return nil, err
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		name := strings.TrimSpace(scanner.Text())
+		if name == "" || strings.HasPrefix(name, "==>") {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:   name,
+			Source: model.SourceBrew,
+		})
+	}
+	return pkgs, nil
+}
+
+func (b *Brew) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("brew", "install", name)
+}

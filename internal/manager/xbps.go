@@ -131,6 +131,14 @@ func (x *Xbps) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("xbps-install", "-S", name)
 }
 
+func (x *Xbps) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("xbps-remove", name)
+}
+
+func (x *Xbps) RemoveCmdWithDeps(name string) *exec.Cmd {
+	return privilegedCmd("xbps-remove", "-R", name)
+}
+
 // SplitXbpsNameVersion splits "name-version_revision" by the last hyphen
 // before a digit.
 func SplitXbpsNameVersion(s string) (string, string) {

@@ -78,3 +78,82 @@ func TestUpgradeCmdNotNil(t *testing.T) {
 		}
 	}
 }
+
+func TestRemoverInterface(t *testing.T) {
+	expected := map[model.Source]bool{
+		model.SourceBrew:       true,
+		model.SourcePacman:     true,
+		model.SourceApt:        true,
+		model.SourceDnf:        true,
+		model.SourceSnap:       true,
+		model.SourcePip:        true,
+		model.SourcePipx:       true,
+		model.SourceCargo:      true,
+		model.SourceNpm:        true,
+		model.SourceFlatpak:    true,
+		model.SourceGem:        true,
+		model.SourceOpam:       true,
+		model.SourceApk:        true,
+		model.SourceXbps:       true,
+		model.SourceConda:      true,
+		model.SourceLuarocks:   true,
+		model.SourceChocolatey: true,
+		model.SourceScoop:      true,
+		model.SourceWinget:     true,
+	}
+
+	for _, mgr := range All() {
+		_, isRemover := mgr.(Remover)
+		if expected[mgr.Name()] && !isRemover {
+			t.Errorf("%s should implement Remover but doesn't", mgr.Name())
+		}
+	}
+}
+
+func TestDeepRemoverInterface(t *testing.T) {
+	expected := map[model.Source]bool{
+		model.SourceApt:    true,
+		model.SourcePacman: true,
+		model.SourceDnf:    true,
+		model.SourceXbps:   true,
+	}
+
+	for _, mgr := range All() {
+		_, isDeep := mgr.(DeepRemover)
+		if expected[mgr.Name()] && !isDeep {
+			t.Errorf("%s should implement DeepRemover but doesn't", mgr.Name())
+		}
+	}
+}
+
+func TestRemoveCmdNotNil(t *testing.T) {
+	for _, mgr := range All() {
+		remover, ok := mgr.(Remover)
+		if !ok {
+			continue
+		}
+		cmd := remover.RemoveCmd("test-package")
+		if cmd == nil {
+			t.Errorf("%s.RemoveCmd returned nil", mgr.Name())
+		}
+		if len(cmd.Args) == 0 {
+			t.Errorf("%s.RemoveCmd returned cmd with no args", mgr.Name())
+		}
+	}
+}
+
+func TestDeepRemoveCmdNotNil(t *testing.T) {
+	for _, mgr := range All() {
+		deep, ok := mgr.(DeepRemover)
+		if !ok {
+			continue
+		}
+		cmd := deep.RemoveCmdWithDeps("test-package")
+		if cmd == nil {
+			t.Errorf("%s.RemoveCmdWithDeps returned nil", mgr.Name())
+		}
+		if len(cmd.Args) == 0 {
+			t.Errorf("%s.RemoveCmdWithDeps returned cmd with no args", mgr.Name())
+		}
+	}
+}

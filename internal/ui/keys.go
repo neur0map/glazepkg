@@ -11,6 +11,7 @@ type KeyMap struct {
 	Back       key.Binding
 	Snapshot   key.Binding
 	Upgrade    key.Binding
+	Remove     key.Binding
 	Diff       key.Binding
 	Export     key.Binding
 	Rescan     key.Binding
@@ -59,6 +60,10 @@ var Keys = KeyMap{
 	Upgrade: key.NewBinding(
 		key.WithKeys("u"),
 		key.WithHelp("u", "upgrade package (detail view)"),
+	),
+	Remove: key.NewBinding(
+		key.WithKeys("x"),
+		key.WithHelp("x", "remove package (detail view)"),
 	),
 	Diff: key.NewBinding(
 		key.WithKeys("d"),
