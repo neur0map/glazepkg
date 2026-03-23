@@ -119,3 +119,7 @@ func (l *Luarocks) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (l *Luarocks) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("luarocks", "upgrade", name)
+}

@@ -58,20 +58,21 @@ Usage:
 
 Keybinds:
   j/k, ↑/↓         Navigate up/down
-  g/G               Jump to top/bottom
-  Ctrl+d/u          Half page down/up
-  PgDn/PgUp         Page down/up
-  Tab/Shift+Tab     Cycle manager tabs
-  /                 Fuzzy search
-  Esc               Clear search / close overlay
-  Enter             Package details
-  e (detail)        Edit description
-  r                 Rescan all managers
-  s                 Save snapshot
-  d                 Diff against last snapshot
-  e                 Export packages
-  ?                 Toggle help overlay
-  q                 Quit
+  g/G              Jump to top/bottom
+  Ctrl+d/u         Half page down/up
+  PgDn/PgUp        Page down/up
+  Tab/Shift+Tab    Cycle manager tabs
+  /                Fuzzy search
+  Esc              Clear search / close overlay
+  Enter            Package details
+  u (detail)       Upgrade package
+  e (detail)       Edit description
+  r                Rescan all managers
+  s                Save snapshot
+  d                Diff against last snapshot
+  e                Export packages
+  ?                Toggle help overlay
+  q                Quit
 
 Supported managers:
   brew, pacman, aur, apt, dnf, snap, pip, pipx,

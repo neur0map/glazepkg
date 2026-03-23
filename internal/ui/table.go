@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool) string {
+func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg string) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -72,12 +72,15 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 	updateIndicator := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	sizeStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
 
+	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+
 	for i := start; i < end; i++ {
 		p := pkgs[i]
 		name := truncate(p.Name, colName-2)
 		hasUpdate := p.LatestVersion != "" && p.LatestVersion != p.Version
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
+		isUpgrading := upgradingPkg != "" && p.Name == upgradingPkg
 
 		// Last column: show size when filtering by size, otherwise description
 		var lastText string
@@ -107,6 +110,18 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			}
 			line := "  " +
 				padCell(StyleSelected.Render(name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isUpgrading {
+			verCell := upgradingStyle.Render(ver)
+			if hasUpdate {
+				verCell += " " + upgradingStyle.Render("↑")
+			}
+			lastCell := upgradingStyle.Render(desc)
+			line := "  " +
+				padCell(upgradingStyle.Render("▸ "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
 				lastCell

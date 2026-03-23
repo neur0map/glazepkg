@@ -10,6 +10,7 @@ type KeyMap struct {
 	Enter      key.Binding
 	Back       key.Binding
 	Snapshot   key.Binding
+	Upgrade    key.Binding
 	Diff       key.Binding
 	Export     key.Binding
 	Rescan     key.Binding
@@ -54,6 +55,10 @@ var Keys = KeyMap{
 	Snapshot: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "snapshot"),
+	),
+	Upgrade: key.NewBinding(
+		key.WithKeys("u"),
+		key.WithHelp("u", "upgrade package (detail view)"),
 	),
 	Diff: key.NewBinding(
 		key.WithKeys("d"),

@@ -106,3 +106,7 @@ func (n *Npm) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (n *Npm) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("npm", "install", "-g", name+"@latest")
+}

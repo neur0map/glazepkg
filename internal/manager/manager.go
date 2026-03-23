@@ -1,10 +1,14 @@
 package manager
 
 import (
+	"errors"
 	"os/exec"
 
 	"github.com/neur0map/glazepkg/internal/model"
 )
+
+// ErrUpgradeNotSupported is returned when a manager cannot upgrade a single package.
+var ErrUpgradeNotSupported = errors.New("this package manager does not support upgrading a single package")
 
 // Manager scans a package manager and returns its installed packages.
 type Manager interface {
@@ -51,6 +55,16 @@ func All() []Manager {
 		&WindowsUpdates{},
 		&Scoop{},
 	}
+}
+
+// BySource returns the manager responsible for the provided source, if any.
+func BySource(source model.Source) Manager {
+	for _, mgr := range All() {
+		if mgr.Name() == source {
+			return mgr
+		}
+	}
+	return nil
 }
 
 // commandExists checks if a binary is in PATH.

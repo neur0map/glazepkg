@@ -157,3 +157,7 @@ func (a *Apt) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (a *Apt) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "install", "--only-upgrade", "-y", name)
+}

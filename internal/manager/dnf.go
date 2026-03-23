@@ -119,3 +119,7 @@ func (d *Dnf) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (d *Dnf) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "upgrade", "-y", name)
+}
