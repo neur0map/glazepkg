@@ -258,10 +258,16 @@ func checkForUpdate(currentVersion string) tea.Cmd {
 			return nil
 		}
 		latest, err := updater.LatestVersion()
-		if err != nil || latest == currentVersion {
+		if err != nil {
 			return nil
 		}
-		return updateAvailableMsg{latest: latest}
+		// Normalize: strip leading 'v' from both sides before comparing.
+		normalLatest := strings.TrimPrefix(latest, "v")
+		normalCurrent := strings.TrimPrefix(currentVersion, "v")
+		if normalLatest == normalCurrent {
+			return nil
+		}
+		return updateAvailableMsg{latest: normalLatest}
 	}
 }
 
@@ -669,7 +675,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case updateAvailableMsg:
-		m.updateBanner = fmt.Sprintf("↑ %s → %s available — run `gpk update`", m.version, msg.latest)
+		current := strings.TrimPrefix(m.version, "v")
+		m.updateBanner = fmt.Sprintf("↑ v%s → v%s available — run `gpk update`", current, msg.latest)
 		return m, nil
 
 	case exportDoneMsg:
