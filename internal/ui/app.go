@@ -181,6 +181,13 @@ type Model struct {
 	filtering   bool
 	sizeFilter  int // 0=all, cycles through sizeFilterLabels
 
+	// Multi-select
+	multiSelect     bool
+	selections      map[string]bool
+	confirmingBatch bool
+	batchFocus      int // 0 = password, 1 = Yes, 2 = No
+	pendingBatch    *batchConfirmState
+
 	// Overlays
 	showHelp          bool
 	showExport        bool
@@ -631,6 +638,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleSearchResult(msg)
 		return m, nil
 
+	case batchResultMsg:
+		m.upgradeInFlight = false
+		m.upgradeCancel = nil
+		m.multiSelect = false
+		m.selections = nil
+		summary := fmt.Sprintf("%d %sd", len(msg.succeeded), msg.op)
+		if len(msg.failed) > 0 {
+			summary += fmt.Sprintf(", %d failed", len(msg.failed))
+			m.upgradeNotifErr = true
+		} else {
+			m.upgradeNotifErr = false
+		}
+		m.upgradeNotifMsg = summary
+		// Rescan all affected sources
+		var cmds []tea.Cmd
+		rescanned := make(map[model.Source]bool)
+		for _, name := range msg.succeeded {
+			for _, p := range m.allPkgs {
+				if p.Name == name && !rescanned[p.Source] {
+					rescanned[p.Source] = true
+					cmds = append(cmds, m.rescanManager(p.Source))
+				}
+			}
+		}
+		cmds = append(cmds, tea.Tick(5*time.Second, func(time.Time) tea.Msg {
+			return upgradeNotifClearMsg{}
+		}))
+		return m, tea.Batch(cmds...)
+
+	case batchNotifClearMsg:
+		m.upgradeNotifMsg = ""
+		return m, nil
+
 	case managerRescanMsg:
 		if msg.err != nil {
 			m.statusMsg = "refresh error: " + msg.err.Error()
@@ -817,6 +857,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.confirmingBatch && m.batchFocus == 0 {
+		var cmd tea.Cmd
+		m.passwordInput, cmd = m.passwordInput.Update(msg)
+		return m, cmd
+	}
+
 	if m.view == viewSearch && m.searchInput.Focused() {
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
@@ -864,6 +910,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.confirmingRemove {
 		return m.handleRemoveConfirmKey(msg)
+	}
+
+	if m.confirmingBatch {
+		return m.handleBatchConfirmKey(msg)
 	}
 
 	// Help overlay intercepts all keys
@@ -1056,6 +1106,20 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.exportCursor = 0
 	case "i":
 		return m, m.enterSearchView()
+	case "m":
+		m.toggleMultiSelect()
+	case " ":
+		if m.multiSelect {
+			m.toggleSelection()
+		}
+	case "u":
+		if m.multiSelect && m.selectionCount() > 0 {
+			return m, m.batchUpgradeSelected()
+		}
+	case "x":
+		if m.multiSelect && m.selectionCount() > 0 {
+			return m, m.batchRemoveSelected()
+		}
 	}
 	return m, nil
 }
@@ -1270,6 +1334,9 @@ func (m Model) View() string {
 	if m.confirmingRemove {
 		return content + "\n" + m.renderRemoveConfirmOverlay()
 	}
+	if m.confirmingBatch {
+		return content + "\n" + m.renderBatchConfirmOverlay()
+	}
 	if m.showHelp {
 		return content + "\n" + renderHelpOverlay(m.width, m.height)
 	}
@@ -1323,7 +1390,7 @@ func (m Model) renderListView(b *strings.Builder) {
 		listHeight = 5
 	}
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName, m.removingPkgName))
+	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
 	// Loading indicators
 	if m.loadingDescs {
@@ -1377,10 +1444,21 @@ func (m Model) renderStatusBar() string {
 
 	switch m.view {
 	case viewList:
-		binds := []struct{ key, desc string }{
+		var binds []struct{ key, desc string }
+		if m.multiSelect {
+			count := m.selectionCount()
+			selectStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+			prefix := selectStyle.Render(fmt.Sprintf("[%d selected]", count))
+			binds = []struct{ key, desc string }{
+				{"space", "toggle"}, {"u", "upgrade"}, {"x", "remove"},
+				{"/", "search"}, {"m", "exit select"}, {"q", "quit"},
+			}
+			return " " + prefix + "  " + formatBinds(binds)
+		}
+		binds = []struct{ key, desc string }{
 			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
 			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
-			{"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"?", "help"}, {"q", "quit"},
+			{"m", "select"}, {"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"?", "help"}, {"q", "quit"},
 		}
 		bar := formatBinds(binds)
 		if m.sizeFilter > 0 {
