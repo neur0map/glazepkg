@@ -187,6 +187,12 @@ type Model struct {
 	confirmingBatch bool
 	batchFocus      int // 0 = password, 1 = Yes, 2 = No
 	pendingBatch    *batchConfirmState
+	batchLog        []batchProgressMsg
+	batchCurrentPkg string
+	batchOps        []batchOp
+	batchPassword   string
+	batchOpLabel    string
+	batchCtx        context.Context
 
 	// Overlays
 	showHelp          bool
@@ -587,7 +593,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return upgradeNotifClearMsg{}
 			})
 		}
-		m.upgradeNotifMsg = fmt.Sprintf("%s %sed successfully", msg.pkg.Name, op)
+		m.upgradeNotifMsg = fmt.Sprintf("%s %s successfully", msg.pkg.Name, pastTense(op))
 		m.upgradeNotifErr = false
 		// Seed the description cache so the new package shows its description after rescan
 		if msg.pkg.Description != "" {
@@ -602,6 +608,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case upgradeNotifClearMsg:
 		m.upgradeNotifMsg = ""
+		m.batchLog = nil
 		return m, nil
 
 	case removeResultMsg:
@@ -638,38 +645,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleSearchResult(msg)
 		return m, nil
 
-	case batchResultMsg:
-		m.upgradeInFlight = false
-		m.upgradeCancel = nil
-		m.multiSelect = false
-		m.selections = nil
-		summary := fmt.Sprintf("%d %sd", len(msg.succeeded), msg.op)
-		if len(msg.failed) > 0 {
-			summary += fmt.Sprintf(", %d failed", len(msg.failed))
-			m.upgradeNotifErr = true
-		} else {
-			m.upgradeNotifErr = false
-		}
-		m.upgradeNotifMsg = summary
-		// Rescan all affected sources
-		var cmds []tea.Cmd
-		rescanned := make(map[model.Source]bool)
-		for _, name := range msg.succeeded {
-			for _, p := range m.allPkgs {
-				if p.Name == name && !rescanned[p.Source] {
-					rescanned[p.Source] = true
-					cmds = append(cmds, m.rescanManager(p.Source))
-				}
-			}
-		}
-		cmds = append(cmds, tea.Tick(5*time.Second, func(time.Time) tea.Msg {
-			return upgradeNotifClearMsg{}
-		}))
-		return m, tea.Batch(cmds...)
-
-	case batchNotifClearMsg:
-		m.upgradeNotifMsg = ""
-		return m, nil
+	case batchProgressMsg:
+		return m.handleBatchProgress(msg)
 
 	case managerRescanMsg:
 		if msg.err != nil {
@@ -1311,9 +1288,42 @@ func (m Model) View() string {
 		m.renderSearchView(&b)
 	}
 
+	// Batch progress log
+	if len(m.batchLog) > 0 {
+		b.WriteString("\n")
+		maxShow := 4
+		if !m.upgradeInFlight {
+			maxShow = 8 // show more after completion
+		}
+		start := 0
+		if len(m.batchLog) > maxShow {
+			start = len(m.batchLog) - maxShow
+		}
+		for _, entry := range m.batchLog[start:] {
+			icon := lipgloss.NewStyle().Foreground(ColorGreen).Render("  ✓ ")
+			if entry.status == "failed" {
+				icon = lipgloss.NewStyle().Foreground(ColorRed).Render("  ✗ ")
+			}
+			nameStyle := StyleDim
+			line := icon + nameStyle.Render(entry.name)
+			if entry.status == "failed" && entry.err != "" {
+				errTrunc := entry.err
+				if len(errTrunc) > 60 {
+					errTrunc = errTrunc[:60] + "..."
+				}
+				line += StyleDim.Render(" — " + errTrunc)
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+
 	// Operation notifications (above the status bar)
 	if m.upgradeNotifMsg != "" {
-		b.WriteString("\n  " + renderOpNotification(m.upgradeNotifMsg, m.upgradeNotifErr, m.upgradeInFlight, "UPGRADE", m.spinner.View()))
+		opLabel := "UPGRADE"
+		if m.batchOpLabel != "" {
+			opLabel = strings.ToUpper(m.batchOpLabel)
+		}
+		b.WriteString("\n  " + renderOpNotification(m.upgradeNotifMsg, m.upgradeNotifErr, m.upgradeInFlight, opLabel, m.spinner.View()))
 	}
 	if m.removeNotifMsg != "" {
 		b.WriteString("\n  " + renderOpNotification(m.removeNotifMsg, m.removeNotifErr, m.removeInFlight, "REMOVE", m.spinner.View()))
@@ -1605,12 +1615,7 @@ func (m *Model) executePendingUpgrade() tea.Cmd {
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
 	m.upgradingPkgName = req.pkg.Name
-	op := req.opLabel
-	if op == "" {
-		op = "upgrading"
-	} else {
-		op = op + "ing"
-	}
+	op := gerund(req.opLabel)
 	m.upgradeNotifMsg = fmt.Sprintf("%s %s...", op, req.pkg.Name)
 	m.upgradeNotifErr = false
 	return tea.Batch(m.spinner.Tick, m.runUpgradeRequest(req))
@@ -2173,6 +2178,26 @@ func renderOpNotification(msg string, isErr, inFlight bool, opLabel, spinnerView
 		Render(" " + label + " ")
 	msgStyle := lipgloss.NewStyle().Foreground(color)
 	return badge + icon + msgStyle.Render(msg)
+}
+
+func gerund(op string) string {
+	if op == "" {
+		return "upgrading"
+	}
+	if strings.HasSuffix(op, "e") {
+		return op[:len(op)-1] + "ing"
+	}
+	return op + "ing"
+}
+
+func pastTense(op string) string {
+	if op == "" {
+		return "upgraded"
+	}
+	if strings.HasSuffix(op, "e") {
+		return op + "d"
+	}
+	return op + "ed"
 }
 
 func filterOut(items []string, exclude string) []string {

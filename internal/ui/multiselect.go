@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -18,6 +19,12 @@ type batchResultMsg struct {
 	succeeded []string
 	failed    map[string]string // name → error
 	op        string            // "upgrade" or "remove"
+}
+
+type batchProgressMsg struct {
+	name   string
+	status string // "running", "done", "failed"
+	err    string
 }
 
 type batchNotifClearMsg struct{}
@@ -269,61 +276,124 @@ func (m *Model) executeBatch() tea.Cmd {
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
-	m.upgradeNotifMsg = fmt.Sprintf("%sing %d packages...", batch.op, len(batch.ops))
+	m.batchLog = nil
 	m.upgradeNotifErr = false
+
+	// Order: privileged first, then unprivileged
+	var ordered []batchOp
+	for _, o := range batch.ops {
+		if o.privileged {
+			ordered = append(ordered, o)
+		}
+	}
+	for _, o := range batch.ops {
+		if !o.privileged {
+			ordered = append(ordered, o)
+		}
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.upgradeCancel = cancel
+	m.batchOps = ordered
+	m.batchPassword = password
+	m.batchOpLabel = batch.op
+	m.batchCtx = ctx
+	m.batchCurrentPkg = ordered[0].pkg.Name
+	m.upgradingPkgName = ordered[0].pkg.Name
+	m.upgradeNotifMsg = fmt.Sprintf("%s %s (1/%d)...", gerund(batch.op), ordered[0].pkg.Name, len(ordered))
 
-	return tea.Batch(m.spinner.Tick, func() tea.Msg {
-		defer cancel()
-		succeeded := make([]string, 0)
-		failed := make(map[string]string)
+	return tea.Batch(m.spinner.Tick, runBatchOp(ctx, ordered, 0, password, batch.op))
+}
 
-		// Run privileged ops sequentially (shared sudo session)
-		for _, o := range batch.ops {
-			if !o.privileged {
-				continue
-			}
-			ctxCmd := exec.CommandContext(ctx, o.cmd.Args[0], o.cmd.Args[1:]...)
-			if password != "" {
-				ctxCmd.Stdin = strings.NewReader(password + "\n")
-			}
-			out, err := ctxCmd.CombinedOutput()
-			if err != nil {
-				msg := extractErrorLines(string(out))
-				if msg != "" {
-					failed[o.pkg.Name] = fmt.Sprintf("%v: %s", err, msg)
-				} else {
-					failed[o.pkg.Name] = err.Error()
-				}
-			} else {
-				succeeded = append(succeeded, o.pkg.Name)
+func runBatchOp(ctx context.Context, ops []batchOp, idx int, password, op string) tea.Cmd {
+	return func() tea.Msg {
+		o := ops[idx]
+		ctxCmd := exec.CommandContext(ctx, o.cmd.Args[0], o.cmd.Args[1:]...)
+		if o.privileged && password != "" {
+			ctxCmd.Stdin = strings.NewReader(password + "\n")
+		}
+		out, err := ctxCmd.CombinedOutput()
+		errStr := ""
+		status := "done"
+		if err != nil {
+			status = "failed"
+			errStr = extractErrorLines(string(out))
+			if errStr == "" {
+				errStr = err.Error()
 			}
 		}
+		return batchProgressMsg{
+			name:   o.pkg.Name,
+			status: status,
+			err:    errStr,
+		}
+	}
+}
 
-		// Run unprivileged ops (could parallelize but sequential is safer)
-		for _, o := range batch.ops {
-			if o.privileged {
-				continue
-			}
-			ctxCmd := exec.CommandContext(ctx, o.cmd.Args[0], o.cmd.Args[1:]...)
-			out, err := ctxCmd.CombinedOutput()
-			if err != nil {
-				msg := extractErrorLines(string(out))
-				if msg != "" {
-					failed[o.pkg.Name] = fmt.Sprintf("%v: %s", err, msg)
-				} else {
-					failed[o.pkg.Name] = err.Error()
-				}
-			} else {
-				succeeded = append(succeeded, o.pkg.Name)
+func (m *Model) handleBatchProgress(msg batchProgressMsg) (tea.Model, tea.Cmd) {
+	m.batchLog = append(m.batchLog, msg)
+	completed := len(m.batchLog)
+	total := len(m.batchOps)
+
+	// Always continue to next op regardless of failure
+	if completed < total {
+		next := m.batchOps[completed]
+		m.batchCurrentPkg = next.pkg.Name
+		m.upgradingPkgName = next.pkg.Name
+		m.upgradeNotifMsg = fmt.Sprintf("%s %s (%d/%d)...", gerund(m.batchOpLabel), next.pkg.Name, completed+1, total)
+		return m, runBatchOp(m.batchCtx, m.batchOps, completed, m.batchPassword, m.batchOpLabel)
+	}
+
+	// All done
+	m.upgradeInFlight = false
+	m.upgradeCancel = nil
+	m.batchCurrentPkg = ""
+	m.upgradingPkgName = ""
+	m.batchPassword = ""
+
+	var succeeded []string
+	failed := make(map[string]string)
+	for _, entry := range m.batchLog {
+		if entry.status == "done" {
+			succeeded = append(succeeded, entry.name)
+		} else {
+			failed[entry.name] = entry.err
+		}
+	}
+
+	m.multiSelect = false
+	m.selections = nil
+
+	summary := fmt.Sprintf("%d %s", len(succeeded), pastTense(m.batchOpLabel))
+	if len(failed) > 0 {
+		summary += fmt.Sprintf(", %d failed", len(failed))
+		m.upgradeNotifErr = true
+	} else {
+		m.upgradeNotifErr = false
+	}
+	m.upgradeNotifMsg = summary
+	m.batchOpLabel = ""
+	m.batchOps = nil
+
+	// Rescan affected sources
+	rescanned := make(map[model.Source]bool)
+	var cmds []tea.Cmd
+	for _, name := range succeeded {
+		for _, p := range m.allPkgs {
+			if p.Name == name && !rescanned[p.Source] {
+				rescanned[p.Source] = true
+				cmds = append(cmds, m.rescanManager(p.Source))
 			}
 		}
-
-		password = ""
-		return batchResultMsg{succeeded: succeeded, failed: failed, op: batch.op}
-	})
+	}
+	dismissTime := 10 * time.Second
+	if len(failed) > 0 {
+		dismissTime = 30 * time.Second
+	}
+	cmds = append(cmds, tea.Tick(dismissTime, func(time.Time) tea.Msg {
+		return upgradeNotifClearMsg{}
+	}))
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) renderBatchConfirmOverlay() string {
