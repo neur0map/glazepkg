@@ -89,21 +89,22 @@ func (dc *DepsCache) Flush() {
 // FetchDependencies fetches dependency lists for all packages, using the cache
 // where possible and falling back to the manager's DependencyLister interface.
 func FetchDependencies(mgrs []Manager, pkgs []model.Package, cache *DepsCache) map[string][]string {
-	result := make(map[string][]string)
-
 	// Group packages by source
 	bySource := make(map[model.Source][]model.Package)
 	for _, p := range pkgs {
 		bySource[p.Source] = append(bySource[p.Source], p)
 	}
 
+	var mu sync.Mutex
+	result := make(map[string][]string)
+	var wg sync.WaitGroup
+
 	for _, mgr := range mgrs {
 		lister, ok := mgr.(DependencyLister)
 		if !ok {
 			continue
 		}
-		source := mgr.Name()
-		srcPkgs := bySource[source]
+		srcPkgs := bySource[mgr.Name()]
 		if len(srcPkgs) == 0 {
 			continue
 		}
@@ -113,7 +114,9 @@ func FetchDependencies(mgrs []Manager, pkgs []model.Package, cache *DepsCache) m
 		for _, p := range srcPkgs {
 			if deps, ok := cache.Get(p.Key()); ok {
 				if len(deps) > 0 {
+					mu.Lock()
 					result[p.Key()] = deps
+					mu.Unlock()
 				}
 			} else {
 				uncached = append(uncached, p)
@@ -124,17 +127,24 @@ func FetchDependencies(mgrs []Manager, pkgs []model.Package, cache *DepsCache) m
 			continue
 		}
 
-		fetched := lister.ListDependencies(uncached)
-		for _, p := range uncached {
-			if deps, ok := fetched[p.Name]; ok {
-				if len(deps) > 0 {
-					result[p.Key()] = deps
+		wg.Add(1)
+		go func(l DependencyLister, pkgs []model.Package) {
+			defer wg.Done()
+			fetched := l.ListDependencies(pkgs)
+			mu.Lock()
+			for _, p := range pkgs {
+				if deps, ok := fetched[p.Name]; ok {
+					if len(deps) > 0 {
+						result[p.Key()] = deps
+					}
+					cache.Set(p.Key(), deps)
 				}
-				cache.Set(p.Key(), deps)
 			}
-		}
+			mu.Unlock()
+		}(lister, uncached)
 	}
 
+	wg.Wait()
 	cache.Flush()
 	return result
 }

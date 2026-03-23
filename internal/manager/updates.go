@@ -101,21 +101,22 @@ func (uc *UpdateCache) Invalidate(keys []string) {
 // FetchUpdates checks for available updates across all managers, using the cache.
 // Returns a map of package key → latest version.
 func FetchUpdates(mgrs []Manager, pkgs []model.Package, cache *UpdateCache) map[string]string {
-	result := make(map[string]string)
-
 	// Group packages by source
 	bySource := make(map[model.Source][]model.Package)
 	for _, p := range pkgs {
 		bySource[p.Source] = append(bySource[p.Source], p)
 	}
 
+	var mu sync.Mutex
+	result := make(map[string]string)
+	var wg sync.WaitGroup
+
 	for _, mgr := range mgrs {
 		checker, ok := mgr.(UpdateChecker)
 		if !ok {
 			continue
 		}
-		source := mgr.Name()
-		srcPkgs := bySource[source]
+		srcPkgs := bySource[mgr.Name()]
 		if len(srcPkgs) == 0 {
 			continue
 		}
@@ -125,7 +126,9 @@ func FetchUpdates(mgrs []Manager, pkgs []model.Package, cache *UpdateCache) map[
 		for _, p := range srcPkgs {
 			if latest, ok := cache.Get(p.Key()); ok {
 				if latest != p.Version {
+					mu.Lock()
 					result[p.Key()] = latest
+					mu.Unlock()
 				}
 			} else {
 				uncached = append(uncached, p)
@@ -136,20 +139,26 @@ func FetchUpdates(mgrs []Manager, pkgs []model.Package, cache *UpdateCache) map[
 			continue
 		}
 
-		fetched := checker.CheckUpdates(uncached)
-		for _, p := range uncached {
-			if latest, ok := fetched[p.Name]; ok && latest != "" {
-				cache.Set(p.Key(), latest)
-				if latest != p.Version {
-					result[p.Key()] = latest
+		wg.Add(1)
+		go func(c UpdateChecker, pkgs []model.Package) {
+			defer wg.Done()
+			fetched := c.CheckUpdates(pkgs)
+			mu.Lock()
+			for _, p := range pkgs {
+				if latest, ok := fetched[p.Name]; ok && latest != "" {
+					cache.Set(p.Key(), latest)
+					if latest != p.Version {
+						result[p.Key()] = latest
+					}
+				} else {
+					cache.Set(p.Key(), p.Version)
 				}
-			} else {
-				// Cache "no update" so we don't re-check for 7 days
-				cache.Set(p.Key(), p.Version)
 			}
-		}
+			mu.Unlock()
+		}(checker, uncached)
 	}
 
+	wg.Wait()
 	cache.Flush()
 	return result
 }
