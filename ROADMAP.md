@@ -8,9 +8,9 @@ This roadmap is an idea of what I want to do with gpk. It is not set in stone an
 
 GPK is read-only right now. That needs to change.
 
-### Update (`u`)
+### ~~Update (`u`)~~ — DONE
 
-Hit `u` on a package with the `↑` indicator. gpk asks for confirmation, runs the update through the native manager (`brew upgrade`, `pacman -S`, `pip install --upgrade`, etc.), and refreshes the entry with the new version when it's done. If there's no update available, nothing happens.
+Press `u` in the package detail view. A confirmation modal shows the exact command that will run, with Yes/No buttons. Privileged managers (apt, dnf, pacman, snap, apk, xbps, chocolatey) show a sudo password field on Linux or an elevated terminal warning on Windows. The upgrade runs in the background with a status notification while the TUI stays interactive. 19 managers support single-package upgrades via the `Upgrader` interface. Post-upgrade rescan refreshes the affected manager's packages.
 
 ### Remove (`x`)
 
@@ -62,7 +62,7 @@ A theme is just 12 color values matching the slots in `theme.go` (Base, Surface,
 | `r` | Rescan | Rescan |
 | `?` | Help | Help |
 | `q` | Quit | Quit |
-| `u` | | Update package |
+| `u` | **Upgrade package** | **Upgrade package** |
 | `x` | | Remove package |
 | `m` | | Multi select mode |
 | `i` | | Install overlay |
@@ -72,7 +72,7 @@ A theme is just 12 color values matching the slots in `theme.go` (Base, Surface,
 ## Build Order
 
 1. **Themes** — most isolated change, only touches `theme.go` and persistence. Good first contribution.
-2. **Update** — introduces the command execution and confirmation patterns that remove and install reuse.
+2. ~~**Update**~~ — DONE. Command execution, confirmation modal, privilege handling, and background execution patterns are established.
 3. **Remove** — same execution pattern as update, adds destructive operation warnings.
 4. **Multi select** — UI layer on top of update and remove already working.
 5. **Install** — most complex. Needs `Searcher` interface, parallel search, results overlay, version display, and all the execution plumbing from above.
@@ -81,45 +81,17 @@ A theme is just 12 color values matching the slots in `theme.go` (Base, Surface,
 
 Stuff that needs to be sorted out before or while building the above.
 
-### Terminal Ownership
+### ~~Terminal Ownership~~ — RESOLVED
 
-Bubble Tea owns the terminal. It eats all keyboard input and controls rendering. Running `sudo pacman -S ripgrep` needs stdin for the password prompt, which Bubble Tea is intercepting.
+Solved by running commands in a background goroutine with `CombinedOutput()`. The TUI stays alive and interactive during upgrades. Sudo passwords are collected in the confirmation modal and piped to `sudo -S` via stdin. Commands use `exec.CommandContext` so they can be cancelled if the user force-quits with ctrl+c. Remove and install should follow the same pattern.
 
-`tea.Exec` and `tea.ExecProcess` handle this. They release terminal control to the subprocess, let it run with full stdin/stdout, and hand back to gpk when the process exits. All package operations have to go through this path. Plain `exec.Command` while Bubble Tea is running will hang or produce garbage.
+### ~~Privilege Escalation~~ — RESOLVED
 
-This means gpk's UI goes away while the command runs. The user sees raw output from their package manager, then gpk comes back. Might actually be better than an embedded output pane since people already know what their package manager's output looks like. Either way, this needs a deliberate call, not a surprise during implementation.
+Handled via build-tag-split helpers: `privilegedCmd()` wraps with `sudo -S` on Unix (non-root), pass-through on Windows. Each manager declares its own elevation needs through `privilegedCmd` vs `exec.Command`. The confirmation modal shows a password field when sudo is needed, or an "elevated terminal" warning on Windows (chocolatey). Error output is parsed to extract meaningful messages and strip sudo prompts.
 
-### Privilege Escalation
+### ~~Cache Invalidation After Write Operations~~ — RESOLVED
 
-sudo handling varies wildly across managers and getting it wrong breaks things.
-
-Need root:
-- pacman, apt, dnf, apk, xbps, portage, snap
-- nix (depends on single vs multi user install)
-- guix (depends on system vs user profile)
-
-Must never use root:
-- brew (explicitly warns against it, breaks /usr/local or /opt/homebrew permissions)
-- cargo, go, npm, pnpm, bun, pip, pipx, gem, composer, luarocks, opam (user space tools, sudo installs to wrong locations or creates root owned files in $HOME)
-
-Depends on context:
-- pip (system pip wants sudo, but --user or venv is almost always the right call)
-- flatpak (system vs user scope)
-
-Each manager needs to declare its own elevation policy. On Linux that's sudo. On macOS brew never needs it. On Windows it's UAC, completely different mechanism.
-
-Also need to handle sudo failures cleanly: wrong password, timeout, permission denied. gpk has to show a clear error and not leave the list in a broken state.
-
-### Cache Invalidation After Write Operations
-
-Scan cache lasts 10 days. The second you install or remove something through gpk, that cache is stale. User removes ripgrep, ripgrep is still in the list until next rescan? That's broken.
-
-Three options:
-1. Nuke the whole cache after any write and force a full rescan. Simple, slow if doing multiple operations.
-2. Patch the cache in place (delete entry on remove, add on install, bump version on update). Fast but fragile, two sources of truth.
-3. Invalidate just the affected manager's portion of the cache and rescan that one manager.
-
-Option 3 makes the most sense but the current `scan.json` is a flat list with one timestamp for everything. Needs per manager timestamps or a structural change.
+Went with option 3: `UpdateCache.Invalidate(keys)` removes the affected manager's entries, then `rescanManager()` rescans just that one manager and merges the results back, preserving cached metadata (descriptions, deps, sizes) from previous entries.
 
 ### Manager Command Differences
 
