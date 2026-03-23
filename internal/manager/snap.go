@@ -117,3 +117,44 @@ func (s *Snap) Describe(pkgs []model.Package) map[string]string {
 func (s *Snap) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("snap", "refresh", name)
 }
+
+func (s *Snap) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("snap", "remove", name)
+}
+
+func (s *Snap) Search(query string) ([]model.Package, error) {
+	// Run: snap find query
+	// Output: tabular with header "Name  Version  Publisher  Notes  Summary"
+	out, err := exec.Command("snap", "find", query).Output()
+	if err != nil {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	first := true
+	for scanner.Scan() {
+		if first {
+			first = false
+			continue // skip header
+		}
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 5 {
+			continue
+		}
+		name := fields[0]
+		version := fields[1]
+		// Summary is everything after the 4th field
+		desc := strings.Join(fields[4:], " ")
+		pkgs = append(pkgs, model.Package{
+			Name:        name,
+			Version:     version,
+			Source:      model.SourceSnap,
+			Description: desc,
+		})
+	}
+	return pkgs, nil
+}
+
+func (s *Snap) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("snap", "install", name)
+}

@@ -161,3 +161,44 @@ func (a *Apt) Describe(pkgs []model.Package) map[string]string {
 func (a *Apt) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("apt-get", "install", "--only-upgrade", "-y", name)
 }
+
+func (a *Apt) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "remove", "-y", name)
+}
+
+func (a *Apt) RemoveCmdWithDeps(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "autoremove", "-y", name)
+}
+
+func (a *Apt) Search(query string) ([]model.Package, error) {
+	// Run: apt-cache search query
+	// Output format: "package-name - description"
+	out, err := exec.Command("apt-cache", "search", query).Output()
+	if err != nil {
+		return nil, err
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		parts := strings.SplitN(line, " - ", 2)
+		if len(parts) < 1 {
+			continue
+		}
+		name := strings.TrimSpace(parts[0])
+		desc := ""
+		if len(parts) == 2 {
+			desc = strings.TrimSpace(parts[1])
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        name,
+			Source:      model.SourceApt,
+			Description: desc,
+		})
+	}
+	return pkgs, nil
+}
+
+func (a *Apt) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "install", "-y", name)
+}

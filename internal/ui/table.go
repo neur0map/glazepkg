@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg string) string {
+func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg, removingPkg string) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -81,6 +81,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
 		isUpgrading := upgradingPkg != "" && p.Name == upgradingPkg
+		isRemoving := removingPkg != "" && p.Name == removingPkg
 
 		// Last column: show size when filtering by size, otherwise description
 		var lastText string
@@ -122,6 +123,16 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			lastCell := upgradingStyle.Render(desc)
 			line := "  " +
 				padCell(upgradingStyle.Render("▸ "+name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isRemoving {
+			removingStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+			verCell := removingStyle.Render(ver)
+			lastCell := removingStyle.Render(desc)
+			line := "  " +
+				padCell(removingStyle.Render("✗ "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
 				lastCell

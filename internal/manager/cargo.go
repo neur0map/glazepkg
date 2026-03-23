@@ -54,3 +54,7 @@ func (c *Cargo) Scan() ([]model.Package, error) {
 func (c *Cargo) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("cargo", "install", name)
 }
+
+func (c *Cargo) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("cargo", "uninstall", name)
+}
