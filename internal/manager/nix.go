@@ -156,6 +156,10 @@ func (n *Nix) scanNixOSSystem(seen map[string]bool) []model.Package {
 	return pkgs
 }
 
+func (n *Nix) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("nix-env", "-e", name)
+}
+
 func (n *Nix) ListDependencies(pkgs []model.Package) map[string][]string {
 	deps := make(map[string][]string, len(pkgs))
 	for _, pkg := range pkgs {

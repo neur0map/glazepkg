@@ -55,6 +55,10 @@ func (m *MacPorts) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (m *MacPorts) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("port", "uninstall", name)
+}
+
 func (m *MacPorts) CheckUpdates(pkgs []model.Package) map[string]string {
 	out, err := exec.Command("port", "-q", "outdated").Output()
 	if err != nil || len(out) == 0 {

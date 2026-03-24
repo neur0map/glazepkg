@@ -45,6 +45,10 @@ func (g *Go) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (g *Go) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("rm", filepath.Join(goBinDir(), name))
+}
+
 func (g *Go) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

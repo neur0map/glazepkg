@@ -47,6 +47,10 @@ func (p *Portage) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (p *Portage) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("emerge", "--unmerge", name)
+}
+
 func (p *Portage) CheckUpdates(pkgs []model.Package) map[string]string {
 	// emerge -puDN @world shows packages that would be updated
 	out, err := exec.Command("emerge", "-puDN", "@world").Output()
