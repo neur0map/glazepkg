@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/neur0map/glazepkg/internal/config"
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 	"github.com/neur0map/glazepkg/internal/snapshot"
@@ -252,11 +253,23 @@ type Model struct {
 	version      string
 	updateBanner string
 
+	// Theme picker
+	showThemePicker bool
+	themeCursor     int
+	themeList       []config.Theme
+	prevThemeID     string // for reverting on Esc
+	appConfig       config.Config
+
 	// Spinner
 	spinner spinner.Model
 }
 
 func NewModel(version string) Model {
+	// Load config and apply theme before building styles
+	cfg := config.Load()
+	theme := config.ResolveTheme(cfg.Appearance.Theme)
+	ApplyTheme(theme)
+
 	ti := textinput.New()
 	ti.Placeholder = "fuzzy search..."
 	ti.CharLimit = 64
@@ -292,6 +305,7 @@ func NewModel(version string) Model {
 	si.TextStyle = StyleNormal
 
 	return Model{
+		appConfig:     cfg,
 		spinner:       sp,
 		searchInput:   si,
 		filterInput:   ti,
@@ -918,6 +932,37 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Theme picker overlay
+	if m.showThemePicker {
+		switch key {
+		case "esc", "q":
+			// Revert to previous theme
+			ApplyTheme(config.ResolveTheme(m.prevThemeID))
+			m.refreshInputStyles()
+			m.showThemePicker = false
+		case "j", "down":
+			if m.themeCursor < len(m.themeList)-1 {
+				m.themeCursor++
+				ApplyTheme(m.themeList[m.themeCursor])
+				m.refreshInputStyles()
+			}
+		case "k", "up":
+			if m.themeCursor > 0 {
+				m.themeCursor--
+				ApplyTheme(m.themeList[m.themeCursor])
+				m.refreshInputStyles()
+			}
+		case "enter":
+			selected := m.themeList[m.themeCursor]
+			ApplyTheme(selected)
+			m.refreshInputStyles()
+			m.appConfig.Appearance.Theme = selected.ID
+			_ = config.Save(m.appConfig)
+			m.showThemePicker = false
+		}
+		return m, nil
+	}
+
 	// Edit mode intercepts keys
 	if m.editingDesc {
 		switch key {
@@ -1085,6 +1130,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		return m, m.enterSearchView()
 	case "m":
 		m.toggleMultiSelect()
+	case "t":
+		m.openThemePicker()
 	case " ":
 		if m.multiSelect {
 			m.toggleSelection()
@@ -1201,6 +1248,39 @@ func (m *Model) handleDiffKey(key string) (tea.Model, tea.Cmd) {
 		m.view = viewList
 	}
 	return m, nil
+}
+
+func (m *Model) openThemePicker() {
+	// Build theme list: System first, then all named themes
+	systemTheme := config.Theme{
+		ID:      "system",
+		Name:    "System (uses terminal colors)",
+		Palette: config.SystemPalette(),
+	}
+	all := config.AllThemes()
+	m.themeList = append([]config.Theme{systemTheme}, all...)
+	m.prevThemeID = m.appConfig.Appearance.Theme
+	m.themeCursor = 0
+	for i, t := range m.themeList {
+		if t.ID == m.prevThemeID {
+			m.themeCursor = i
+			break
+		}
+	}
+	m.showThemePicker = true
+}
+
+// refreshInputStyles updates text input and spinner styles after a theme change.
+func (m *Model) refreshInputStyles() {
+	m.filterInput.PromptStyle = StyleFilterPrompt
+	m.filterInput.TextStyle = StyleFilterText
+	m.descInput.PromptStyle = StyleDetailKey
+	m.descInput.TextStyle = StyleDetailVal
+	m.passwordInput.PromptStyle = StyleDim
+	m.passwordInput.TextStyle = StyleNormal
+	m.searchInput.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
+	m.searchInput.TextStyle = StyleNormal
+	m.spinner.Style = lipgloss.NewStyle().Foreground(ColorBlue)
 }
 
 func (m *Model) applyFilter() {
@@ -1359,6 +1439,9 @@ func (m Model) View() string {
 	if m.showPkgHelp {
 		return content + "\n" + renderPkgHelpOverlay(m.detailPkg.Name, m.pkgHelpLines, m.pkgHelpScroll, m.width, m.height)
 	}
+	if m.showThemePicker {
+		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
+	}
 
 	return content
 }
@@ -1449,7 +1532,33 @@ func (m Model) renderStatusBar() string {
 		for _, b := range binds {
 			parts = append(parts, keyStyle.Render(b.key)+descStyle.Render(" "+b.desc))
 		}
-		return strings.Join(parts, sep)
+		if m.width <= 0 {
+			return strings.Join(parts, sep)
+		}
+		// Wrap into multiple lines when too wide
+		maxW := m.width - 2
+		var lines []string
+		var line []string
+		w := 0
+		sepW := lipgloss.Width(sep)
+		for _, p := range parts {
+			pw := lipgloss.Width(p)
+			needed := pw
+			if len(line) > 0 {
+				needed += sepW
+			}
+			if w+needed > maxW && len(line) > 0 {
+				lines = append(lines, strings.Join(line, sep))
+				line = nil
+				w = 0
+			}
+			line = append(line, p)
+			w += needed
+		}
+		if len(line) > 0 {
+			lines = append(lines, strings.Join(line, sep))
+		}
+		return strings.Join(lines, "\n ")
 	}
 
 	switch m.view {
@@ -1468,7 +1577,7 @@ func (m Model) renderStatusBar() string {
 		binds = []struct{ key, desc string }{
 			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
 			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
-			{"m", "select"}, {"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"?", "help"}, {"q", "quit"},
+			{"m", "select"}, {"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
 		}
 		bar := formatBinds(binds)
 		if m.sizeFilter > 0 {
@@ -1740,11 +1849,11 @@ func (m Model) renderUpgradeConfirmOverlay() string {
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 
 	if m.confirmFocus == 1 {
-		yesStyle = yesStyle.Background(ColorGreen).Foreground(lipgloss.Color("#1a1b26"))
+		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	} else if m.confirmFocus == 2 {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
-		noStyle = noStyle.Background(ColorRed).Foreground(lipgloss.Color("#1a1b26"))
+		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
 	} else {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
@@ -2127,11 +2236,11 @@ func (m Model) renderRemoveConfirmOverlay() string {
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 
 	if m.removeFocus == 2 {
-		yesStyle = yesStyle.Background(ColorGreen).Foreground(lipgloss.Color("#1a1b26"))
+		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	} else if m.removeFocus == 3 {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
-		noStyle = noStyle.Background(ColorRed).Foreground(lipgloss.Color("#1a1b26"))
+		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
 	} else {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
@@ -2173,7 +2282,7 @@ func renderOpNotification(msg string, isErr, inFlight bool, opLabel, spinnerView
 	}
 	badge := lipgloss.NewStyle().
 		Background(color).
-		Foreground(lipgloss.Color("#1a1b26")).
+		Foreground(ColorBase).
 		Bold(true).
 		Render(" " + label + " ")
 	msgStyle := lipgloss.NewStyle().Foreground(color)

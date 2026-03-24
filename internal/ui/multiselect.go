@@ -486,11 +486,11 @@ func (m Model) renderBatchConfirmOverlay() string {
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 
 	if m.batchFocus == 1 {
-		yesStyle = yesStyle.Background(ColorGreen).Foreground(lipgloss.Color("#1a1b26"))
+		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	} else if m.batchFocus == 2 {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
-		noStyle = noStyle.Background(ColorRed).Foreground(lipgloss.Color("#1a1b26"))
+		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
 	} else {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)

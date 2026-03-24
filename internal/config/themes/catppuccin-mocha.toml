@@ -1,0 +1,15 @@
+name = "Catppuccin Mocha"
+
+[palette]
+base = "#1e1e2e"
+surface = "#313244"
+text = "#cdd6f4"
+subtext = "#6c7086"
+blue = "#89b4fa"
+purple = "#cba6f7"
+green = "#a6e3a1"
+red = "#f38ba8"
+yellow = "#f9e2af"
+cyan = "#89dceb"
+orange = "#fab387"
+white = "#bac2de"

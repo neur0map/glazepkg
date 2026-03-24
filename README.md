@@ -48,6 +48,12 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install neur0map/tap/gpk
+```
+
 ### Arch Linux (AUR)
 
 ```bash
