@@ -30,6 +30,7 @@ func renderHelpOverlay(width, height int) string {
 		{"i", "Search + install packages"},
 		{"d", "Diff against last snapshot"},
 		{"e", "Export packages"},
+		{"t", "Switch theme"},
 		{"?", "Toggle this help"},
 		{"q", "Quit"},
 	}

@@ -224,7 +224,7 @@ func renderFixedBadge(source model.Source) string {
 		label = strings.Repeat(" ", left) + label + strings.Repeat(" ", right)
 	}
 	return StyleBadge.
-		Foreground(lipgloss.Color("#1a1b26")).
+		Foreground(ColorBase).
 		Background(color).
 		Render(label)
 }

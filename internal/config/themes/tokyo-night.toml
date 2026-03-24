@@ -1,0 +1,15 @@
+name = "Tokyo Night"
+
+[palette]
+base = "#1a1b26"
+surface = "#3b4261"
+text = "#a9b1d6"
+subtext = "#565f89"
+blue = "#7aa2f7"
+purple = "#bb9af7"
+green = "#9ece6a"
+red = "#f7768e"
+yellow = "#e0af68"
+cyan = "#7dcfff"
+orange = "#ff9e64"
+white = "#c6c6df"
