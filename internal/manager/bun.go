@@ -51,3 +51,18 @@ func (b *Bun) Scan() ([]model.Package, error) {
 	}
 	return pkgs, nil
 }
+
+func (b *Bun) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command("npm", "info", pkg.Name, "description").Output()
+		if err != nil {
+			continue
+		}
+		desc := strings.TrimSpace(string(out))
+		if desc != "" {
+			descs[pkg.Name] = desc
+		}
+	}
+	return descs
+}
