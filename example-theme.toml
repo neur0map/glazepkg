@@ -1,0 +1,31 @@
+# Example custom theme for gpk
+# Copy this file to ~/.config/glazepkg/themes/ and rename it:
+#
+#   mkdir -p ~/.config/glazepkg/themes
+#   cp example-theme.toml ~/.config/glazepkg/themes/my-theme.toml
+#
+# It will appear in the theme picker (press t) on next open.
+#
+# Only "name" is required. Omitted palette keys fall back to
+# Tokyo Night defaults. The [managers] section is optional.
+
+name = "My Theme"
+
+[palette]
+base = "#0d1117"       # background
+surface = "#161b22"    # borders, overlays
+text = "#c9d1d9"       # primary text
+subtext = "#484f58"    # dimmed text, hints
+blue = "#58a6ff"       # titles, active tab, selection
+purple = "#bc8cff"     # pip, pipx, composer, nuget, portage badges
+green = "#3fb950"      # added items, update indicator
+red = "#f85149"        # removed items, npm, gem, dnf badges
+yellow = "#d29922"     # upgrade text, brew, bun, guix badges
+cyan = "#39d2c0"       # search prompt, aur, go, macports badges
+orange = "#f0883e"     # snap, cargo, opam, chocolatey badges
+white = "#b1bac4"      # pnpm badge
+
+# Override individual manager badge colors (optional)
+# [managers]
+# brew = "#f9e2af"
+# cargo = "#fab387"
