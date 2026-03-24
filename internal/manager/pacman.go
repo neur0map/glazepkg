@@ -182,14 +182,19 @@ func (p *Pacman) Search(query string) ([]model.Package, error) {
 		}
 		nameWithRepo := parts[0]
 		version := parts[1]
-		// Strip repo prefix
+		// Extract repo prefix to distinguish AUR from native pacman results
+		source := model.SourcePacman
 		if idx := strings.Index(nameWithRepo, "/"); idx >= 0 {
+			repo := nameWithRepo[:idx]
 			nameWithRepo = nameWithRepo[idx+1:]
+			if repo == "aur" {
+				source = model.SourceAUR
+			}
 		}
 		pkgs = append(pkgs, model.Package{
 			Name:        nameWithRepo,
 			Version:     version,
-			Source:      model.SourcePacman,
+			Source:      source,
 			Description: desc,
 		})
 	}

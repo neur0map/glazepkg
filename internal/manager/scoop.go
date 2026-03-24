@@ -231,6 +231,29 @@ func (s *Scoop) Search(query string) ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (s *Scoop) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command("scoop", "info", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		// scoop info output contains a line like:
+		// Description: Some description here
+		for _, line := range strings.Split(string(out), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Description:") {
+				desc := strings.TrimSpace(strings.TrimPrefix(trimmed, "Description:"))
+				if desc != "" {
+					descs[pkg.Name] = desc
+				}
+				break
+			}
+		}
+	}
+	return descs
+}
+
 func (s *Scoop) InstallCmd(name string) *exec.Cmd {
 	return exec.Command("scoop", "install", name)
 }
