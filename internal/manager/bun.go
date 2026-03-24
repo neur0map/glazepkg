@@ -52,6 +52,10 @@ func (b *Bun) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (b *Bun) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("bun", "remove", "-g", name)
+}
+
 func (b *Bun) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {

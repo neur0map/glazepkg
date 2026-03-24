@@ -56,6 +56,10 @@ func (p *Pkgsrc) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (p *Pkgsrc) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("pkg_delete", name)
+}
+
 func (p *Pkgsrc) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {
