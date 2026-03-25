@@ -1,0 +1,19 @@
+name: Sync Fork
+
+on:
+  schedule:
+    # Run every day at midnight UTC
+    - cron: '0 0 * * *'
+  # Allows manual triggering from the Actions tab in the GitHub UI
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync my fork
+        uses: aormsby/Fork-Sync-With-Upstream-action@v1.0.1
+        with:
+          target_branch: main
+          sync_method: merge
+          
