@@ -109,3 +109,62 @@ jobs:
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: "Update to ${{ steps.bump.outputs.new_tag }}"
           force_push: true
+
+      - name: Update Homebrew tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VER="${{ steps.bump.outputs.ver }}"
+          SHA_DARWIN_ARM64=$(sha256sum gpk-darwin-arm64 | cut -d' ' -f1)
+          SHA_DARWIN_AMD64=$(sha256sum gpk-darwin-amd64 | cut -d' ' -f1)
+          SHA_LINUX_AMD64=$(sha256sum gpk-linux-amd64 | cut -d' ' -f1)
+          SHA_LINUX_ARM64=$(sha256sum gpk-linux-arm64 | cut -d' ' -f1)
+
+          cat > gpk.rb << FORMULA
+          class Gpk < Formula
+            desc "TUI dashboard that unifies 34 package managers into one searchable view"
+            homepage "https://github.com/neur0map/glazepkg"
+            version "${VER}"
+            license "GPL-3.0-or-later"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-darwin-arm64"
+                sha256 "${SHA_DARWIN_ARM64}"
+              else
+                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-darwin-amd64"
+                sha256 "${SHA_DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-linux-arm64"
+                sha256 "${SHA_LINUX_ARM64}"
+              else
+                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-linux-amd64"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              binary = Dir.glob("gpk-*").first
+              bin.install binary => "gpk"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/gpk --version")
+            end
+          end
+          FORMULA
+          sed -i 's/^          //' gpk.rb
+
+          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/neur0map/homebrew-tap.git tap
+          mkdir -p tap/Formula
+          mv gpk.rb tap/Formula/gpk.rb
+          cd tap
+          git config user.name "neur0map"
+          git config user.email "90535780+neur0map@users.noreply.github.com"
+          git add Formula/gpk.rb
+          git commit -m "gpk ${VER}"
+          git push

@@ -45,6 +45,10 @@ func (c *Composer) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (c *Composer) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("composer", "global", "remove", name)
+}
+
 func (c *Composer) CheckUpdates(pkgs []model.Package) map[string]string {
 	out, err := exec.Command("composer", "global", "outdated", "--format=json").Output()
 	if err != nil && len(out) == 0 {

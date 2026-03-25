@@ -145,3 +145,32 @@ func (c *Conda) CheckUpdates(pkgs []model.Package) map[string]string {
 func (c *Conda) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command(c.condaCmd(), "update", "--yes", name)
 }
+
+func (c *Conda) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command(c.condaCmd(), "search", pkg.Name, "--info", "--json").Output()
+		if err != nil {
+			continue
+		}
+		// JSON output: {"<name>": [{"summary": "..."}]}
+		var result map[string][]struct {
+			Summary string `json:"summary"`
+		}
+		if err := json.Unmarshal(out, &result); err != nil {
+			continue
+		}
+		if entries, ok := result[pkg.Name]; ok && len(entries) > 0 {
+			// Take the last entry (latest version) for the description
+			desc := entries[len(entries)-1].Summary
+			if desc != "" {
+				descs[pkg.Name] = desc
+			}
+		}
+	}
+	return descs
+}
+
+func (c *Conda) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command(c.condaCmd(), "remove", "--yes", name)
+}

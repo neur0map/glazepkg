@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/neur0map/glazepkg/internal/config"
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 	"github.com/neur0map/glazepkg/internal/snapshot"
@@ -26,6 +27,7 @@ const (
 	viewList view = iota
 	viewDetail
 	viewDiff
+	viewSearch
 )
 
 // Size filter thresholds (in bytes).
@@ -34,12 +36,12 @@ var sizeFilters = []struct {
 	MinBytes int64
 	MaxBytes int64
 }{
-	{"All", 0, 0},
-	{"< 1 MB", 0, 1 << 20},
-	{"1–10 MB", 1 << 20, 10 << 20},
-	{"10–100 MB", 10 << 20, 100 << 20},
-	{"> 100 MB", 100 << 20, 0},
-	{"Has updates", -1, -1},
+	{"All", 0, 0},                      // no filter
+	{"< 1 MB", 0, 1 << 20},             // 0 – 1 MB
+	{"1–10 MB", 1 << 20, 10 << 20},     // 1 – 10 MB
+	{"10–100 MB", 10 << 20, 100 << 20}, // 10 – 100 MB
+	{"> 100 MB", 100 << 20, 0},         // 100 MB+
+	{"Has updates", -1, -1},            // special: only packages with updates
 }
 
 // ─── Message types ────────────────────────────────────────────────────────────
@@ -77,11 +79,10 @@ type exportDoneMsg struct {
 }
 
 type upgradeResultMsg struct {
-	pkg model.Package
-	err error
+	pkg     model.Package
+	err     error
+	opLabel string
 }
-
-type upgradeNotifClearMsg struct{}
 
 type managerRescanMsg struct {
 	source  model.Source
@@ -90,14 +91,9 @@ type managerRescanMsg struct {
 	err     error
 }
 
-type pkgHelpMsg struct{ lines []string }
-
-// themeChangedMsg is sent after ApplyTheme() so the bubbletea loop forces a
-// full redraw with the new palette.
-type themeChangedMsg struct{ t theme.Theme }
-
-// SetVersionMsg is sent by the main process when the async version check completes.
-type SetVersionMsg string
+type pkgHelpMsg struct {
+	lines []string
+}
 
 type upgradeRequest struct {
 	pkg        model.Package
@@ -105,9 +101,49 @@ type upgradeRequest struct {
 	cmdStr     string
 	privileged bool
 	password   string
+	opLabel    string // "upgrade" or "install"
 }
 
-// ─── Model ────────────────────────────────────────────────────────────────────
+type upgradeNotifClearMsg struct{}
+
+type removeResultMsg struct {
+	pkg model.Package
+	err error
+}
+
+type removeRequest struct {
+	pkg        model.Package
+	cmd        *exec.Cmd
+	cmdStr     string
+	deepCmd    *exec.Cmd
+	deepCmdStr string
+	privileged bool
+	password   string
+}
+
+type removeNotifClearMsg struct{}
+
+type searchResultMsg struct {
+	source model.Source
+	pkgs   []model.Package
+	err    error
+}
+
+type searchDoneMsg struct{}
+
+type installResultMsg struct {
+	pkg model.Package
+	err error
+}
+
+type installNotifClearMsg struct{}
+
+type searchResultGroup struct {
+	name     string
+	entries  []model.Package
+	expanded bool
+}
+
 
 type Model struct {
 	width  int
@@ -138,6 +174,19 @@ type Model struct {
 	filtering   bool
 	sizeFilter  int
 
+	// Multi-select
+	multiSelect     bool
+	selections      map[string]bool
+	confirmingBatch bool
+	batchFocus      int // 0 = password, 1 = Yes, 2 = No
+	pendingBatch    *batchConfirmState
+	batchLog        []batchProgressMsg
+	batchCurrentPkg string
+	batchOps        []batchOp
+	batchPassword   string
+	batchOpLabel    string
+	batchCtx        context.Context
+
 	// Overlays
 	showHelp          bool
 	showExport        bool
@@ -148,7 +197,7 @@ type Model struct {
 	pkgHelpLines      []string
 	pkgHelpScroll     int
 	confirmingUpgrade bool
-	confirmFocus      int // 0=password, 1=Yes, 2=No
+	confirmFocus      int // 0 = password (privileged only), 1 = Yes, 2 = No
 	pendingUpgrade    *upgradeRequest
 	passwordInput     textinput.Model
 	upgradeInFlight   bool
@@ -157,10 +206,28 @@ type Model struct {
 	upgradeNotifMsg   string
 	upgradeNotifErr   bool
 
-	// Theme picker overlay
-	showThemeMenu bool     // whether the theme overlay is open
-	themeCursor   int      // cursor position within the theme list
-	themeNames    []string // ordered list from theme.ListThemes()
+	// Remove
+	confirmingRemove  bool
+	removeFocus       int // 0 = mode, 1 = password, 2 = Yes, 3 = No
+	removeMode        int // 0 = package only, 1 = package + deps
+	pendingRemove     *removeRequest
+	removeInFlight    bool
+	removingPkgName   string
+	removeCancel      context.CancelFunc
+	removeNotifMsg    string
+	removeNotifErr    bool
+
+	// Search + Install
+	searchInput       textinput.Model
+	searchActive      bool
+	searchPending     int
+	searchResults     []searchResultGroup
+	searchCursor      int
+	showPreRelease    bool
+	installInFlight   bool
+	installCancel     context.CancelFunc
+	installNotifMsg   string
+	installNotifErr   bool
 
 	// Descriptions
 	loadingDescs bool
@@ -178,18 +245,23 @@ type Model struct {
 	version      string
 	updateBanner string
 
+	// Theme picker
+	showThemePicker bool
+	themeCursor     int
+	themeList       []config.Theme
+	prevThemeID     string // for reverting on Esc
+	appConfig       config.Config
+
 	// Spinner
 	spinner    spinner.Model
 	titleFrame int // incremented on every spinner tick; drives rainbow title animation
 }
 
 func NewModel(version string) Model {
-	// Initialise the theme system; apply active theme to the UI palette.
-	// Errors are non-fatal — the compile-time default (Tokyo Night) remains.
-	if err := theme.Load(); err != nil {
-		_ = err // logged inside theme.Load
-	}
-	ApplyTheme(theme.Active())
+	// Load config and apply theme before building styles
+	cfg := config.Load()
+	theme := config.ResolveTheme(cfg.Appearance.Theme)
+	ApplyTheme(theme)
 
 	ti := textinput.New()
 	ti.Placeholder = "fuzzy search..."
@@ -210,11 +282,22 @@ func NewModel(version string) Model {
 	pi.Placeholder = "password"
 	pi.CharLimit = 128
 	pi.Prompt = "  Password: "
+	pi.PromptStyle = StyleDim
+	pi.TextStyle = StyleNormal
 	pi.EchoMode = textinput.EchoPassword
 	pi.EchoCharacter = '•'
 
-	m := Model{
+	si := textinput.New()
+	si.Placeholder = "search packages..."
+	si.CharLimit = 64
+	si.Prompt = "  search: "
+	si.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
+	si.TextStyle = StyleNormal
+
+	return Model{
+		appConfig:     cfg,
 		spinner:       sp,
+		searchInput:   si,
 		filterInput:   ti,
 		descInput:     di,
 		passwordInput: pi,
@@ -225,8 +308,6 @@ func NewModel(version string) Model {
 		depsCache:     manager.NewDepsCache(),
 		userNotes:     snapshot.LoadNotes(),
 		version:       version,
-		themeNames:    theme.ListThemes(),
-		themeCursor:   theme.ActiveIndex(),
 	}
 	m.syncThemeStyles()
 	return m
@@ -401,7 +482,9 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 		m.statusMsg = "upgrade already in progress"
 		return nil
 	}
+
 	pkg := m.detailPkg
+
 	mgr := manager.BySource(pkg.Source)
 	if mgr == nil {
 		m.statusMsg = fmt.Sprintf("manager not found for %s", pkg.Source)
@@ -411,11 +494,13 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 		m.statusMsg = fmt.Sprintf("%s is not available", pkg.Source)
 		return nil
 	}
+
 	upgrader, ok := mgr.(manager.Upgrader)
 	if !ok {
 		m.statusMsg = manager.ErrUpgradeNotSupported.Error()
 		return nil
 	}
+
 	cmd := upgrader.UpgradeCmd(pkg.Name)
 	cmdStr := strings.Join(cmd.Args, " ")
 	needsSudo := len(cmd.Args) > 0 && cmd.Args[0] == "sudo"
@@ -424,16 +509,18 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 		cmd:        cmd,
 		cmdStr:     cmdStr,
 		privileged: isPrivilegedSource(pkg.Source),
+		opLabel:    "upgrade",
 	}
+
 	m.pendingUpgrade = req
 	m.confirmingUpgrade = true
 	m.passwordInput.SetValue("")
 	if needsSudo {
-		m.confirmFocus = 0
+		m.confirmFocus = 0 // password field
 		m.passwordInput.Focus()
 		return textinput.Blink
 	}
-	m.confirmFocus = 1
+	m.confirmFocus = 1 // Yes button
 	m.passwordInput.Blur()
 	return nil
 }
@@ -486,53 +573,91 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case spinner.TickMsg:
-		// Always update the spinner model so the rainbow title animation runs
-		// continuously.  The spinner glyph itself is only rendered in the UI
-		// when there is active work (scanning / loading / upgradeInFlight).
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		m.titleFrame++
-		return m, cmd
-
-	// themeChangedMsg is dispatched after ApplyTheme() to force a redraw.
-	// The actual palette swap already happened synchronously in handleKey; this
-	// message just ensures bubbletea triggers a View() call.
-	case themeChangedMsg:
-		ApplyTheme(msg.t)
-		m.syncThemeStyles()
-		return m, nil
-
+		if m.scanning || m.loadingDescs || m.loadingUpdates || m.loadingDeps || m.upgradeInFlight || m.removeInFlight || m.searchActive {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
 	case upgradeResultMsg:
 		m.upgradeInFlight = false
 		m.upgradingPkgName = ""
 		m.upgradeCancel = nil
+		op := msg.opLabel
+		if op == "" {
+			op = "upgrade"
+		}
 		if msg.err != nil {
 			errMsg := msg.err.Error()
 			if len(errMsg) > 120 {
 				errMsg = errMsg[:120] + "..."
 			}
-			m.upgradeNotifMsg = fmt.Sprintf("upgrade failed: %s", errMsg)
+			m.upgradeNotifMsg = fmt.Sprintf("%s failed: %s", op, errMsg)
 			m.upgradeNotifErr = true
 			return m, tea.Tick(8*time.Second, func(time.Time) tea.Msg {
 				return upgradeNotifClearMsg{}
 			})
 		}
-		m.upgradeNotifMsg = fmt.Sprintf("%s upgraded successfully", msg.pkg.Name)
+		m.upgradeNotifMsg = fmt.Sprintf("%s %s successfully", msg.pkg.Name, pastTense(op))
 		m.upgradeNotifErr = false
+		// Seed the description cache so the new package shows its description after rescan
+		if msg.pkg.Description != "" {
+			m.descCache.Set(msg.pkg.Key(), msg.pkg.Description)
+		}
 		return m, tea.Batch(
 			m.rescanManager(msg.pkg.Source),
-			tea.Tick(5*time.Second, func(time.Time) tea.Msg { return upgradeNotifClearMsg{} }),
+			tea.Tick(5*time.Second, func(time.Time) tea.Msg {
+				return upgradeNotifClearMsg{}
+			}),
 		)
 
 	case upgradeNotifClearMsg:
 		m.upgradeNotifMsg = ""
+		m.batchLog = nil
 		return m, nil
+
+	case removeResultMsg:
+		m.removeInFlight = false
+		m.removingPkgName = ""
+		m.removeCancel = nil
+		if msg.err != nil {
+			errMsg := msg.err.Error()
+			if len(errMsg) > 120 {
+				errMsg = errMsg[:120] + "..."
+			}
+			m.removeNotifMsg = fmt.Sprintf("remove failed: %s", errMsg)
+			m.removeNotifErr = true
+			return m, tea.Tick(8*time.Second, func(time.Time) tea.Msg {
+				return removeNotifClearMsg{}
+			})
+		}
+		m.removeNotifMsg = fmt.Sprintf("%s removed successfully", msg.pkg.Name)
+		m.removeNotifErr = false
+		// Go back to list view since the package no longer exists
+		m.view = viewList
+		return m, tea.Batch(
+			m.rescanManager(msg.pkg.Source),
+			tea.Tick(5*time.Second, func(time.Time) tea.Msg {
+				return removeNotifClearMsg{}
+			}),
+		)
+
+	case removeNotifClearMsg:
+		m.removeNotifMsg = ""
+		return m, nil
+
+	case searchResultMsg:
+		m.handleSearchResult(msg)
+		return m, nil
+
+	case batchProgressMsg:
+		return m.handleBatchProgress(msg)
 
 	case managerRescanMsg:
 		if msg.err != nil {
 			m.statusMsg = "refresh error: " + msg.err.Error()
 			return m, nil
 		}
+		// Index previous entries so we can preserve cached metadata.
 		prev := make(map[string]model.Package)
 		var next []model.Package
 		for _, p := range m.allPkgs {
@@ -557,6 +682,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					p.SizeBytes = old.SizeBytes
 				}
 			}
+			if p.Description == "" {
+				if desc, ok := m.descCache.Get(p.Key()); ok && desc != "" {
+					p.Description = desc
+				}
+			}
 			if note, ok := m.userNotes[p.Key()]; ok {
 				p.Description = note
 			}
@@ -565,7 +695,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			next = append(next, p)
 		}
-		sort.Slice(next, func(i, j int) bool { return next[i].Name < next[j].Name })
+		sort.Slice(next, func(i, j int) bool {
+			return next[i].Name < next[j].Name
+		})
 		m.allPkgs = next
 		manager.SaveScanCache(m.allPkgs)
 		m.tabs = buildTabs(m.allPkgs)
@@ -694,6 +826,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.passwordInput, cmd = m.passwordInput.Update(msg)
 		return m, cmd
 	}
+
+	if m.confirmingRemove && m.removeFocus == 1 {
+		var cmd tea.Cmd
+		m.passwordInput, cmd = m.passwordInput.Update(msg)
+		return m, cmd
+	}
+
+	if m.confirmingBatch && m.batchFocus == 0 {
+		var cmd tea.Cmd
+		m.passwordInput, cmd = m.passwordInput.Update(msg)
+		return m, cmd
+	}
+
+	if m.view == viewSearch && m.searchInput.Focused() {
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		return m, cmd
+	}
+
 	if m.filtering {
 		var cmd tea.Cmd
 		m.filterInput, cmd = m.filterInput.Update(msg)
@@ -714,10 +865,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	m.statusMsg = ""
 
+	// Quit — cancel any in-flight upgrade first
 	if key == "ctrl+c" {
 		if m.upgradeCancel != nil {
 			m.upgradeCancel()
 			m.upgradeCancel = nil
+		}
+		if m.removeCancel != nil {
+			m.removeCancel()
+			m.removeCancel = nil
 		}
 		return m, tea.Quit
 	}
@@ -726,11 +882,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleUpgradeConfirmKey(msg)
 	}
 
-	// Theme overlay intercepts all keys.
-	if m.showThemeMenu {
-		return m.handleThemeMenuKey(key)
+	if m.confirmingRemove {
+		return m.handleRemoveConfirmKey(msg)
 	}
 
+	if m.confirmingBatch {
+		return m.handleBatchConfirmKey(msg)
+	}
+
+	// Help overlay intercepts all keys
 	if m.showHelp {
 		m.showHelp = false
 		return m, nil
@@ -754,6 +914,38 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Theme picker overlay
+	if m.showThemePicker {
+		switch key {
+		case "esc", "q":
+			// Revert to previous theme
+			ApplyTheme(config.ResolveTheme(m.prevThemeID))
+			m.refreshInputStyles()
+			m.showThemePicker = false
+		case "j", "down":
+			if m.themeCursor < len(m.themeList)-1 {
+				m.themeCursor++
+				ApplyTheme(m.themeList[m.themeCursor])
+				m.refreshInputStyles()
+			}
+		case "k", "up":
+			if m.themeCursor > 0 {
+				m.themeCursor--
+				ApplyTheme(m.themeList[m.themeCursor])
+				m.refreshInputStyles()
+			}
+		case "enter":
+			selected := m.themeList[m.themeCursor]
+			ApplyTheme(selected)
+			m.refreshInputStyles()
+			m.appConfig.Appearance.Theme = selected.ID
+			_ = config.Save(m.appConfig)
+			m.showThemePicker = false
+		}
+		return m, nil
+	}
+
+	// Edit mode intercepts keys
 	if m.editingDesc {
 		switch key {
 		case "esc":
@@ -818,6 +1010,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleDetailKey(key)
 	case viewDiff:
 		return m.handleDiffKey(key)
+	case viewSearch:
+		return m.handleSearchKey(msg)
 	}
 	return m, nil
 }
@@ -902,8 +1096,8 @@ func (m *Model) applyThemeByIndex(idx int, closeMenu bool) (tea.Model, tea.Cmd) 
 func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q":
-		if m.upgradeInFlight {
-			m.statusMsg = "upgrade in progress — press ctrl+c to force quit"
+		if m.upgradeInFlight || m.removeInFlight {
+			m.statusMsg = "operation in progress — press ctrl+c to force quit"
 			return m, nil
 		}
 		return m, tea.Quit
@@ -998,6 +1192,24 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "e":
 		m.showExport = true
 		m.exportCursor = 0
+	case "i":
+		return m, m.enterSearchView()
+	case "m":
+		m.toggleMultiSelect()
+	case "t":
+		m.openThemePicker()
+	case " ":
+		if m.multiSelect {
+			m.toggleSelection()
+		}
+	case "u":
+		if m.multiSelect && m.selectionCount() > 0 {
+			return m, m.batchUpgradeSelected()
+		}
+	case "x":
+		if m.multiSelect && m.selectionCount() > 0 {
+			return m, m.batchRemoveSelected()
+		}
 	}
 	return m, nil
 }
@@ -1093,6 +1305,8 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		return m, fetchPkgHelp(m.detailPkg.Name)
 	case "u":
 		return m, m.upgradeDetailPackage()
+	case "x":
+		return m, m.removeDetailPackage()
 	}
 	return m, nil
 }
@@ -1107,6 +1321,39 @@ func (m *Model) handleDiffKey(key string) (tea.Model, tea.Cmd) {
 		m.view = viewList
 	}
 	return m, nil
+}
+
+func (m *Model) openThemePicker() {
+	// Build theme list: System first, then all named themes
+	systemTheme := config.Theme{
+		ID:      "system",
+		Name:    "System (uses terminal colors)",
+		Palette: config.SystemPalette(),
+	}
+	all := config.AllThemes()
+	m.themeList = append([]config.Theme{systemTheme}, all...)
+	m.prevThemeID = m.appConfig.Appearance.Theme
+	m.themeCursor = 0
+	for i, t := range m.themeList {
+		if t.ID == m.prevThemeID {
+			m.themeCursor = i
+			break
+		}
+	}
+	m.showThemePicker = true
+}
+
+// refreshInputStyles updates text input and spinner styles after a theme change.
+func (m *Model) refreshInputStyles() {
+	m.filterInput.PromptStyle = StyleFilterPrompt
+	m.filterInput.TextStyle = StyleFilterText
+	m.descInput.PromptStyle = StyleDetailKey
+	m.descInput.TextStyle = StyleDetailVal
+	m.passwordInput.PromptStyle = StyleDim
+	m.passwordInput.TextStyle = StyleNormal
+	m.searchInput.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
+	m.searchInput.TextStyle = StyleNormal
+	m.spinner.Style = lipgloss.NewStyle().Foreground(ColorBlue)
 }
 
 func (m *Model) applyFilter() {
@@ -1201,6 +1448,49 @@ func (m Model) View() string {
 		b.WriteString(renderDetail(m.detailPkg, m.editingDesc, m.descInput.View()))
 	case viewDiff:
 		b.WriteString(renderDiffView(m.currentDiff, m.diffSince))
+	case viewSearch:
+		m.renderSearchView(&b)
+	}
+
+	// Batch progress log
+	if len(m.batchLog) > 0 {
+		b.WriteString("\n")
+		maxShow := 4
+		if !m.upgradeInFlight {
+			maxShow = 8 // show more after completion
+		}
+		start := 0
+		if len(m.batchLog) > maxShow {
+			start = len(m.batchLog) - maxShow
+		}
+		for _, entry := range m.batchLog[start:] {
+			icon := lipgloss.NewStyle().Foreground(ColorGreen).Render("  ✓ ")
+			if entry.status == "failed" {
+				icon = lipgloss.NewStyle().Foreground(ColorRed).Render("  ✗ ")
+			}
+			nameStyle := StyleDim
+			line := icon + nameStyle.Render(entry.name)
+			if entry.status == "failed" && entry.err != "" {
+				errTrunc := entry.err
+				if len(errTrunc) > 60 {
+					errTrunc = errTrunc[:60] + "..."
+				}
+				line += StyleDim.Render(" — " + errTrunc)
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+
+	// Operation notifications (above the status bar)
+	if m.upgradeNotifMsg != "" {
+		opLabel := "UPGRADE"
+		if m.batchOpLabel != "" {
+			opLabel = strings.ToUpper(m.batchOpLabel)
+		}
+		b.WriteString("\n  " + renderOpNotification(m.upgradeNotifMsg, m.upgradeNotifErr, m.upgradeInFlight, opLabel, m.spinner.View()))
+	}
+	if m.removeNotifMsg != "" {
+		b.WriteString("\n  " + renderOpNotification(m.removeNotifMsg, m.removeNotifErr, m.removeInFlight, "REMOVE", m.spinner.View()))
 	}
 
 	if m.upgradeNotifMsg != "" {
@@ -1324,15 +1614,24 @@ func (m Model) renderThemeOverlay() string {
 
 	content := b.String()
 
-	// Width: wide enough for the longest theme name plus decoration.
-	overlayWidth := 42
-	for _, name := range names {
-		if w := len(name) + 8; w > overlayWidth {
-			overlayWidth = w
-		}
+	// Render overlays on top
+	if m.confirmingUpgrade {
+		return content + "\n" + m.renderUpgradeConfirmOverlay()
+	}
+	if m.confirmingRemove {
+		return content + "\n" + m.renderRemoveConfirmOverlay()
+	}
+	if m.confirmingBatch {
+		return content + "\n" + m.renderBatchConfirmOverlay()
+	}
+	if m.showHelp {
+		return content + "\n" + renderHelpOverlay(m.width, m.height)
 	}
 	if overlayWidth > m.width-4 {
 		overlayWidth = m.width - 4
+	}
+	if m.showThemePicker {
+		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
 	}
 
 	overlayHeight := min(end-start, maxVisible) + 8
@@ -1499,7 +1798,7 @@ func (m Model) renderListView(b *strings.Builder) {
 		listHeight = 5
 	}
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName))
+	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
 	if m.loadingDescs {
 		loadDescMsgs := []string{
@@ -1561,15 +1860,52 @@ func (m Model) renderStatusBar() string {
 		for _, b := range binds {
 			parts = append(parts, keyStyle.Render(b.key)+descStyle.Render(" "+b.desc))
 		}
-		return strings.Join(parts, sep)
+		if m.width <= 0 {
+			return strings.Join(parts, sep)
+		}
+		// Wrap into multiple lines when too wide
+		maxW := m.width - 2
+		var lines []string
+		var line []string
+		w := 0
+		sepW := lipgloss.Width(sep)
+		for _, p := range parts {
+			pw := lipgloss.Width(p)
+			needed := pw
+			if len(line) > 0 {
+				needed += sepW
+			}
+			if w+needed > maxW && len(line) > 0 {
+				lines = append(lines, strings.Join(line, sep))
+				line = nil
+				w = 0
+			}
+			line = append(line, p)
+			w += needed
+		}
+		if len(line) > 0 {
+			lines = append(lines, strings.Join(line, sep))
+		}
+		return strings.Join(lines, "\n ")
 	}
 
 	switch m.view {
 	case viewList:
-		binds := []struct{ key, desc string }{
+		var binds []struct{ key, desc string }
+		if m.multiSelect {
+			count := m.selectionCount()
+			selectStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+			prefix := selectStyle.Render(fmt.Sprintf("[%d selected]", count))
+			binds = []struct{ key, desc string }{
+				{"space", "toggle"}, {"u", "upgrade"}, {"x", "remove"},
+				{"/", "search"}, {"m", "exit select"}, {"q", "quit"},
+			}
+			return " " + prefix + "  " + formatBinds(binds)
+		}
+		binds = []struct{ key, desc string }{
 			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
 			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
-			{"d", "diff"}, {"e", "export"}, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
+			{"m", "select"}, {"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
 		}
 		bar := formatBinds(binds)
 		if m.sizeFilter > 0 {
@@ -1598,6 +1934,9 @@ func (m Model) renderStatusBar() string {
 			if _, ok := mgr.(manager.Upgrader); ok {
 				binds = append(binds, struct{ key, desc string }{"u", "upgrade"})
 			}
+			if _, ok := mgr.(manager.Remover); ok {
+				binds = append(binds, struct{ key, desc string }{"x", "remove"})
+			}
 		}
 		binds = append(binds, struct{ key, desc string }{"e", "edit description"})
 		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
@@ -1614,75 +1953,53 @@ func (m Model) renderStatusBar() string {
 		return StyleNormal.Render(" ") + formatBinds([]struct{ key, desc string }{
 			{"t", "theme"}, {"esc", "back"}, {"q", "quit"},
 		})
+	case viewSearch:
+		if m.searchInput.Focused() {
+			return " " + formatBinds([]struct{ key, desc string }{
+				{"enter", "search"}, {"esc", "back"},
+			})
+		}
+		binds := []struct{ key, desc string }{
+			{"j/k", "navigate"}, {"enter", "expand"}, {"i", "install"},
+			{"p", "pre-release"}, {"/", "new search"}, {"q", "back"},
+		}
+		if m.showPreRelease {
+			preStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+			return " " + preStyle.Render("[pre-release]") + "  " + formatBinds(binds)
+		}
+		return " " + formatBinds(binds)
 	}
 	return ""
 }
 
-func (m Model) renderBase(content string) string {
-	// Style the entire content block by lines to ensure the background color
-	// is correctly applied even if sub-components have internal unstyled spaces.
-	lines := strings.Split(content, "\n")
-	var styledLines []string
-	for _, line := range lines {
-		styledLines = append(styledLines, StyleNormal.Copy().Width(m.width).Render(line))
-	}
-	styledContent := strings.Join(styledLines, "\n")
-
-	return lipgloss.Place(m.width, m.height,
-		lipgloss.Left, lipgloss.Top,
-		styledContent,
-		lipgloss.WithWhitespaceBackground(ColorBase),
-	)
-}
-
-// ─── Upgrade confirm overlay ──────────────────────────────────────────────────
-
 func (m *Model) runUpgradeRequest(req upgradeRequest) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.upgradeCancel = cancel
+	// Rebuild the command with context so it can be cancelled on quit
 	ctxCmd := exec.CommandContext(ctx, req.cmd.Args[0], req.cmd.Args[1:]...)
 	ctxCmd.Dir = req.cmd.Dir
 	ctxCmd.Env = req.cmd.Env
 	return func() tea.Msg {
-		defer cancel() //nolint:errcheck
-		// Detect commands that were tagged as needing elevation but cannot be
-		// elevated automatically (process is not admin, gsudo is not installed).
-		// Fail immediately with a clear, actionable message rather than letting
-		// the child process crash deep inside its own file-system operations
-		// (e.g. the choco .chocolateyPending "Access is denied" error).
-		for _, e := range ctxCmd.Env {
-			if e == "GLAZEPKG_NEEDS_ELEVATION=1" {
-				return upgradeResultMsg{
-					pkg: req.pkg,
-					err: fmt.Errorf("administrator privileges required — re-run GlazePKG from an elevated terminal, or install gsudo: choco install gsudo"),
-				}
-			}
-		}
-		// Run any manager-specific pre-upgrade preparation (e.g. removing
-		// stale Chocolatey .chocolateyPending markers).  This is called inside
-		// the goroutine so it executes after elevation is confirmed but before
-		// the command starts, guaranteeing a clean environment for every run.
-		if mgr := manager.BySource(req.pkg.Source); mgr != nil {
-			if prep, ok := mgr.(manager.PreUpgrader); ok {
-				if err := prep.PrepareUpgrade(req.pkg.Name); err != nil {
-					return upgradeResultMsg{pkg: req.pkg, err: err}
-				}
-			}
-		}
+		defer cancel()
 		if req.password != "" {
 			ctxCmd.Stdin = strings.NewReader(req.password + "\n")
 			req.password = ""
 		}
 		out, err := ctxCmd.CombinedOutput()
 		if err != nil {
-			if msg := extractErrorLines(string(out)); msg != "" {
+			msg := extractErrorLines(string(out))
+			if msg != "" {
 				err = fmt.Errorf("%w: %s", err, msg)
 			}
 		}
-		return upgradeResultMsg{pkg: req.pkg, err: err}
+		return upgradeResultMsg{pkg: req.pkg, err: err, opLabel: req.opLabel}
 	}
 }
 
+// extractErrorLines pulls the meaningful error from command output.
+// Looks for lines starting with "E:", "error:", "Error:", "fatal:", or
+// "Sorry," (sudo). Falls back to the last non-empty line if nothing
+// matches. Strips sudo password prompts.
 func extractErrorLines(raw string) string {
 	lines := strings.Split(raw, "\n")
 	var errLines []string
@@ -1691,6 +2008,7 @@ func extractErrorLines(raw string) string {
 		if line == "" {
 			continue
 		}
+		// Skip sudo password prompts
 		if strings.Contains(line, "password") && strings.Contains(line, ":") && len(line) < 80 {
 			continue
 		}
@@ -1710,6 +2028,7 @@ func extractErrorLines(raw string) string {
 		}
 		return msg
 	}
+	// Fallback: last non-empty line
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := strings.TrimSpace(lines[i])
 		if line != "" && !strings.Contains(line, "password") {
@@ -1737,21 +2056,21 @@ func (m *Model) executePendingUpgrade() tea.Cmd {
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
 	m.upgradingPkgName = req.pkg.Name
-	m.upgradeNotifMsg = fmt.Sprintf("upgrading %s...", req.pkg.Name)
+	op := gerund(req.opLabel)
+	m.upgradeNotifMsg = fmt.Sprintf("%s %s...", op, req.pkg.Name)
 	m.upgradeNotifErr = false
 	return tea.Batch(m.spinner.Tick, m.runUpgradeRequest(req))
 }
 
 func (m *Model) needsSudoPassword() bool {
-	return m.pendingUpgrade != nil &&
-		len(m.pendingUpgrade.cmd.Args) > 0 &&
-		m.pendingUpgrade.cmd.Args[0] == "sudo"
+	return m.pendingUpgrade != nil && len(m.pendingUpgrade.cmd.Args) > 0 && m.pendingUpgrade.cmd.Args[0] == "sudo"
 }
 
 func (m *Model) handleUpgradeConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	hasPwField := m.needsSudoPassword()
 
+	// Password field is focused — let textinput handle typing
 	if hasPwField && m.confirmFocus == 0 {
 		switch key {
 		case "esc":
@@ -1776,7 +2095,7 @@ func (m *Model) handleUpgradeConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "enter":
-		if m.confirmFocus == 1 {
+		if m.confirmFocus == 1 { // Yes
 			if hasPwField && m.passwordInput.Value() == "" {
 				m.confirmFocus = 0
 				m.passwordInput.Focus()
@@ -1784,6 +2103,7 @@ func (m *Model) handleUpgradeConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.executePendingUpgrade()
 		}
+		// No
 		m.cancelUpgradeConfirm()
 	case "esc":
 		m.cancelUpgradeConfirm()
@@ -1820,54 +2140,58 @@ func (m Model) renderUpgradeConfirmOverlay() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(StyleOverlayTitle.Render("  Confirm Upgrade"))
-	b.WriteString(StyleOverlayBase.Render("\n"))
-	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  " + strings.Repeat("─", 40)))
-	b.WriteString(StyleOverlayBase.Render("\n\n"))
-	b.WriteString(StyleOverlayBase.Render(fmt.Sprintf("  Upgrade %s (%s)?", req.pkg.Name, req.pkg.Source)))
-	b.WriteString(StyleOverlayBase.Render("\n\n"))
-	b.WriteString(StyleOverlayBase.Copy().Foreground(ColorSubtext).Render("  command:"))
-	b.WriteString(StyleOverlayBase.Render("\n"))
-	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan).Background(ColorOverlay)
-	b.WriteString(StyleOverlayBase.Render("  ") + cmdStyle.Render(req.cmdStr))
-	b.WriteString(StyleOverlayBase.Render("\n"))
+	title := "Upgrade"
+	if req.opLabel == "install" {
+		title = "Install"
+	}
+	b.WriteString(StyleOverlayTitle.Render("  Confirm " + title))
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 40)))
+	b.WriteString("\n\n")
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("  %s %s (%s)?", title, req.pkg.Name, req.pkg.Source)))
+	b.WriteString("\n\n")
+	b.WriteString(StyleDim.Render("  command:"))
+	b.WriteString("\n")
+
+	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan)
+	b.WriteString("  " + cmdStyle.Render(req.cmdStr))
+	b.WriteString("\n")
 
 	overlayHeight := 11
 	needsSudo := len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo"
 
 	if req.privileged {
-		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow).Background(ColorOverlay)
+		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
 		if needsSudo {
-			b.WriteString(StyleOverlayBase.Render("\n") + StyleOverlayBase.Render("  ") + warnStyle.Render("requires elevated privileges"))
-			b.WriteString(StyleOverlayBase.Render("\n\n"))
+			b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+			b.WriteString("\n\n")
 			b.WriteString(m.passwordInput.View())
-			b.WriteString(StyleOverlayBase.Render("\n"))
+			b.WriteString("\n")
 			overlayHeight = 16
 		} else {
-			b.WriteString(StyleOverlayBase.Render("\n") + StyleOverlayBase.Render("  ") + warnStyle.Render("requires an elevated terminal"))
-			b.WriteString(StyleOverlayBase.Render("\n"))
+			b.WriteString("\n  " + warnStyle.Render("requires an elevated terminal"))
+			b.WriteString("\n")
 			overlayHeight = 13
 		}
 	}
 
-	b.WriteString(StyleOverlayBase.Render("\n"))
+	b.WriteString("\n")
 
-	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Background(ColorOverlay).Bold(true)
-	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Background(ColorOverlay).Bold(true)
+	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
+	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 
-	switch m.confirmFocus {
-	case 1:
-		yesStyle = yesStyle.Background(ColorGreen).Foreground(badgeForeground(ColorGreen))
+	if m.confirmFocus == 1 {
+		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	case 2:
+	} else if m.confirmFocus == 2 {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
-		noStyle = noStyle.Background(ColorRed).Foreground(badgeForeground(ColorRed))
-	default:
+		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
+	} else {
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
 
-	b.WriteString(StyleOverlayBase.Render("      ") + yesStyle.Render("  Yes  ") + StyleOverlayBase.Render("   ") + noStyle.Render("  No  "))
+	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
 
 	content := b.String()
 
@@ -1896,4 +2220,433 @@ func isPrivilegedSource(source model.Source) bool {
 	default:
 		return false
 	}
+}
+
+// --- Remove flow ---
+
+func (m *Model) removeDetailPackage() tea.Cmd {
+	if m.removeInFlight || m.upgradeInFlight {
+		m.statusMsg = "operation already in progress"
+		return nil
+	}
+
+	pkg := m.detailPkg
+
+	mgr := manager.BySource(pkg.Source)
+	if mgr == nil {
+		m.statusMsg = fmt.Sprintf("manager not found for %s", pkg.Source)
+		return nil
+	}
+	if !mgr.Available() {
+		m.statusMsg = fmt.Sprintf("%s is not available", pkg.Source)
+		return nil
+	}
+
+	remover, ok := mgr.(manager.Remover)
+	if !ok {
+		m.statusMsg = "this package manager does not support removing packages"
+		return nil
+	}
+
+	cmd := remover.RemoveCmd(pkg.Name)
+	req := &removeRequest{
+		pkg:        pkg,
+		cmd:        cmd,
+		cmdStr:     strings.Join(cmd.Args, " "),
+		privileged: isPrivilegedSource(pkg.Source),
+	}
+
+	if deep, ok := mgr.(manager.DeepRemover); ok {
+		deepCmd := deep.RemoveCmdWithDeps(pkg.Name)
+		req.deepCmd = deepCmd
+		req.deepCmdStr = strings.Join(deepCmd.Args, " ")
+	}
+
+	m.pendingRemove = req
+	m.confirmingRemove = true
+	m.removeMode = 0
+	m.passwordInput.SetValue("")
+
+	needsSudo := len(cmd.Args) > 0 && cmd.Args[0] == "sudo"
+	hasDeep := req.deepCmd != nil
+
+	if hasDeep {
+		m.removeFocus = 0 // mode selector
+	} else if needsSudo {
+		m.removeFocus = 1 // password
+		m.passwordInput.Focus()
+		return textinput.Blink
+	} else {
+		m.removeFocus = 2 // Yes
+	}
+	m.passwordInput.Blur()
+	return nil
+}
+
+func (m *Model) executeRemove() tea.Cmd {
+	if m.pendingRemove == nil {
+		m.confirmingRemove = false
+		return nil
+	}
+	req := *m.pendingRemove
+
+	// Use deep remove command if that mode was selected
+	if m.removeMode == 1 && req.deepCmd != nil {
+		req.cmd = req.deepCmd
+		req.cmdStr = req.deepCmdStr
+	}
+
+	if len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo" {
+		req.password = m.passwordInput.Value()
+	}
+
+	m.pendingRemove = nil
+	m.confirmingRemove = false
+	m.passwordInput.SetValue("")
+	m.passwordInput.Blur()
+	m.removeInFlight = true
+	m.removingPkgName = req.pkg.Name
+	m.removeNotifMsg = fmt.Sprintf("removing %s...", req.pkg.Name)
+	m.removeNotifErr = false
+	return tea.Batch(m.spinner.Tick, m.runRemoveRequest(req))
+}
+
+func (m *Model) runRemoveRequest(req removeRequest) tea.Cmd {
+	ctx, cancel := context.WithCancel(context.Background())
+	m.removeCancel = cancel
+	ctxCmd := exec.CommandContext(ctx, req.cmd.Args[0], req.cmd.Args[1:]...)
+	ctxCmd.Dir = req.cmd.Dir
+	ctxCmd.Env = req.cmd.Env
+	return func() tea.Msg {
+		defer cancel()
+		if req.password != "" {
+			ctxCmd.Stdin = strings.NewReader(req.password + "\n")
+			req.password = ""
+		}
+		out, err := ctxCmd.CombinedOutput()
+		if err != nil {
+			msg := extractErrorLines(string(out))
+			if msg != "" {
+				err = fmt.Errorf("%w: %s", err, msg)
+			}
+		}
+		return removeResultMsg{pkg: req.pkg, err: err}
+	}
+}
+
+func (m *Model) cancelRemoveConfirm() {
+	m.confirmingRemove = false
+	m.pendingRemove = nil
+	m.removeMode = 0
+	m.passwordInput.SetValue("")
+	m.passwordInput.Blur()
+	m.statusMsg = "remove cancelled"
+}
+
+func (m *Model) removeNeedsSudo() bool {
+	return m.pendingRemove != nil && len(m.pendingRemove.cmd.Args) > 0 && m.pendingRemove.cmd.Args[0] == "sudo"
+}
+
+func (m *Model) handleRemoveConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	hasDeep := m.pendingRemove != nil && m.pendingRemove.deepCmd != nil
+	hasPw := m.removeNeedsSudo()
+
+	// Mode selector focused
+	if hasDeep && m.removeFocus == 0 {
+		switch key {
+		case "esc":
+			m.cancelRemoveConfirm()
+			return m, nil
+		case "j", "down":
+			if m.removeMode == 0 {
+				m.removeMode = 1
+			}
+		case "k", "up":
+			if m.removeMode == 1 {
+				m.removeMode = 0
+			}
+		case "tab", "enter":
+			if hasPw {
+				m.removeFocus = 1
+				m.passwordInput.Focus()
+				return m, textinput.Blink
+			}
+			m.removeFocus = 2
+		}
+		return m, nil
+	}
+
+	// Password field focused
+	if hasPw && m.removeFocus == 1 {
+		switch key {
+		case "esc":
+			m.cancelRemoveConfirm()
+			return m, nil
+		case "tab":
+			m.removeFocus = 2
+			m.passwordInput.Blur()
+			return m, nil
+		case "enter":
+			if m.passwordInput.Value() != "" {
+				m.removeFocus = 2
+				m.passwordInput.Blur()
+			}
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.passwordInput, cmd = m.passwordInput.Update(msg)
+			return m, cmd
+		}
+	}
+
+	// Yes/No buttons
+	switch key {
+	case "enter":
+		if m.removeFocus == 2 { // Yes
+			if hasPw && m.passwordInput.Value() == "" {
+				m.removeFocus = 1
+				m.passwordInput.Focus()
+				return m, textinput.Blink
+			}
+			return m, m.executeRemove()
+		}
+		m.cancelRemoveConfirm()
+	case "esc":
+		m.cancelRemoveConfirm()
+	case "tab", "right", "l":
+		if m.removeFocus == 2 {
+			m.removeFocus = 3
+		} else {
+			m.removeFocus = 2
+		}
+	case "shift+tab", "left", "h":
+		if m.removeFocus == 3 {
+			m.removeFocus = 2
+		} else if hasPw {
+			m.removeFocus = 1
+			m.passwordInput.Focus()
+			return m, textinput.Blink
+		} else if hasDeep {
+			m.removeFocus = 0
+		}
+	}
+	return m, nil
+}
+
+func (m Model) renderRemoveConfirmOverlay() string {
+	req := m.pendingRemove
+	if req == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(StyleOverlayTitle.Render("  Confirm Remove"))
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 40)))
+	b.WriteString("\n\n")
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("  Remove %s (%s)?", req.pkg.Name, req.pkg.Source)))
+	b.WriteString("\n")
+
+	overlayHeight := 11
+
+	// RequiredBy warning
+	if len(req.pkg.RequiredBy) > 0 {
+		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
+		reqList := strings.Join(req.pkg.RequiredBy, ", ")
+		if len(reqList) > 60 {
+			reqList = reqList[:60] + "..."
+		}
+		b.WriteString("\n  " + warnStyle.Render("⚠ required by: "+reqList))
+		b.WriteString("\n")
+		overlayHeight += 2
+	}
+
+	// Mode selector (DeepRemover only)
+	if req.deepCmd != nil {
+		b.WriteString("\n")
+		b.WriteString(StyleDim.Render("  mode:"))
+		b.WriteString("\n")
+
+		modeStyle0 := StyleNormal
+		modeStyle1 := StyleNormal
+		if m.removeFocus == 0 && m.removeMode == 0 {
+			modeStyle0 = lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+		} else if m.removeFocus == 0 && m.removeMode == 1 {
+			modeStyle1 = lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+		}
+
+		prefix0 := "  "
+		prefix1 := "  "
+		if m.removeMode == 0 {
+			prefix0 = "› "
+		} else {
+			prefix1 = "› "
+		}
+
+		b.WriteString("  " + modeStyle0.Render(prefix0+"Remove package only"))
+		b.WriteString("\n")
+		b.WriteString("  " + modeStyle1.Render(prefix1+"Remove package + orphaned deps"))
+		b.WriteString("\n")
+		overlayHeight += 5
+
+		// Show orphaned deps when deep remove selected
+		if m.removeMode == 1 && len(req.pkg.DependsOn) > 0 {
+			b.WriteString("\n")
+			b.WriteString(StyleDim.Render("  orphaned deps to remove:"))
+			b.WriteString("\n")
+			depStyle := lipgloss.NewStyle().Foreground(ColorSubtext)
+			depList := strings.Join(req.pkg.DependsOn, ", ")
+			if len(depList) > 60 {
+				depList = depList[:60] + "..."
+			}
+			b.WriteString("  " + depStyle.Render("  "+depList))
+			b.WriteString("\n")
+			overlayHeight += 3
+
+			// Flag deps still required by other packages
+			var conflicts []string
+			for _, dep := range req.pkg.DependsOn {
+				for _, p := range m.allPkgs {
+					if p.Name == dep && len(p.RequiredBy) > 0 {
+						others := filterOut(p.RequiredBy, req.pkg.Name)
+						if len(others) > 0 {
+							conflicts = append(conflicts, fmt.Sprintf("%s is required by: %s", dep, strings.Join(others, ", ")))
+						}
+					}
+				}
+			}
+			if len(conflicts) > 0 {
+				warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
+				for _, c := range conflicts {
+					if len(c) > 60 {
+						c = c[:60] + "..."
+					}
+					b.WriteString("\n  " + warnStyle.Render("⚠ "+c))
+					overlayHeight++
+				}
+				b.WriteString("\n")
+				overlayHeight++
+			}
+		}
+	}
+
+	// Command preview
+	cmdStr := req.cmdStr
+	if m.removeMode == 1 && req.deepCmdStr != "" {
+		cmdStr = req.deepCmdStr
+	}
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  command:"))
+	b.WriteString("\n")
+	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan)
+	b.WriteString("  " + cmdStyle.Render(cmdStr))
+	b.WriteString("\n")
+	overlayHeight += 3
+
+	needsSudo := len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo"
+
+	if req.privileged {
+		if needsSudo {
+			warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
+			b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+			b.WriteString("\n\n")
+			b.WriteString(m.passwordInput.View())
+			b.WriteString("\n")
+			overlayHeight += 4
+		} else {
+			warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
+			b.WriteString("\n  " + warnStyle.Render("requires an elevated terminal"))
+			b.WriteString("\n")
+			overlayHeight += 2
+		}
+	}
+
+	b.WriteString("\n")
+
+	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
+	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+
+	if m.removeFocus == 2 {
+		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
+		noStyle = noStyle.Foreground(ColorSubtext)
+	} else if m.removeFocus == 3 {
+		yesStyle = yesStyle.Foreground(ColorSubtext)
+		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
+	} else {
+		yesStyle = yesStyle.Foreground(ColorSubtext)
+		noStyle = noStyle.Foreground(ColorSubtext)
+	}
+
+	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+
+	content := b.String()
+
+	cmdLen := len(cmdStr) + 8
+	overlayWidth := 48
+	if cmdLen > overlayWidth {
+		overlayWidth = cmdLen
+	}
+	if overlayWidth > m.width-4 {
+		overlayWidth = m.width - 4
+	}
+
+	overlay := StyleOverlay.
+		Width(overlayWidth).
+		Height(overlayHeight).
+		Render(content)
+
+	return placeOverlay(m.width, m.height, overlay)
+}
+
+func renderOpNotification(msg string, isErr, inFlight bool, opLabel, spinnerView string) string {
+	icon := " ✓ "
+	color := ColorGreen
+	label := "DONE"
+	if isErr {
+		icon = " ✗ "
+		color = ColorRed
+		label = "FAIL"
+	} else if inFlight {
+		icon = " " + spinnerView + " "
+		color = ColorCyan
+		label = opLabel
+	}
+	badge := lipgloss.NewStyle().
+		Background(color).
+		Foreground(ColorBase).
+		Bold(true).
+		Render(" " + label + " ")
+	msgStyle := lipgloss.NewStyle().Foreground(color)
+	return badge + icon + msgStyle.Render(msg)
+}
+
+func gerund(op string) string {
+	if op == "" {
+		return "upgrading"
+	}
+	if strings.HasSuffix(op, "e") {
+		return op[:len(op)-1] + "ing"
+	}
+	return op + "ing"
+}
+
+func pastTense(op string) string {
+	if op == "" {
+		return "upgraded"
+	}
+	if strings.HasSuffix(op, "e") {
+		return op + "d"
+	}
+	return op + "ed"
+}
+
+func filterOut(items []string, exclude string) []string {
+	var result []string
+	for _, s := range items {
+		if s != exclude {
+			result = append(result, s)
+		}
+	}
+	return result
 }

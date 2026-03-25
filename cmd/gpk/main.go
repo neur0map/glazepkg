@@ -234,15 +234,13 @@ TUI Keybinds:
   Esc              Clear search / close overlay
   Enter            Package details
   u (detail)       Upgrade package
+  x (detail)       Remove package
   e (detail)       Edit description
-  d (detail)       View dependencies
-  h (detail)       Package help/usage
-  f                Cycle size filter
   r                Rescan all managers
-  s                Save package snapshot
+  s                Save snapshot
+  i                Search + install packages
   d                Diff against last snapshot
   e                Export packages
-  t                Open theme picker / cycle themes
   ?                Toggle help overlay
   q                Quit
 

@@ -54,3 +54,29 @@ func (c *Cargo) Scan() ([]model.Package, error) {
 func (c *Cargo) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("cargo", "install", name)
 }
+
+func (c *Cargo) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command("cargo", "info", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		// cargo info output contains a line like:
+		// description: Some description here
+		for _, line := range strings.Split(string(out), "\n") {
+			if strings.HasPrefix(line, "description:") {
+				desc := strings.TrimSpace(strings.TrimPrefix(line, "description:"))
+				if desc != "" {
+					descs[pkg.Name] = desc
+				}
+				break
+			}
+		}
+	}
+	return descs
+}
+
+func (c *Cargo) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("cargo", "uninstall", name)
+}

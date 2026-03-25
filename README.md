@@ -34,7 +34,9 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
 - **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
-- **Universal single-key package upgrades** — press **u** to upgrade the highlighted package with the active manager; privileged managers (apt, dnf, pacman, snap, apk, XBPS, Chocolatey) surface a confirmation overlay so the upgrade never runs on a single keypress; Chocolatey upgrades automatically clear stale `.chocolateyPending` lock files before running, permanently fixing the "Access is denied" failure that previously broke every subsequent upgrade after an interrupted run
+- **Package operations** — upgrade, remove, and install packages without leaving the TUI. Every operation shows a confirmation with the exact command before running.
+- **Search + install** — press `i` to search across all installed managers in parallel, browse deduplicated results, expand to see all sources, and install with one keypress
+- **Multi-select** — press `m` to select multiple packages, then batch upgrade or remove them all at once with smart sudo batching
 - **Custom descriptions** — press `e` in the detail view to annotate any package; persists across sessions
 - **Background descriptions** — package summaries load asynchronously and cache for 24 hours
 - **Export** — dump your full package list to JSON or text for backup, migration, or dotfile tracking
@@ -47,6 +49,12 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 - **Cross-platform** — works on macOS, Linux, and Windows; skips managers that aren't installed
 
 ## Install
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install neur0map/tap/gpk
+```
 
 ### Arch Linux (AUR)
 
@@ -130,6 +138,26 @@ cleanup is ever needed.
 
 See [`docs/upgrade.md`](docs/upgrade.md) for full internals and [`docs/windows.md`](docs/windows.md) for the complete Windows guide.
 
+## Package Operations
+
+### Upgrade (`u` in detail view)
+
+Open a package with `Enter`, then press `u`. A confirmation modal shows the exact command. Privileged managers (apt, pacman, dnf, snap, apk, xbps) include a password field for sudo. The upgrade runs in the background while you keep using the TUI.
+
+### Remove (`x` in detail view)
+
+Open a package with `Enter`, then press `x`. Managers that support it (apt, pacman, dnf, xbps) offer two modes: remove package only, or remove package with orphaned dependencies. If the package is required by other packages, a warning is shown before proceeding.
+
+### Search + Install (`i`)
+
+Press `i` from the package list to open the search view. Type a query and results stream in from all installed managers in parallel. Results are deduplicated by name — expand a row to see all available sources and versions. Press `i` on a result to install it. Already-installed packages are marked.
+
+### Multi-Select (`m`)
+
+Press `m` to enter selection mode. Use `Space` to toggle packages, navigate and search normally — selections persist across tabs and searches. Press `u` to upgrade all selected or `x` to remove all selected. The confirmation modal groups operations by privilege level so you only enter your password once.
+
+All operations work on macOS, Linux, and Windows. Each manager maps to its correct native command automatically.
+
 ## Supported Package Managers
 
 | Manager | Platform | What it scans | Descriptions |
@@ -188,9 +216,14 @@ See [`docs/upgrade.md`](docs/upgrade.md) for full internals and [`docs/windows.m
 | `f` | Cycle size filter |
 | `/` | Fuzzy search |
 | `Enter` | Package details |
+| `u` (detail) | Upgrade package |
+| `x` (detail) | Remove package |
 | `d` (detail) | View dependencies |
 | `h` (detail) | Package help/usage |
 | `e` (detail) | Edit description |
+| `i` | Search + install packages |
+| `m` | Toggle multi-select mode |
+| `Space` (multi-select) | Toggle package selection |
 | `s` | Save snapshot |
 | `u` (detail) | Upgrade package (shows confirmation with command preview) |
 | `d` | Diff against last snapshot |

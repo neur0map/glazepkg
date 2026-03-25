@@ -39,6 +39,10 @@ func (a *AUR) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (a *AUR) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-R", name)
+}
+
 func (a *AUR) CheckUpdates(pkgs []model.Package) map[string]string {
 	// Check if an AUR helper is available (yay, paru)
 	var cmd *exec.Cmd

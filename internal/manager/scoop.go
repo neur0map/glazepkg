@@ -191,3 +191,69 @@ func (s *Scoop) parseStatusOutput(text string) map[string]string {
 func (s *Scoop) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("scoop", "update", name)
 }
+
+func (s *Scoop) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("scoop", "uninstall", name)
+}
+
+func (s *Scoop) Search(query string) ([]model.Package, error) {
+	// Run: scoop search query
+	// Output varies but typically: "name (version)" lines under bucket headers
+	out, err := exec.Command("scoop", "search", query).Output()
+	if err != nil {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "'") || strings.HasPrefix(line, "Results") || strings.HasPrefix(line, "-") {
+			continue
+		}
+		// Format varies: "    name (version)"
+		fields := strings.Fields(line)
+		if len(fields) < 1 {
+			continue
+		}
+		name := fields[0]
+		version := ""
+		if len(fields) >= 2 {
+			v := fields[1]
+			v = strings.Trim(v, "()")
+			version = v
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:    name,
+			Version: version,
+			Source:  model.SourceScoop,
+		})
+	}
+	return pkgs, nil
+}
+
+func (s *Scoop) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command("scoop", "info", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		// scoop info output contains a line like:
+		// Description: Some description here
+		for _, line := range strings.Split(string(out), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Description:") {
+				desc := strings.TrimSpace(strings.TrimPrefix(trimmed, "Description:"))
+				if desc != "" {
+					descs[pkg.Name] = desc
+				}
+				break
+			}
+		}
+	}
+	return descs
+}
+
+func (s *Scoop) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("scoop", "install", name)
+}

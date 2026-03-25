@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg string) string {
+func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg, removingPkg string, selections map[string]bool) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -74,13 +74,19 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 
 	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Background(ColorBase).Bold(true)
 
+	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
+
+	selectedStyle := lipgloss.NewStyle().Foreground(ColorPurple)
+
 	for i := start; i < end; i++ {
 		p := pkgs[i]
 		name := truncate(p.Name, colName-2)
+		isSelected := len(selections) > 0 && selections[p.Key()]
 		hasUpdate := p.LatestVersion != "" && p.LatestVersion != p.Version
 		ver := truncate(p.Version, colVer-4)
 		badge := renderFixedBadge(p.Source)
 		isUpgrading := upgradingPkg != "" && p.Name == upgradingPkg
+		isRemoving := removingPkg != "" && p.Name == removingPkg
 
 		// Last column: show size when filtering by size, otherwise description
 		var lastText string
@@ -99,7 +105,21 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		}
 		desc := truncate(lastText, colDesc-1)
 
-		if i == cursor {
+		if i == cursor && isSelected {
+			// Cursor + selected: bright purple highlight
+			curSelStyle := lipgloss.NewStyle().Foreground(ColorPurple).Bold(true).Underline(true)
+			verCell := curSelStyle.Render(ver)
+			if hasUpdate {
+				verCell += " " + updateIndicator.Render("↑")
+			}
+			lastCell := curSelStyle.Render(desc)
+			line := "  " +
+				padCell(curSelStyle.Render("● "+name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if i == cursor {
 			verCell := StyleSelected.Render(ver)
 			if hasUpdate {
 				verCell += StyleSelected.Render(" ") + updateIndicator.Render("↑")
@@ -108,8 +128,46 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			if showSize && p.Size != "" {
 				lastCell = sizeStyle.Render(desc)
 			}
-			line := StyleNormal.Render("  ") +
-				padCell(StyleSelected.Render(name), colName) +
+			namePrefix := name
+			if len(selections) > 0 {
+				namePrefix = "○ " + name
+			}
+			line := "  " +
+				padCell(StyleSelected.Render(namePrefix), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isSelected {
+			verCell := selectedStyle.Render(ver)
+			if hasUpdate {
+				verCell += " " + updateIndicator.Render("↑")
+			}
+			lastCell := selectedStyle.Render(desc)
+			line := "  " +
+				padCell(selectedStyle.Render("● "+name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isUpgrading {
+			verCell := upgradingStyle.Render(ver)
+			if hasUpdate {
+				verCell += " " + upgradingStyle.Render("↑")
+			}
+			lastCell := upgradingStyle.Render(desc)
+			line := "  " +
+				padCell(upgradingStyle.Render("▸ "+name), colName) +
+				padCell(verCell, colVer) +
+				padCell(badge, colBadge) +
+				lastCell
+			lines = append(lines, line)
+		} else if isRemoving {
+			removingStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
+			verCell := removingStyle.Render(ver)
+			lastCell := removingStyle.Render(desc)
+			line := "  " +
+				padCell(removingStyle.Render("✗ "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
 				lastCell
@@ -181,7 +239,7 @@ func renderFixedBadge(source model.Source) string {
 	}
 	fg := badgeForeground(color)
 	return StyleBadge.
-		Foreground(fg).
+		Foreground(ColorBase).
 		Background(color).
 		Render(label)
 }

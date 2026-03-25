@@ -49,6 +49,10 @@ func (n *Pnpm) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (n *Pnpm) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("pnpm", "remove", "-g", name)
+}
+
 func (n *Pnpm) CheckUpdates(pkgs []model.Package) map[string]string {
 	out, err := exec.Command("pnpm", "outdated", "-g", "--json").Output()
 	if err != nil && out == nil {

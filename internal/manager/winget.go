@@ -241,3 +241,90 @@ func (w *Winget) UpgradeCmd(name string) *exec.Cmd {
 		"--disable-interactivity",
 	)
 }
+
+func (w *Winget) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("winget", "uninstall",
+		"--id", name,
+		"--exact",
+		"--disable-interactivity",
+	)
+}
+
+func (w *Winget) Search(query string) ([]model.Package, error) {
+	// Run: winget search query --disable-interactivity --accept-source-agreements
+	out, err := exec.Command("winget", "search", query,
+		"--disable-interactivity",
+		"--accept-source-agreements",
+	).Output()
+	if err != nil {
+		return nil, nil
+	}
+	// Parse tabular output. Find header separator line (-----).
+	lines := strings.Split(string(out), "\n")
+	var sepIdx int
+	var starts []int
+	for i, line := range lines {
+		if wingetIsSep(strings.TrimSpace(line)) {
+			sepIdx = i
+			// Find column positions from the separator line
+			starts = wingetColumns(strings.TrimSpace(line))
+			break
+		}
+	}
+	if len(starts) == 0 || sepIdx == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	for i := sepIdx + 1; i < len(lines); i++ {
+		line := lines[i]
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		fields := wingetExtract(line, starts)
+		if len(fields) < 2 {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:    strings.TrimSpace(fields[0]),
+			Version: strings.TrimSpace(fields[1]),
+			Source:  model.SourceWinget,
+		})
+	}
+	return pkgs, nil
+}
+
+func (w *Winget) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command("winget", "show", pkg.Name,
+			"--accept-source-agreements",
+			"--disable-interactivity",
+		).Output()
+		if err != nil {
+			continue
+		}
+		// winget show output contains a line like:
+		// Description: Some description here
+		for _, line := range strings.Split(string(out), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Description:") {
+				desc := strings.TrimSpace(strings.TrimPrefix(trimmed, "Description:"))
+				if desc != "" {
+					descs[pkg.Name] = desc
+				}
+				break
+			}
+		}
+	}
+	return descs
+}
+
+func (w *Winget) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("winget", "install",
+		"--id", name,
+		"--exact",
+		"--accept-source-agreements",
+		"--accept-package-agreements",
+		"--disable-interactivity",
+	)
+}

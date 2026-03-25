@@ -49,6 +49,10 @@ func (g *Guix) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (g *Guix) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("guix", "package", "-r", name)
+}
+
 func (g *Guix) CheckUpdates(pkgs []model.Package) map[string]string {
 	// guix upgrade -n (dry-run) shows "   name old → new"
 	out, err := exec.Command("guix", "upgrade", "-n").Output()

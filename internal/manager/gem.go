@@ -37,10 +37,12 @@ func (g *Gem) Scan() ([]model.Package, error) {
 		name := strings.TrimSpace(line[:parenIdx])
 		verStr := strings.TrimSuffix(strings.TrimSpace(line[parenIdx+1:]), ")")
 
-		// Take the first (latest) version, strip "default: " prefix
+		// Take the first (latest) version; skip system gems with "default:"
 		parts := strings.SplitN(verStr, ",", 2)
 		version := strings.TrimSpace(parts[0])
-		version = strings.TrimPrefix(version, "default: ")
+		if strings.Contains(version, "default:") {
+			continue
+		}
 
 		pkgs = append(pkgs, model.Package{
 			Name:        name,
@@ -127,4 +129,8 @@ func (g *Gem) Describe(pkgs []model.Package) map[string]string {
 
 func (g *Gem) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("gem", "update", name)
+}
+
+func (g *Gem) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("gem", "uninstall", name, "-x")
 }

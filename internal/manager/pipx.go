@@ -48,3 +48,7 @@ func (p *Pipx) Scan() ([]model.Package, error) {
 func (p *Pipx) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("pipx", "upgrade", name)
 }
+
+func (p *Pipx) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("pipx", "uninstall", name)
+}

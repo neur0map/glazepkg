@@ -1,0 +1,15 @@
+name = "Dracula"
+
+[palette]
+base = "#282a36"
+surface = "#44475a"
+text = "#f8f8f2"
+subtext = "#6272a4"
+blue = "#8be9fd"
+purple = "#bd93f9"
+green = "#50fa7b"
+red = "#ff5555"
+yellow = "#f1fa8c"
+cyan = "#8be9fd"
+orange = "#ffb86c"
+white = "#f8f8f2"

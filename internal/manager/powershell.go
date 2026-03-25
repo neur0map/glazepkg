@@ -101,6 +101,10 @@ else { ConvertTo-Json -InputObject @($m) -Compress }
 	return pkgs, nil
 }
 
+func (ps *PowerShell) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command(ps.exe(), "-Command", "Uninstall-Module -Name "+name+" -Force")
+}
+
 // Describe returns module descriptions, reusing cached Scan() data when available
 // to avoid spawning a second PowerShell process.
 func (ps *PowerShell) Describe(pkgs []model.Package) map[string]string {

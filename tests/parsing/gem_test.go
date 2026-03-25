@@ -22,7 +22,9 @@ func parseGemList(output string) map[string]string {
 		verStr := strings.TrimSuffix(strings.TrimSpace(line[parenIdx+1:]), ")")
 		parts := strings.SplitN(verStr, ",", 2)
 		version := strings.TrimSpace(parts[0])
-		version = strings.TrimPrefix(version, "default: ")
+		if strings.Contains(version, "default:") {
+			continue
+		}
 		result[name] = version
 	}
 	return result
@@ -37,11 +39,17 @@ csv (default: 3.2.2)
 rake (13.0.6)
 `
 	pkgs := parseGemList(output)
-	if len(pkgs) != 4 {
-		t.Fatalf("expected 4 gems, got %d", len(pkgs))
+	// bigdecimal and csv are pure default gems — they should be skipped.
+	// bundler has a user-installed version (2.3.7) as the first entry, so it stays.
+	// rake is a normal gem, so it stays.
+	if len(pkgs) != 2 {
+		t.Fatalf("expected 2 gems, got %d: %v", len(pkgs), pkgs)
 	}
-	if pkgs["bigdecimal"] != "3.1.1" {
-		t.Errorf("bigdecimal: got %q, want 3.1.1", pkgs["bigdecimal"])
+	if _, ok := pkgs["bigdecimal"]; ok {
+		t.Error("bigdecimal is a default system gem and should be skipped")
+	}
+	if _, ok := pkgs["csv"]; ok {
+		t.Error("csv is a default system gem and should be skipped")
 	}
 	if pkgs["bundler"] != "2.3.7" {
 		t.Errorf("bundler: got %q, want 2.3.7", pkgs["bundler"])

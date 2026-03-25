@@ -2,7 +2,9 @@ package manager
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/neur0map/glazepkg/internal/model"
 )
@@ -41,6 +43,37 @@ func (g *Go) Scan() ([]model.Package, error) {
 		})
 	}
 	return pkgs, nil
+}
+
+func (g *Go) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("rm", filepath.Join(goBinDir(), name))
+}
+
+func (g *Go) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		// Best-effort: run `go doc <name>` and grab the first non-empty comment line
+		out, err := exec.Command("go", "doc", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		// The package doc comment is typically the first paragraph of output.
+		// Take the first non-empty line that doesn't start with "package" or "func".
+		for _, line := range strings.Split(string(out), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			if strings.HasPrefix(line, "package ") || strings.HasPrefix(line, "func ") ||
+				strings.HasPrefix(line, "var ") || strings.HasPrefix(line, "type ") ||
+				strings.HasPrefix(line, "const ") {
+				continue
+			}
+			descs[pkg.Name] = line
+			break
+		}
+	}
+	return descs
 }
 
 func goBinDir() string {

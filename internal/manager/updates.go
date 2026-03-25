@@ -98,6 +98,18 @@ func (uc *UpdateCache) Invalidate(keys []string) {
 	uc.save()
 }
 
+func (uc *UpdateCache) Invalidate(keys []string) {
+	if len(keys) == 0 {
+		return
+	}
+	uc.mu.Lock()
+	defer uc.mu.Unlock()
+	for _, key := range keys {
+		delete(uc.entries, key)
+	}
+	uc.save()
+}
+
 // FetchUpdates checks for available updates across all managers, using the cache.
 // Returns a map of package key → latest version.
 func FetchUpdates(mgrs []Manager, pkgs []model.Package, cache *UpdateCache) map[string]string {
@@ -141,7 +153,7 @@ func FetchUpdates(mgrs []Manager, pkgs []model.Package, cache *UpdateCache) map[
 
 		wg.Add(1)
 		go func(c UpdateChecker, pkgs []model.Package) {
-			defer wg.Done() //nolint:errcheck
+			defer wg.Done()
 			fetched := c.CheckUpdates(pkgs)
 			mu.Lock()
 			for _, p := range pkgs {

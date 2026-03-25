@@ -143,60 +143,64 @@ func (c *Chocolatey) parseOutdatedOutput(s string) map[string]string {
 	return updates
 }
 
-// PrepareUpgrade removes any stale .chocolateyPending marker left behind by a
-// previous interrupted or failed Chocolatey upgrade.
-//
-// Root cause
-// ----------
-// Chocolatey creates <chocoLib>/<package>/.chocolateyPending at the start of
-// every upgrade as an in-progress sentinel and normally deletes it on
-// completion.  When an upgrade is interrupted — by a crash, forced process
-// kill, power loss, or a previous run that itself failed with the access-
-// denied error — the file is left on disk.  On the next upgrade attempt
-// Chocolatey tries to recreate the same file.  Because the stale copy was
-// created by a *different* elevated process, its DACL (Windows access-control
-// list) may deny write access even to the current elevated session, producing:
-//
-//	Access to the path 'C:\ProgramData\chocolatey\lib\<pkg>\.chocolateyPending'
-//	is denied.
-//
-// This error affects every subsequent upgrade of the package — including
-// upgrading Chocolatey itself — until the marker is removed.
-//
-// Fix
-// ---
-// Deleting the stale marker before the upgrade command runs restores the
-// expected clean state.  Chocolatey will recreate it during the new run and
-// remove it on success.  The file contains no package data; it is purely a
-// lock sentinel whose presence means "upgrade in progress".
-//
-// If deletion fails (e.g. the process still lacks sufficient rights), the
-// method returns nil so that the upgrade command proceeds and Chocolatey
-// surfaces the authoritative error to the user rather than a secondary one
-// from GlazePKG.
-func (c *Chocolatey) PrepareUpgrade(name string) error {
-	progData := os.Getenv("ProgramData")
-	if progData == "" {
-		progData = `C:\ProgramData`
-	}
-	pending := filepath.Join(progData, "chocolatey", "lib", name, ".chocolateyPending")
-	if err := os.Remove(pending); err != nil && !os.IsNotExist(err) {
-		// Non-fatal: allow the upgrade to run; Chocolatey will report the
-		// real error if elevated rights are still insufficient.
-		return nil
-	}
-	return nil
+func (c *Chocolatey) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("choco", "upgrade", name, "--yes")
 }
 
-func (c *Chocolatey) UpgradeCmd(name string) *exec.Cmd {
-	// privilegedCmd handles Windows elevation transparently:
-	//   · already-elevated process  → exec.Command directly (no wrapper)
-	//   · gsudo on PATH             → wrapped with "gsudo --wait"
-	//   · neither                   → tagged with GLAZEPKG_NEEDS_ELEVATION=1
-	//     so runUpgradeRequest can surface a clear actionable error before
-	//     choco reaches C:\ProgramData\chocolatey\lib\<pkg>\.chocolateyPending
-	//     and emits the cryptic "Access is denied" failure.
-	// --no-progress suppresses the ASCII progress bar Chocolatey emits when
-	// running non-interactively, keeping the combined output clean.
-	return privilegedCmd("choco", "upgrade", name, "--yes", "--no-progress")
+func (c *Chocolatey) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("choco", "uninstall", name, "--yes")
+}
+
+func (c *Chocolatey) Search(query string) ([]model.Package, error) {
+	// Run: choco search query
+	// Output: "name version" per line, with a summary line at the end
+	out, err := exec.Command("choco", "search", query).Output()
+	if err != nil {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.Contains(line, " packages found") || strings.Contains(line, "Chocolatey") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:    fields[0],
+			Version: fields[1],
+			Source:  model.SourceChocolatey,
+		})
+	}
+	return pkgs, nil
+}
+
+func (c *Chocolatey) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string)
+	for _, pkg := range pkgs {
+		out, err := exec.Command("choco", "info", pkg.Name).Output()
+		if err != nil {
+			continue
+		}
+		// choco info output contains a line like:
+		//  Description: Some description here
+		for _, line := range strings.Split(string(out), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "Description:") {
+				desc := strings.TrimSpace(strings.TrimPrefix(trimmed, "Description:"))
+				if desc != "" {
+					descs[pkg.Name] = desc
+				}
+				break
+			}
+		}
+	}
+	return descs
+}
+
+func (c *Chocolatey) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("choco", "install", name, "--yes")
 }

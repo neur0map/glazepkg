@@ -123,3 +123,51 @@ func (d *Dnf) Describe(pkgs []model.Package) map[string]string {
 func (d *Dnf) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("dnf", "upgrade", "-y", name)
 }
+
+func (d *Dnf) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "remove", "-y", name)
+}
+
+func (d *Dnf) RemoveCmdWithDeps(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "autoremove", "-y", name)
+}
+
+func (d *Dnf) Search(query string) ([]model.Package, error) {
+	// Run: dnf search query
+	// Output has header lines then "name.arch : description" format
+	out, err := exec.Command("dnf", "search", query).Output()
+	if err != nil {
+		// dnf search returns exit 1 when no results
+		if len(out) == 0 {
+			return nil, nil
+		}
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "=") || strings.HasPrefix(line, "Last metadata") || line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " : ", 2)
+		if len(parts) < 2 {
+			continue
+		}
+		nameArch := strings.TrimSpace(parts[0])
+		desc := strings.TrimSpace(parts[1])
+		// Strip .arch suffix (e.g., "curl.x86_64" -> "curl")
+		if idx := strings.LastIndex(nameArch, "."); idx > 0 {
+			nameArch = nameArch[:idx]
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        nameArch,
+			Source:      model.SourceDnf,
+			Description: desc,
+		})
+	}
+	return pkgs, nil
+}
+
+func (d *Dnf) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "install", "-y", name)
+}

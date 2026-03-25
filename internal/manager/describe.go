@@ -146,7 +146,7 @@ func FetchDescriptions(mgrs []Manager, pkgs []model.Package, cache *DescriptionC
 
 		wg.Add(1)
 		go func(d Describer, pkgs []model.Package) {
-			defer wg.Done() //nolint:errcheck
+			defer wg.Done()
 			fetched := d.Describe(pkgs)
 			mu.Lock()
 			for _, p := range pkgs {

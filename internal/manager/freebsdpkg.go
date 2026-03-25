@@ -66,6 +66,10 @@ func (f *FreeBSDPkg) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (f *FreeBSDPkg) RemoveCmd(name string) *exec.Cmd {
+	return privilegedCmd("pkg", "delete", "-y", name)
+}
+
 func (f *FreeBSDPkg) CheckUpdates(pkgs []model.Package) map[string]string {
 	out, err := exec.Command("pkg", "upgrade", "-n").Output()
 	if err != nil && len(out) == 0 {

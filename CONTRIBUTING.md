@@ -56,22 +56,32 @@ func (y *YourPkg) Scan() ([]model.Package, error) {
 
 ### 2. Optional interfaces
 
-You can implement any of these to extend functionality:
+You can also implement any of these. Just omit any that your manager doesn't support — the UI adapts automatically.
 
 ```go
-// Single-package upgrade (press u in detail view)
+// Upgrade a package (press u in detail view)
 func (y *YourPkg) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("yourpkg", "upgrade", name)
 }
-// If the tool requires root/Administrator, use privilegedCmd instead:
-// return privilegedCmd("yourpkg", "upgrade", name)
 
-// Pre-upgrade cleanup (runs before UpgradeCmd inside the upgrade goroutine)
-// Use this to remove stale lock files or other artifacts that block upgrades.
-// Always return nil — non-fatal; let the command surface real errors.
-func (y *YourPkg) PrepareUpgrade(name string) error {
-	_ = os.Remove(lockFilePath(name))
-	return nil
+// Remove a package (press x in detail view)
+func (y *YourPkg) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("yourpkg", "uninstall", name)
+}
+
+// Remove with orphaned deps (shown as a second option in the remove modal)
+func (y *YourPkg) RemoveCmdWithDeps(name string) *exec.Cmd {
+	return exec.Command("yourpkg", "uninstall", "--recursive", name)
+}
+
+// Search for available packages (press i in list view)
+func (y *YourPkg) Search(query string) ([]model.Package, error) {
+	// parse CLI output into []model.Package with Name, Version, Source, Description
+}
+
+// Install a new package (from search results)
+func (y *YourPkg) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("yourpkg", "install", name)
 }
 
 // Update detection
@@ -90,9 +100,7 @@ func (y *YourPkg) ListDependencies(pkgs []model.Package) map[string][]string {
 }
 ```
 
-If a manager can't upgrade individual packages, omit `UpgradeCmd` — the UI will show a message saying it's not supported.
-
-`PrepareUpgrade` (the `manager.PreUpgrader` interface) is optional and exists for managers that need to remove stale lock files or do other idempotent cleanup before the upgrade command runs. Chocolatey implements this to clear `.chocolateyPending` markers — see [`docs/upgrade.md`](docs/upgrade.md#why-it-exists--the-chocolatey-chocolateypending-bug) for the full root-cause analysis.
+If the tool requires root, use `privilegedCmd` instead of `exec.Command` for upgrade, remove, and install commands. This wraps with `sudo -S` on Unix and is a pass-through on Windows.
 
 ### 3. Register it
 

@@ -129,7 +129,7 @@ func FetchDependencies(mgrs []Manager, pkgs []model.Package, cache *DepsCache) m
 
 		wg.Add(1)
 		go func(l DependencyLister, pkgs []model.Package) {
-			defer wg.Done() //nolint:errcheck
+			defer wg.Done()
 			fetched := l.ListDependencies(pkgs)
 			mu.Lock()
 			for _, p := range pkgs {
