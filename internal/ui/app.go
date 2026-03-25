@@ -13,7 +13,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/neur0map/glazepkg/internal/config"
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 	"github.com/neur0map/glazepkg/internal/snapshot"
@@ -245,11 +244,9 @@ type Model struct {
 	updateBanner string
 
 	// Theme picker
-	showThemePicker bool
-	themeCursor     int
-	themeList       []config.Theme
-	prevThemeID     string // for reverting on Esc
-	appConfig       config.Config
+	showThemeMenu bool
+	themeCursor   int
+	themeNames    []string
 
 	// Spinner
 	spinner    spinner.Model
@@ -258,9 +255,8 @@ type Model struct {
 
 func NewModel(version string) Model {
 	// Load config and apply theme before building styles
-	cfg := config.Load()
-	theme := config.ResolveTheme(cfg.Appearance.Theme)
-	ApplyTheme(theme)
+	_ = theme.Load()
+	ApplyTheme(theme.Active())
 
 	ti := textinput.New()
 	ti.Placeholder = "fuzzy search..."
@@ -293,8 +289,7 @@ func NewModel(version string) Model {
 	si.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
 	si.TextStyle = StyleNormal
 
-	return Model{
-		appConfig:     cfg,
+	m := Model{
 		spinner:       sp,
 		searchInput:   si,
 		filterInput:   ti,
@@ -889,6 +884,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleBatchConfirmKey(msg)
 	}
 
+	if m.showThemeMenu {
+		return m.handleThemeMenuKey(key)
+	}
+
 	// Help overlay intercepts all keys
 	if m.showHelp {
 		m.showHelp = false
@@ -909,37 +908,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			return m, doExport(m.allPkgs, m.exportCursor)
-		}
-		return m, nil
-	}
-
-	// Theme picker overlay
-	if m.showThemePicker {
-		switch key {
-		case "esc", "q":
-			// Revert to previous theme
-			ApplyTheme(config.ResolveTheme(m.prevThemeID))
-			m.refreshInputStyles()
-			m.showThemePicker = false
-		case "j", "down":
-			if m.themeCursor < len(m.themeList)-1 {
-				m.themeCursor++
-				ApplyTheme(m.themeList[m.themeCursor])
-				m.refreshInputStyles()
-			}
-		case "k", "up":
-			if m.themeCursor > 0 {
-				m.themeCursor--
-				ApplyTheme(m.themeList[m.themeCursor])
-				m.refreshInputStyles()
-			}
-		case "enter":
-			selected := m.themeList[m.themeCursor]
-			ApplyTheme(selected)
-			m.refreshInputStyles()
-			m.appConfig.Appearance.Theme = selected.ID
-			_ = config.Save(m.appConfig)
-			m.showThemePicker = false
 		}
 		return m, nil
 	}
@@ -1088,8 +1056,7 @@ func (m *Model) applyThemeByIndex(idx int, closeMenu bool) (tea.Model, tea.Cmd) 
 	if closeMenu {
 		m.showThemeMenu = false
 	}
-	// Dispatch a themeChangedMsg to guarantee bubbletea triggers View().
-	return m, func() tea.Msg { return themeChangedMsg{t: t} }
+	return m, nil
 }
 
 func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
@@ -1179,12 +1146,6 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "s":
 		m.statusMsg = "saving snapshot..."
 		return m, saveSnapshot(m.allPkgs)
-	case "u":
-		if _, ok := m.selectedPackage(); ok {
-			// Upgrade from list view is unsupported (no detail loaded).
-			// Direct user to Enter → u in detail view for safety.
-			m.statusMsg = "press Enter for detail view, then u to upgrade"
-		}
 	case "d":
 		m.statusMsg = "computing diff..."
 		return m, computeDiff(m.allPkgs)
@@ -1195,8 +1156,6 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		return m, m.enterSearchView()
 	case "m":
 		m.toggleMultiSelect()
-	case "t":
-		m.openThemePicker()
 	case " ":
 		if m.multiSelect {
 			m.toggleSelection()
@@ -1204,6 +1163,11 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "u":
 		if m.multiSelect && m.selectionCount() > 0 {
 			return m, m.batchUpgradeSelected()
+		}
+		if _, ok := m.selectedPackage(); ok {
+			// Upgrade from list view is unsupported (no detail loaded).
+			// Direct user to Enter → u in detail view for safety.
+			m.statusMsg = "press Enter for detail view, then u to upgrade"
 		}
 	case "x":
 		if m.multiSelect && m.selectionCount() > 0 {
@@ -1320,39 +1284,6 @@ func (m *Model) handleDiffKey(key string) (tea.Model, tea.Cmd) {
 		m.view = viewList
 	}
 	return m, nil
-}
-
-func (m *Model) openThemePicker() {
-	// Build theme list: System first, then all named themes
-	systemTheme := config.Theme{
-		ID:      "system",
-		Name:    "System (uses terminal colors)",
-		Palette: config.SystemPalette(),
-	}
-	all := config.AllThemes()
-	m.themeList = append([]config.Theme{systemTheme}, all...)
-	m.prevThemeID = m.appConfig.Appearance.Theme
-	m.themeCursor = 0
-	for i, t := range m.themeList {
-		if t.ID == m.prevThemeID {
-			m.themeCursor = i
-			break
-		}
-	}
-	m.showThemePicker = true
-}
-
-// refreshInputStyles updates text input and spinner styles after a theme change.
-func (m *Model) refreshInputStyles() {
-	m.filterInput.PromptStyle = StyleFilterPrompt
-	m.filterInput.TextStyle = StyleFilterText
-	m.descInput.PromptStyle = StyleDetailKey
-	m.descInput.TextStyle = StyleDetailVal
-	m.passwordInput.PromptStyle = StyleDim
-	m.passwordInput.TextStyle = StyleNormal
-	m.searchInput.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
-	m.searchInput.TextStyle = StyleNormal
-	m.spinner.Style = lipgloss.NewStyle().Foreground(ColorBlue)
 }
 
 func (m *Model) applyFilter() {
@@ -1522,6 +1453,17 @@ func (m Model) View() string {
 	return m.renderBase(b.String())
 }
 
+func (m Model) renderBase(content string) string {
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Left,
+		lipgloss.Top,
+		content,
+		lipgloss.WithWhitespaceBackground(ColorBase),
+	)
+}
+
 // renderThemeOverlay draws the theme picker as a centred modal.
 // The list is capped at maxVisible rows and scrolls to keep the cursor in view.
 func (m Model) renderThemeOverlay() string {
@@ -1533,6 +1475,8 @@ func (m Model) renderThemeOverlay() string {
 	}
 
 	activeThemeName := theme.Active().Name
+	maxNameWidth := 0
+	typeBadgeWidth := 0
 
 	// Compute scroll window.
 	start := 0
@@ -1561,10 +1505,16 @@ func (m Model) renderThemeOverlay() string {
 	for i := start; i < end; i++ {
 		name := names[i]
 		t, _ := theme.GetTheme(name)
+		if w := lipgloss.Width(name); w > maxNameWidth {
+			maxNameWidth = w
+		}
 
 		// Build the type badge ("dark" / "light" / "").
 		typeBadge := ""
 		if t.Type != "" {
+			if len(t.Type)+3 > typeBadgeWidth { // " [x]"
+				typeBadgeWidth = len(t.Type) + 3
+			}
 			badgeColor := ColorSubtext
 			if t.Type == "light" {
 				badgeColor = ColorYellow
@@ -1613,26 +1563,14 @@ func (m Model) renderThemeOverlay() string {
 
 	content := b.String()
 
-	// Render overlays on top
-	if m.confirmingUpgrade {
-		return content + "\n" + m.renderUpgradeConfirmOverlay()
-	}
-	if m.confirmingRemove {
-		return content + "\n" + m.renderRemoveConfirmOverlay()
-	}
-	if m.confirmingBatch {
-		return content + "\n" + m.renderBatchConfirmOverlay()
-	}
-	if m.showHelp {
-		return content + "\n" + renderHelpOverlay(m.width, m.height)
+	overlayWidth := 44
+	minWidth := maxNameWidth + typeBadgeWidth + 8
+	if minWidth > overlayWidth {
+		overlayWidth = minWidth
 	}
 	if overlayWidth > m.width-4 {
 		overlayWidth = m.width - 4
 	}
-	if m.showThemePicker {
-		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
-	}
-
 	overlayHeight := min(end-start, maxVisible) + 8
 
 	overlay := StyleOverlay.

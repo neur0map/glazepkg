@@ -74,8 +74,6 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 
 	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Background(ColorBase).Bold(true)
 
-	upgradingStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-
 	selectedStyle := lipgloss.NewStyle().Foreground(ColorPurple)
 
 	for i := start; i < end; i++ {
@@ -239,7 +237,7 @@ func renderFixedBadge(source model.Source) string {
 	}
 	fg := badgeForeground(color)
 	return StyleBadge.
-		Foreground(ColorBase).
+		Foreground(fg).
 		Background(color).
 		Render(label)
 }
