@@ -30,25 +30,25 @@ var (
 
 // Styles — rebuilt by ApplyTheme.
 var (
-	StyleTitle         lipgloss.Style
-	StyleActiveTab     lipgloss.Style
-	StyleInactiveTab   lipgloss.Style
-	StyleFilterPrompt  lipgloss.Style
-	StyleFilterText    lipgloss.Style
-	StyleTableHeader   lipgloss.Style
-	StyleSelected      lipgloss.Style
-	StyleNormal        lipgloss.Style
-	StyleDim           lipgloss.Style
-	StyleAdded         lipgloss.Style
-	StyleRemoved       lipgloss.Style
-	StyleUpgrade       lipgloss.Style
-	StyleStatusBar     lipgloss.Style
-	StyleDetailKey     lipgloss.Style
-	StyleDetailVal     lipgloss.Style
-	StyleOverlay       lipgloss.Style
-	StyleUpdateBanner  lipgloss.Style
-	StyleOverlayTitle  lipgloss.Style
-	StyleBadge         lipgloss.Style
+	StyleTitle        lipgloss.Style
+	StyleActiveTab    lipgloss.Style
+	StyleInactiveTab  lipgloss.Style
+	StyleFilterPrompt lipgloss.Style
+	StyleFilterText   lipgloss.Style
+	StyleTableHeader  lipgloss.Style
+	StyleSelected     lipgloss.Style
+	StyleNormal       lipgloss.Style
+	StyleDim          lipgloss.Style
+	StyleAdded        lipgloss.Style
+	StyleRemoved      lipgloss.Style
+	StyleUpgrade      lipgloss.Style
+	StyleStatusBar    lipgloss.Style
+	StyleDetailKey    lipgloss.Style
+	StyleDetailVal    lipgloss.Style
+	StyleOverlay      lipgloss.Style
+	StyleUpdateBanner lipgloss.Style
+	StyleOverlayTitle lipgloss.Style
+	StyleBadge        lipgloss.Style
 )
 
 // ─── Derived style variables ──────────────────────────────────────────────────

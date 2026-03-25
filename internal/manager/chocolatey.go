@@ -2,9 +2,7 @@ package manager
 
 import (
 	"bufio"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"

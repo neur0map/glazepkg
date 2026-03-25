@@ -113,7 +113,7 @@ func (w *Winget) parseText() ([]model.Package, error) {
 //	Git                   Git.Git               2.44.0     2.45.0     winget
 func (w *Winget) parseTextOutput(s string) []model.Package {
 	var colStarts []int
-	var pkgs []model.Package
+	pkgs := make([]model.Package, 0)
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	for scanner.Scan() {
 		line := scanner.Text()

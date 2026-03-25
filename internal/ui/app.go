@@ -144,7 +144,6 @@ type searchResultGroup struct {
 	expanded bool
 }
 
-
 type Model struct {
 	width  int
 	height int
@@ -207,27 +206,27 @@ type Model struct {
 	upgradeNotifErr   bool
 
 	// Remove
-	confirmingRemove  bool
-	removeFocus       int // 0 = mode, 1 = password, 2 = Yes, 3 = No
-	removeMode        int // 0 = package only, 1 = package + deps
-	pendingRemove     *removeRequest
-	removeInFlight    bool
-	removingPkgName   string
-	removeCancel      context.CancelFunc
-	removeNotifMsg    string
-	removeNotifErr    bool
+	confirmingRemove bool
+	removeFocus      int // 0 = mode, 1 = password, 2 = Yes, 3 = No
+	removeMode       int // 0 = package only, 1 = package + deps
+	pendingRemove    *removeRequest
+	removeInFlight   bool
+	removingPkgName  string
+	removeCancel     context.CancelFunc
+	removeNotifMsg   string
+	removeNotifErr   bool
 
 	// Search + Install
-	searchInput       textinput.Model
-	searchActive      bool
-	searchPending     int
-	searchResults     []searchResultGroup
-	searchCursor      int
-	showPreRelease    bool
-	installInFlight   bool
-	installCancel     context.CancelFunc
-	installNotifMsg   string
-	installNotifErr   bool
+	searchInput     textinput.Model
+	searchActive    bool
+	searchPending   int
+	searchResults   []searchResultGroup
+	searchCursor    int
+	showPreRelease  bool
+	installInFlight bool
+	installCancel   context.CancelFunc
+	installNotifMsg string
+	installNotifErr bool
 
 	// Descriptions
 	loadingDescs bool
