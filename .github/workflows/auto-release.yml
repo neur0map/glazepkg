@@ -89,7 +89,7 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           ARCH: ${{ matrix.goarch }}
         run: |
-          envsubst < .github/templates/gpk.nsi > gpk.nsi
+          envsubst '$TAG $ARCH' < .github/templates/gpk.nsi > gpk.nsi
           makensis gpk.nsi
 
       - name: Upload artifacts
@@ -146,7 +146,7 @@ jobs:
         run: |
           export SHA_AMD64=$(sha256sum ./dist/gpk-linux-amd64 | awk '{print $1}')
           export SHA_ARM64=$(sha256sum ./dist/gpk-linux-arm64 | awk '{print $1}')
-          envsubst < .github/templates/PKGBUILD > PKGBUILD
+          envsubst '$TAG $VER $SHA_AMD64 $SHA_ARM64' < .github/templates/PKGBUILD > PKGBUILD
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
@@ -167,7 +167,7 @@ jobs:
           export SHA_DARWIN_ARM64=$(sha256sum ./dist/gpk-darwin-arm64 | awk '{print $1}')
           export SHA_LINUX_AMD64=$(sha256sum  ./dist/gpk-linux-amd64  | awk '{print $1}')
           export SHA_LINUX_ARM64=$(sha256sum  ./dist/gpk-linux-arm64  | awk '{print $1}')
-          envsubst < .github/templates/gpk.rb > gpk.rb
+          envsubst '$VER $TAG $SHA_DARWIN_AMD64 $SHA_DARWIN_ARM64 $SHA_LINUX_AMD64 $SHA_LINUX_ARM64' < .github/templates/gpk.rb > gpk.rb
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/neur0map/homebrew-tap.git" tap
           mkdir -p tap/Formula
