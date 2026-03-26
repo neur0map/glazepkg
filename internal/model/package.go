@@ -39,6 +39,7 @@ const (
 	SourcePowerShell     Source = "powershell"
 	SourceWindowsUpdates Source = "windows-updates"
 	SourceScoop          Source = "scoop"
+	SourceMaven          Source = "maven"
 )
 
 type Package struct {
