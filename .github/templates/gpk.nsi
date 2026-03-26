@@ -18,11 +18,13 @@ Section "Install gpk"
 
   ; Register uninstaller in Add / Remove Programs
   WriteUninstaller "$INSTDIR\uninstall.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "DisplayName" "gpk ${TAG}" /reg:64
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "UninstallString" '"$INSTDIR\uninstall.exe"' /reg:64
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "DisplayVersion" "${TAG}" /reg:64
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "NoModify" 1 /reg:64
-  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "NoRepair" 1 /reg:64
+  SetRegView 64
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "DisplayName" "gpk ${TAG}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "UninstallString" '"$INSTDIR\uninstall.exe"'
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "DisplayVersion" "${TAG}"
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "NoModify" 1
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "NoRepair" 1
+  SetRegView lastused
 
   ; Add $INSTDIR to the system PATH if not already present
   ExecWait 'powershell -NoProfile -NonInteractive -Command ^
@@ -52,5 +54,7 @@ Section "Uninstall"
   RMDir "$INSTDIR"
 
   ; Delete registry keys
-  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" /reg:64
+  SetRegView 64
+  DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk"
+  SetRegView lastused
 SectionEnd
