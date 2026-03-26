@@ -43,7 +43,9 @@ func TestMavenScan(t *testing.T) {
 		if filepath.Base(filepath.Dir(full)) == "3.12.0" {
 			ts = older
 		}
-		os.Chtimes(full, ts, ts)
+		if err := os.Chtimes(full, ts, ts); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	t.Setenv("MAVEN_REPO_LOCAL", tmpDir)

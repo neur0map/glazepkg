@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -18,6 +19,7 @@ type Maven struct{}
 
 // Package-level state shared across Maven instances (All() creates new instances).
 var (
+	mavenMu             sync.RWMutex
 	mavenCoords         = make(map[string]string) // display name → "groupId:artifactId"
 	mavenPackaging      = make(map[string]string) // display name → packaging type (jar, pom, etc.)
 	mavenLatestVersions = make(map[string]string) // display name → latest version
@@ -109,8 +111,8 @@ func (m *Maven) Scan() ([]model.Package, error) {
 		idCount[a.artifactID]++
 	}
 
-	mavenCoords = make(map[string]string, len(seen))
-	mavenPackaging = make(map[string]string, len(seen))
+	coords := make(map[string]string, len(seen))
+	packaging := make(map[string]string, len(seen))
 
 	pkgs := make([]model.Package, 0, len(seen))
 	for _, a := range seen {
@@ -118,8 +120,8 @@ func (m *Maven) Scan() ([]model.Package, error) {
 		if idCount[a.artifactID] > 1 {
 			name = a.groupID + ":" + a.artifactID
 		}
-		mavenCoords[name] = a.groupID + ":" + a.artifactID
-		mavenPackaging[name] = pomPackaging(filepath.Join(a.versionDir, a.artifactID+"-"+a.version+".pom"))
+		coords[name] = a.groupID + ":" + a.artifactID
+		packaging[name] = pomPackaging(filepath.Join(a.versionDir, a.artifactID+"-"+a.version+".pom"))
 		pkgs = append(pkgs, model.Package{
 			Name:        name,
 			Version:     a.version,
@@ -129,6 +131,12 @@ func (m *Maven) Scan() ([]model.Package, error) {
 			SizeBytes:   dirSizes[a.versionDir],
 		})
 	}
+
+	mavenMu.Lock()
+	mavenCoords = coords
+	mavenPackaging = packaging
+	mavenMu.Unlock()
+
 	return pkgs, nil
 }
 
@@ -136,7 +144,7 @@ var mavenHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
 func (m *Maven) CheckUpdates(pkgs []model.Package) map[string]string {
 	updates := make(map[string]string)
-	mavenLatestVersions = make(map[string]string)
+	latestVersions := make(map[string]string)
 	for _, p := range pkgs {
 		// Description holds the full groupId:artifactId coordinate.
 		parts := strings.SplitN(p.Description, ":", 2)
@@ -148,22 +156,30 @@ func (m *Maven) CheckUpdates(pkgs []model.Package) map[string]string {
 		latest := mavenCentralLatest(groupID, artifactID)
 		if latest != "" && latest != p.Version {
 			updates[p.Name] = latest
-			mavenLatestVersions[p.Name] = latest
+			latestVersions[p.Name] = latest
 		}
 	}
+
+	mavenMu.Lock()
+	mavenLatestVersions = latestVersions
+	mavenMu.Unlock()
+
 	return updates
 }
 
 func (m *Maven) UpgradeCmd(name string) *exec.Cmd {
+	mavenMu.RLock()
 	coord := mavenCoords[name]
+	version := mavenLatestVersions[name]
+	pkg := mavenPackaging[name]
+	mavenMu.RUnlock()
+
 	if coord == "" {
 		coord = name
 	}
-	version := mavenLatestVersions[name]
 	if version == "" {
 		version = "LATEST"
 	}
-	pkg := mavenPackaging[name]
 	if pkg == "" {
 		pkg = "jar"
 	}
