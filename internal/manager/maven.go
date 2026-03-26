@@ -19,6 +19,7 @@ type Maven struct{}
 // Package-level state shared across Maven instances (All() creates new instances).
 var (
 	mavenCoords         = make(map[string]string) // display name → "groupId:artifactId"
+	mavenPackaging      = make(map[string]string) // display name → packaging type (jar, pom, etc.)
 	mavenLatestVersions = make(map[string]string) // display name → latest version
 )
 
@@ -109,6 +110,7 @@ func (m *Maven) Scan() ([]model.Package, error) {
 	}
 
 	mavenCoords = make(map[string]string, len(seen))
+	mavenPackaging = make(map[string]string, len(seen))
 
 	pkgs := make([]model.Package, 0, len(seen))
 	for _, a := range seen {
@@ -117,6 +119,7 @@ func (m *Maven) Scan() ([]model.Package, error) {
 			name = a.groupID + ":" + a.artifactID
 		}
 		mavenCoords[name] = a.groupID + ":" + a.artifactID
+		mavenPackaging[name] = pomPackaging(filepath.Join(a.versionDir, a.artifactID+"-"+a.version+".pom"))
 		pkgs = append(pkgs, model.Package{
 			Name:        name,
 			Version:     a.version,
@@ -160,12 +163,17 @@ func (m *Maven) UpgradeCmd(name string) *exec.Cmd {
 	if version == "" {
 		version = "LATEST"
 	}
+	pkg := mavenPackaging[name]
+	if pkg == "" {
+		pkg = "jar"
+	}
+	// Format: groupId:artifactId:version:packaging
+	artifact := coord + ":" + version + ":" + pkg
 	cmd := exec.Command("mvn", "-B", "-N",
 		"dependency:get",
-		"-Dartifact="+coord+":"+version,
+		"-Dartifact="+artifact,
 		"-Dtransitive=false",
 	)
-	// Run from a directory without a pom.xml so Maven uses standalone mode.
 	cmd.Dir, _ = os.UserHomeDir()
 	return cmd
 }
@@ -199,6 +207,26 @@ func mavenCentralLatest(groupID, artifactID string) string {
 		return ""
 	}
 	return result.Response.Docs[0].LatestVersion
+}
+
+// pomPackaging reads the <packaging> element from a POM file.
+// Returns "jar" if not found or unreadable (jar is Maven's default).
+func pomPackaging(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "jar"
+	}
+	s := string(data)
+	start := strings.Index(s, "<packaging>")
+	if start == -1 {
+		return "jar"
+	}
+	start += len("<packaging>")
+	end := strings.Index(s[start:], "</packaging>")
+	if end == -1 {
+		return "jar"
+	}
+	return strings.TrimSpace(s[start : start+end])
 }
 
 func mavenRepoDir() string {
