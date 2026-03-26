@@ -4,100 +4,149 @@ on:
   push:
     branches: [main]
     paths-ignore:
-      - 'README.md'
+      - README.md
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  auto-release:
+
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.bump.outputs.tag }}
+      ver: ${{ steps.bump.outputs.ver }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Get latest tag and bump patch
+      - name: Bump patch version
         id: bump
         run: |
           latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
           if [ -z "$latest" ]; then
-            echo "new_tag=v0.1.1" >> "$GITHUB_OUTPUT"
-            echo "ver=0.1.1" >> "$GITHUB_OUTPUT"
+            tag="v0.1.1"
+            ver="0.1.1"
           else
-            major=$(echo "$latest" | sed 's/v//' | cut -d. -f1)
-            minor=$(echo "$latest" | sed 's/v//' | cut -d. -f2)
-            patch=$(echo "$latest" | sed 's/v//' | cut -d. -f3)
+            IFS='.' read -r major minor patch <<< "${latest#v}"
             patch=$((patch + 1))
-            echo "new_tag=v${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
-            echo "ver=${major}.${minor}.${patch}" >> "$GITHUB_OUTPUT"
+            tag="v${major}.${minor}.${patch}"
+            ver="${major}.${minor}.${patch}"
           fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
 
-      - name: Create and push tag
+      - name: Push tag
         run: |
-          git tag ${{ steps.bump.outputs.new_tag }}
-          git push origin ${{ steps.bump.outputs.new_tag }}
+          git tag "${{ steps.bump.outputs.tag }}"
+          git push origin "${{ steps.bump.outputs.tag }}"
+
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: darwin,  goarch: amd64 }
+          - { goos: darwin,  goarch: arm64 }
+          - { goos: linux,   goarch: amd64 }
+          - { goos: linux,   goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Build binaries
-        env:
-          TAG: ${{ steps.bump.outputs.new_tag }}
-          LDFLAGS: -s -w -X main.version=${{ steps.bump.outputs.new_tag }}
+      - name: Install NSIS
+        if: matrix.goos == 'windows'
+        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends nsis
+
+      - name: Build binary
         run: |
-          GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o gpk-darwin-arm64 ./cmd/gpk
-          GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o gpk-darwin-amd64 ./cmd/gpk
-          GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o gpk-linux-amd64 ./cmd/gpk
-          GOOS=linux GOARCH=arm64 go build -ldflags "$LDFLAGS" -o gpk-linux-arm64 ./cmd/gpk
-          GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o gpk-windows-amd64.exe ./cmd/gpk
-          GOOS=windows GOARCH=arm64 go build -ldflags "$LDFLAGS" -o gpk-windows-arm64.exe ./cmd/gpk
+          ext=""
+          [ "${{ matrix.goos }}" = "windows" ] && ext=".exe"
+          out="./bin/${{ matrix.goos }}-${{ matrix.goarch }}/gpk${ext}"
+          mkdir -p "$(dirname "$out")"
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build \
+            -ldflags "-s -w -X main.version=${{ needs.version.outputs.tag }}" \
+            -o "$out" \
+            ./cmd/gpk
 
-      - name: Create release
+      - name: Build Windows installer
+        if: matrix.goos == 'windows'
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+          ARCH: ${{ matrix.goarch }}
+        run: |
+          envsubst '$TAG $ARCH' < .github/templates/gpk.nsi > gpk.nsi
+          makensis gpk.nsi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpk-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+          path: |
+            ./bin/${{ matrix.goos }}-${{ matrix.goarch }}/gpk*
+            gpk-*-setup.exe
+
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      VER: ${{ needs.version.outputs.ver }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Stage release assets
+        run: |
+          mkdir -p ./dist
+
+          for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
+            cp "./artifacts/gpk-${platform}/gpk" "./dist/gpk-${platform}"
+            chmod +x "./dist/gpk-${platform}"
+          done
+
+          for arch in amd64 arm64; do
+            cp "./artifacts/gpk-windows-${arch}/bin/windows-${arch}/gpk.exe" "./dist/gpk-windows-${arch}.exe"
+            setup="./artifacts/gpk-windows-${arch}/gpk-${TAG}-${arch}-setup.exe"
+            [ -f "$setup" ] && cp "$setup" ./dist/
+          done
+
+          (cd ./dist && sha256sum * > checksums.txt)
+          ls -lh ./dist
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.bump.outputs.new_tag }}
+          tag_name: ${{ env.TAG }}
           generate_release_notes: true
-          files: |
-            gpk-darwin-arm64
-            gpk-darwin-amd64
-            gpk-linux-amd64
-            gpk-linux-arm64
-            gpk-windows-amd64.exe
-            gpk-windows-arm64.exe
+          files: ./dist/*
 
       - name: Generate AUR PKGBUILD
         run: |
-          SHA_AMD64=$(sha256sum gpk-linux-amd64 | cut -d' ' -f1)
-          SHA_ARM64=$(sha256sum gpk-linux-arm64 | cut -d' ' -f1)
-          VER="${{ steps.bump.outputs.ver }}"
-          cat > PKGBUILD << EOF
-          # Maintainer: neur0map <90535780+neur0map@users.noreply.github.com>
-          pkgname=gpk-bin
-          pkgver=${VER}
-          pkgrel=1
-          pkgdesc="TUI dashboard that unifies 34 package managers into one searchable view"
-          arch=('x86_64' 'aarch64')
-          url="https://github.com/neur0map/glazepkg"
-          license=('GPL-3.0-or-later')
-          depends=()
-          provides=('gpk')
-          conflicts=('gpk')
-          source_x86_64=("\${url}/releases/download/v\${pkgver}/gpk-linux-amd64")
-          source_aarch64=("\${url}/releases/download/v\${pkgver}/gpk-linux-arm64")
-          sha256sums_x86_64=('${SHA_AMD64}')
-          sha256sums_aarch64=('${SHA_ARM64}')
-
-          package() {
-              if [[ "\$CARCH" == "x86_64" ]]; then
-                  install -Dm755 "gpk-linux-amd64" "\${pkgdir}/usr/bin/gpk"
-              elif [[ "\$CARCH" == "aarch64" ]]; then
-                  install -Dm755 "gpk-linux-arm64" "\${pkgdir}/usr/bin/gpk"
-              fi
-          }
-          EOF
-          sed -i 's/^          //' PKGBUILD
+          export SHA_AMD64=$(sha256sum ./dist/gpk-linux-amd64 | awk '{print $1}')
+          export SHA_ARM64=$(sha256sum ./dist/gpk-linux-arm64 | awk '{print $1}')
+          envsubst '$TAG $VER $SHA_AMD64 $SHA_ARM64' < .github/templates/PKGBUILD > PKGBUILD
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
@@ -107,63 +156,24 @@ jobs:
           commit_username: neur0map
           commit_email: 90535780+neur0map@users.noreply.github.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: "Update to ${{ steps.bump.outputs.new_tag }}"
+          commit_message: "Update to ${{ env.TAG }}"
           force_push: true
 
       - name: Update Homebrew tap
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          VER="${{ steps.bump.outputs.ver }}"
-          SHA_DARWIN_ARM64=$(sha256sum gpk-darwin-arm64 | cut -d' ' -f1)
-          SHA_DARWIN_AMD64=$(sha256sum gpk-darwin-amd64 | cut -d' ' -f1)
-          SHA_LINUX_AMD64=$(sha256sum gpk-linux-amd64 | cut -d' ' -f1)
-          SHA_LINUX_ARM64=$(sha256sum gpk-linux-arm64 | cut -d' ' -f1)
+          export SHA_DARWIN_AMD64=$(sha256sum ./dist/gpk-darwin-amd64 | awk '{print $1}')
+          export SHA_DARWIN_ARM64=$(sha256sum ./dist/gpk-darwin-arm64 | awk '{print $1}')
+          export SHA_LINUX_AMD64=$(sha256sum  ./dist/gpk-linux-amd64  | awk '{print $1}')
+          export SHA_LINUX_ARM64=$(sha256sum  ./dist/gpk-linux-arm64  | awk '{print $1}')
+          envsubst '$VER $TAG $SHA_DARWIN_AMD64 $SHA_DARWIN_ARM64 $SHA_LINUX_AMD64 $SHA_LINUX_ARM64' < .github/templates/gpk.rb > gpk.rb
 
-          cat > gpk.rb << FORMULA
-          class Gpk < Formula
-            desc "TUI dashboard that unifies 34 package managers into one searchable view"
-            homepage "https://github.com/neur0map/glazepkg"
-            version "${VER}"
-            license "GPL-3.0-or-later"
-
-            on_macos do
-              if Hardware::CPU.arm?
-                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-darwin-arm64"
-                sha256 "${SHA_DARWIN_ARM64}"
-              else
-                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-darwin-amd64"
-                sha256 "${SHA_DARWIN_AMD64}"
-              end
-            end
-
-            on_linux do
-              if Hardware::CPU.arm?
-                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-linux-arm64"
-                sha256 "${SHA_LINUX_ARM64}"
-              else
-                url "https://github.com/neur0map/glazepkg/releases/download/v${VER}/gpk-linux-amd64"
-                sha256 "${SHA_LINUX_AMD64}"
-              end
-            end
-
-            def install
-              binary = Dir.glob("gpk-*").first
-              bin.install binary => "gpk"
-            end
-
-            test do
-              assert_match version.to_s, shell_output("#{bin}/gpk --version")
-            end
-          end
-          FORMULA
-          sed -i 's/^          //' gpk.rb
-
-          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/neur0map/homebrew-tap.git tap
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/neur0map/homebrew-tap.git" tap
           mkdir -p tap/Formula
-          mv gpk.rb tap/Formula/gpk.rb
+          cp gpk.rb tap/Formula/gpk.rb
           cd tap
-          git config user.name "neur0map"
+          git config user.name  "neur0map"
           git config user.email "90535780+neur0map@users.noreply.github.com"
           git add Formula/gpk.rb
           git commit -m "gpk ${VER}"
