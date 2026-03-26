@@ -122,7 +122,7 @@ jobs:
           mkdir -p ./dist
 
           for platform in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
-            cp "./artifacts/gpk-${platform}/gpk" "./dist/gpk-${platform}"
+            cp "./artifacts/gpk-${platform}/bin/${platform}/gpk" "./dist/gpk-${platform}"
             chmod +x "./dist/gpk-${platform}"
           done
 
