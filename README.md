@@ -30,21 +30,13 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 - **35 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
-- **Size filter** — press `f` to cycle through size filters (< 1 MB, 1–10 MB, 10–100 MB, > 100 MB, has updates); sorted largest-first
 - **Fuzzy search** — find any package across all managers instantly with `/`
-- **Snapshots & diffs** — save your system state, then diff to see what was added, removed, or upgraded
-- **Update detection** — packages with available updates show a `↑` indicator (checked every 7 days)
-- **Package operations** — upgrade, remove, and install packages without leaving the TUI. Every operation shows a confirmation with the exact command before running.
-- **Search + install** — press `i` to search across all installed managers in parallel, browse deduplicated results, expand to see all sources, and install with one keypress
-- **Multi-select** — press `m` to select multiple packages, then batch upgrade or remove them all at once with smart sudo batching
-- **Custom descriptions** — press `e` in the detail view to annotate any package; persists across sessions
-- **Background descriptions** — package summaries load asynchronously and cache for 24 hours
-- **Export** — dump your full package list to JSON or text for backup, migration, or dotfile tracking
-- **Self-updating** — run `gpk update` to grab the latest release automatically
-- **Tokyo Night theme** — carefully designed color palette with per-manager color coding
-- **Vim keybindings** — `j`/`k`, `g`/`G`, `Ctrl+d`/`Ctrl+u` — feels like home
-- **Zero dependencies** — single static Go binary, no runtime requirements
-- **Cross-platform** — works on macOS, Linux, and Windows; skips managers that aren't installed
+- **Package operations** — upgrade, remove, search, and install packages without leaving the TUI
+- **Multi-select** — batch upgrade or remove with smart sudo batching
+- **Snapshots & diffs** — save system state, diff to see what changed
+- **Update detection** — `↑` indicator for packages with available updates
+- **Export** — dump to JSON or text for backup, migration, or dotfile tracking
+- **Zero dependencies** — single static Go binary, cross-platform
 
 ## Install
 
@@ -70,7 +62,8 @@ go install github.com/neur0map/glazepkg/cmd/gpk@latest
 
 Grab a binary from [releases](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel), Linux (x64/ARM), or Windows (x64/ARM).
 
-### Build from source
+<details>
+<summary>Build from source</summary>
 
 ```bash
 git clone https://github.com/neur0map/glazepkg.git
@@ -80,17 +73,10 @@ cd glazepkg && go build ./cmd/gpk
 If `gpk` is not found after installing via `go install`, add Go's bin directory to your PATH:
 
 ```bash
-# bash/zsh
 export PATH="$PATH:$HOME/go/bin"
 ```
 
-## Update
-
-```bash
-gpk update
-```
-
-Self-updates the binary to the latest release. Run `gpk version` to check your current version.
+</details>
 
 ## Quick Start
 
@@ -101,9 +87,40 @@ gpk version      Show current version
 gpk --help       Show keybind reference
 ```
 
-Just run `gpk` — it drops straight into a beautiful table. Navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Press `?` for the full keybind reference.
+Just run `gpk` — navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Press `?` for the full keybind reference.
 
-## Package Operations
+<details>
+<summary><strong>Keybindings</strong></summary>
+
+| Key | Action |
+|-----|--------|
+| `j`/`k`, `↑`/`↓` | Navigate |
+| `g` / `G` | Jump to top / bottom |
+| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
+| `PgDn` / `PgUp` | Page down / up |
+| `Tab` / `Shift+Tab` | Cycle manager tabs |
+| `f` | Cycle size filter |
+| `/` | Fuzzy search |
+| `Enter` | Package details |
+| `u` (detail) | Upgrade package |
+| `x` (detail) | Remove package |
+| `d` (detail) | View dependencies |
+| `h` (detail) | Package help/usage |
+| `e` (detail) | Edit description |
+| `i` | Search + install packages |
+| `m` | Toggle multi-select mode |
+| `Space` (multi-select) | Toggle package selection |
+| `s` | Save snapshot |
+| `d` | Diff against last snapshot |
+| `e` | Export (JSON or text) |
+| `r` | Force rescan |
+| `?` | Help overlay |
+| `q` | Quit |
+
+</details>
+
+<details>
+<summary><strong>Package Operations</strong></summary>
 
 ### Upgrade (`u` in detail view)
 
@@ -123,7 +140,10 @@ Press `m` to enter selection mode. Use `Space` to toggle packages, navigate and 
 
 All operations work on macOS, Linux, and Windows. Each manager maps to its correct native command automatically.
 
-## Supported Package Managers
+</details>
+
+<details>
+<summary><strong>Supported Package Managers (35)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
@@ -170,34 +190,10 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 - Press `h` in the detail view to see the package's `--help` output.
 - Press `e` in the detail view to add custom descriptions — these persist across sessions and won't be overwritten.
 
-## Keybindings
+</details>
 
-| Key | Action |
-|-----|--------|
-| `j`/`k`, `↑`/`↓` | Navigate |
-| `g` / `G` | Jump to top / bottom |
-| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
-| `PgDn` / `PgUp` | Page down / up |
-| `Tab` / `Shift+Tab` | Cycle manager tabs |
-| `f` | Cycle size filter |
-| `/` | Fuzzy search |
-| `Enter` | Package details |
-| `u` (detail) | Upgrade package |
-| `x` (detail) | Remove package |
-| `d` (detail) | View dependencies |
-| `h` (detail) | Package help/usage |
-| `e` (detail) | Edit description |
-| `i` | Search + install packages |
-| `m` | Toggle multi-select mode |
-| `Space` (multi-select) | Toggle package selection |
-| `s` | Save snapshot |
-| `d` | Diff against last snapshot |
-| `e` | Export (JSON or text) |
-| `r` | Force rescan |
-| `?` | Help overlay |
-| `q` | Quit |
-
-## Snapshots & Diffs
+<details>
+<summary><strong>Snapshots & Diffs</strong></summary>
 
 GlazePKG can track how your system changes over time:
 
@@ -209,7 +205,10 @@ GlazePKG can track how your system changes over time:
 
 Use this to audit what changed after a `brew upgrade`, track drift across machines, or catch unexpected installs.
 
-## Data Storage
+</details>
+
+<details>
+<summary><strong>Data Storage</strong></summary>
 
 All data lives under `~/.local/share/glazepkg/` (respects `XDG_DATA_HOME`):
 
@@ -222,16 +221,18 @@ All data lives under `~/.local/share/glazepkg/` (respects `XDG_DATA_HOME`):
 | Snapshots | `snapshots/*.json` | Permanent |
 | Exports | `exports/*.json` or `*.txt` | Permanent |
 
+</details>
+
+## Contributing
+
+Want to add a package manager or fix a bug? Check out [CONTRIBUTING.md](CONTRIBUTING.md). Each manager is a single Go file — easy to add.
+
 ## Built With
 
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework
 - [Lip Gloss](https://github.com/charmbracelet/lipgloss) — terminal styling
 - [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
 - [Fuzzy](https://github.com/sahilm/fuzzy) — fuzzy matching
-
-## Contributing
-
-Want to add a package manager or fix a bug? Check out [CONTRIBUTING.md](CONTRIBUTING.md). Each manager is a single Go file — easy to add.
 
 ## Star History
 
