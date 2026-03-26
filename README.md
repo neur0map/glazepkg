@@ -234,7 +234,13 @@ Want to add a package manager or fix a bug? Check out [CONTRIBUTING.md](CONTRIBU
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=neur0map/glazepkg&type=Date)](https://star-history.com/#neur0map/glazepkg&Date)
+<a href="https://www.star-history.com/?repos=neur0map%2Fglazepkg&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/image?repos=neur0map/glazepkg&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/image?repos=neur0map/glazepkg&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/image?repos=neur0map/glazepkg&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
