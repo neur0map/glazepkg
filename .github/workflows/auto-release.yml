@@ -70,7 +70,10 @@ jobs:
 
       - name: Install NSIS
         if: matrix.goos == 'windows'
-        run: sudo apt-get update -q && sudo apt-get install -y --no-install-recommends nsis
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y --no-install-recommends nsis
+          curl -fsSL https://github.com/GsNSIS/EnVar/releases/download/v0.3.1/EnVar-Plugin.zip -o /tmp/envar.zip
+          sudo unzip -o /tmp/envar.zip "Plugins/*" -d /usr/share/nsis/
 
       - name: Build binary
         run: |

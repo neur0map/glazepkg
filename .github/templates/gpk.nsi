@@ -26,18 +26,20 @@ Section "Install gpk"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\gpk" "NoRepair" 1
   SetRegView lastused
 
-  ; Add $INSTDIR to the system PATH if not already present
-  ExecWait "powershell -NoProfile -NonInteractive -Command $$p=[Environment]::GetEnvironmentVariable('Path','Machine');if($$p -notmatch [regex]::Escape('$INSTDIR')){[Environment]::SetEnvironmentVariable('Path',($$p+';$INSTDIR'),'Machine')}"
+  ; Add $INSTDIR to the system PATH (EnVar handles duplicates and long PATH)
+  EnVar::SetHKLM
+  EnVar::AddValue "PATH" "$INSTDIR"
+  Pop $0
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
-  Sleep 1000
 SectionEnd
 
 ; ── Uninstall ─────────────────────────────────────────────────────
 Section "Uninstall"
   ; Remove $INSTDIR from system PATH
-  ExecWait "powershell -NoProfile -NonInteractive -Command $$p=[Environment]::GetEnvironmentVariable('Path','Machine');$$entries=($$p -split ';')|Where-Object{$$_ -ne '$INSTDIR'};[Environment]::SetEnvironmentVariable('Path',($$entries -join ';'),'Machine')"
+  EnVar::SetHKLM
+  EnVar::DeleteValue "PATH" "$INSTDIR"
+  Pop $0
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
-  Sleep 1000
 
   ; Delete installed files
   Delete "$INSTDIR\gpk.exe"
