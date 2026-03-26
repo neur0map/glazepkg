@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Build
         run: go build ./cmd/gpk
@@ -33,14 +34,14 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install package managers
         run: |
-          npm install -g npm
           pip3 install --break-system-packages pipx 2>/dev/null || true
           gem list --local > /dev/null
 
@@ -55,18 +56,19 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
 
       - name: Install package managers
         run: |
           sudo apt-get update -qq
-          npm install -g npm
           pip3 install pipx 2>/dev/null || true
           cargo --version 2>/dev/null || true
           gem list --local > /dev/null 2>&1 || true
 
       - name: Integration tests
         run: go test ./tests/integration/... -v -timeout 120s
+        
