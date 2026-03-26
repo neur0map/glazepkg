@@ -190,6 +190,38 @@ func (a *Apk) RemoveCmd(name string) *exec.Cmd {
 	return privilegedCmd("apk", "del", name)
 }
 
+func (a *Apk) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("apk", "search", "-v", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		var nameVer, desc string
+		if sepIdx := strings.Index(line, " - "); sepIdx >= 0 {
+			nameVer = line[:sepIdx]
+			desc = line[sepIdx+3:]
+		} else {
+			nameVer = strings.Fields(line)[0]
+		}
+		name, version := SplitApkNameVersion(nameVer)
+		if name == "" {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{Name: name, Version: version, Source: model.SourceApk, Description: desc})
+	}
+	return pkgs, nil
+}
+
+func (a *Apk) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("apk", "add", name)
+}
+
 // SplitApkNameVersion splits "name-version-rN" by finding the version boundary.
 // Alpine package names can contain hyphens, so we look for the last hyphen
 // that is followed by a digit.

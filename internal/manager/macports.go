@@ -134,3 +134,35 @@ func (m *MacPorts) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (m *MacPorts) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("port", "upgrade", name)
+}
+
+func (m *MacPorts) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("port", "search", "--name", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, " ") {
+			continue
+		}
+		// Format: "name @version    category/subcategory"
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		name := fields[0]
+		version := strings.TrimPrefix(fields[1], "@")
+		pkgs = append(pkgs, model.Package{Name: name, Version: version, Source: model.SourceMacPorts})
+	}
+	return pkgs, nil
+}
+
+func (m *MacPorts) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("port", "install", name)
+}

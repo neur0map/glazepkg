@@ -109,3 +109,55 @@ func (a *AUR) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func aurHelper() string {
+	if commandExists("yay") {
+		return "yay"
+	}
+	if commandExists("paru") {
+		return "paru"
+	}
+	return ""
+}
+
+func (a *AUR) UpgradeCmd(name string) *exec.Cmd {
+	if h := aurHelper(); h != "" {
+		return exec.Command(h, "-S", name)
+	}
+	return exec.Command("pacman", "-S", name)
+}
+
+func (a *AUR) Search(query string) ([]model.Package, error) {
+	h := aurHelper()
+	if h == "" {
+		return nil, nil
+	}
+	out, err := exec.Command(h, "-Ss", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, " ") || line == "" {
+			continue
+		}
+		// Format: "repo/name version (group) [installed]"
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		nameParts := strings.SplitN(fields[0], "/", 2)
+		name := nameParts[len(nameParts)-1]
+		pkgs = append(pkgs, model.Package{Name: name, Version: fields[1], Source: model.SourceAUR})
+	}
+	return pkgs, nil
+}
+
+func (a *AUR) InstallCmd(name string) *exec.Cmd {
+	if h := aurHelper(); h != "" {
+		return exec.Command(h, "-S", name)
+	}
+	return exec.Command("pacman", "-S", name)
+}

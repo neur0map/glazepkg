@@ -154,3 +154,41 @@ func (f *FreeBSDPkg) Describe(pkgs []model.Package) map[string]string {
 	// Descriptions are already populated during Scan.
 	return nil
 }
+
+func (f *FreeBSDPkg) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("pkg", "upgrade", "-y", name)
+}
+
+func (f *FreeBSDPkg) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("pkg", "search", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 1 {
+			continue
+		}
+		nameVer := fields[0]
+		idx := strings.LastIndex(nameVer, "-")
+		if idx <= 0 {
+			continue
+		}
+		desc := ""
+		if len(fields) > 1 {
+			desc = strings.Join(fields[1:], " ")
+		}
+		pkgs = append(pkgs, model.Package{Name: nameVer[:idx], Version: nameVer[idx+1:], Source: model.SourcePkg, Description: desc})
+	}
+	return pkgs, nil
+}
+
+func (f *FreeBSDPkg) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("pkg", "install", "-y", name)
+}

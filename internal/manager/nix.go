@@ -250,6 +250,34 @@ func (n *Nix) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
+func (n *Nix) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("nix-env", "--upgrade", name)
+}
+
+func (n *Nix) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("nix", "search", "nixpkgs", query, "--json").Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var results map[string]struct {
+		PName       string `json:"pname"`
+		Version     string `json:"version"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(out, &results); err != nil {
+		return nil, nil
+	}
+	pkgs := make([]model.Package, 0, len(results))
+	for _, r := range results {
+		pkgs = append(pkgs, model.Package{Name: r.PName, Version: r.Version, Source: model.SourceNix, Description: r.Description})
+	}
+	return pkgs, nil
+}
+
+func (n *Nix) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("nix-env", "-iA", "nixpkgs."+name)
+}
+
 // parseNixStorePath extracts name and version from a store path like
 // "/nix/store/hash-name-version".
 func parseNixStorePath(storePath string) (string, string) {

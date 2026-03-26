@@ -158,6 +158,39 @@ func (p *Portage) ListDependencies(pkgs []model.Package) map[string][]string {
 	return deps
 }
 
+func (p *Portage) UpgradeCmd(name string) *exec.Cmd {
+	return privilegedCmd("emerge", "--update", name)
+}
+
+func (p *Portage) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("emerge", "-s", query).Output()
+	if err != nil && len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	var name, desc string
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "* ") {
+			name = strings.TrimPrefix(line, "* ")
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "Description:") {
+			desc = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "Description:"))
+			if name != "" {
+				pkgs = append(pkgs, model.Package{Name: name, Source: model.SourcePortage, Description: desc})
+				name = ""
+				desc = ""
+			}
+		}
+	}
+	return pkgs, nil
+}
+
+func (p *Portage) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("emerge", name)
+}
+
 // splitPortageCPV splits "category/name-version" into ("category/name", "version").
 // The version starts at the last hyphen before a digit.
 func splitPortageCPV(cpv string) (string, string) {

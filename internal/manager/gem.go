@@ -127,6 +127,34 @@ func (g *Gem) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
+func (g *Gem) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("gem", "search", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, "***") {
+			continue
+		}
+		parenIdx := strings.Index(line, "(")
+		if parenIdx < 0 {
+			continue
+		}
+		name := strings.TrimSpace(line[:parenIdx])
+		verStr := strings.TrimSuffix(strings.TrimSpace(line[parenIdx+1:]), ")")
+		version := strings.TrimSpace(strings.SplitN(verStr, ",", 2)[0])
+		pkgs = append(pkgs, model.Package{Name: name, Version: version, Source: model.SourceGem})
+	}
+	return pkgs, nil
+}
+
+func (g *Gem) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("gem", "install", name)
+}
+
 func (g *Gem) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("gem", "update", name)
 }

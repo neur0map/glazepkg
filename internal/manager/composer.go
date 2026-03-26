@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"bufio"
 	"encoding/json"
 	"os/exec"
 	"strings"
@@ -99,4 +100,37 @@ func (c *Composer) ListDependencies(pkgs []model.Package) map[string][]string {
 func (c *Composer) Describe(pkgs []model.Package) map[string]string {
 	// Descriptions are already populated during Scan.
 	return nil
+}
+
+func (c *Composer) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("composer", "global", "update", name)
+}
+
+func (c *Composer) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("composer", "search", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) < 1 || parts[0] == "" {
+			continue
+		}
+		desc := ""
+		if len(parts) == 2 {
+			desc = parts[1]
+		}
+		pkgs = append(pkgs, model.Package{Name: parts[0], Source: model.SourceComposer, Description: desc})
+	}
+	return pkgs, nil
+}
+
+func (c *Composer) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("composer", "global", "require", name)
 }

@@ -126,6 +126,31 @@ func (o *Opam) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
+func (o *Opam) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("opam", "list", "--available", "-s", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		desc := ""
+		if len(fields) > 2 {
+			desc = strings.Join(fields[2:], " ")
+		}
+		pkgs = append(pkgs, model.Package{Name: fields[0], Version: fields[1], Source: model.SourceOpam, Description: desc})
+	}
+	return pkgs, nil
+}
+
+func (o *Opam) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("opam", "install", name)
+}
+
 func (o *Opam) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("opam", "upgrade", "--yes", name)
 }

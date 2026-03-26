@@ -125,3 +125,11 @@ func (n *Pnpm) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (n *Pnpm) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("pnpm", "update", "-g", name)
+}
+
+func (n *Pnpm) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("pnpm", "add", "-g", name)
+}
