@@ -103,7 +103,7 @@ func (m *Model) mergeSearchResults(pkgs []model.Package) {
 }
 
 func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	key := normalizeHotkey(msg.String())
 
 	if m.searchInput.Focused() {
 		switch key {

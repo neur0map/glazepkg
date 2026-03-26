@@ -31,7 +31,7 @@ func renderHelpOverlay(width, height int) string {
 		{"d", "Diff against last snapshot"},
 		{"e", "Export packages"},
 		{"t", "Switch theme"},
-		{"?", "Toggle this help"},
+		{"?/h", "Toggle this help"},
 		{"q", "Quit"},
 	}
 
@@ -55,13 +55,15 @@ func renderHelpOverlay(width, height int) string {
 	}
 
 	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  Russian layout follows the same key positions"))
+	b.WriteString("\n")
 	b.WriteString(StyleDim.Render("  Press any key to dismiss"))
 
 	content := b.String()
 
 	// Center the overlay
 	overlayWidth := 44
-	overlayHeight := len(keybinds) + 7
+	overlayHeight := len(keybinds) + 8
 
 	overlay := StyleOverlay.
 		Width(overlayWidth).
