@@ -2,6 +2,7 @@ package manager
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -19,6 +20,18 @@ func (p *Portage) Available() bool {
 }
 
 func (p *Portage) Scan() ([]model.Package, error) {
+	// Build set of explicitly installed packages from /var/lib/portage/world
+	// World file contains "category/name" per line (no version).
+	worldPkgs := make(map[string]bool)
+	if data, err := os.ReadFile("/var/lib/portage/world"); err == nil {
+		sc := bufio.NewScanner(strings.NewReader(string(data)))
+		for sc.Scan() {
+			if atom := strings.TrimSpace(sc.Text()); atom != "" {
+				worldPkgs[atom] = true
+			}
+		}
+	}
+
 	// qlist -Iv outputs "category/name-version" per line
 	out, err := exec.Command("qlist", "-Iv").Output()
 	if err != nil {
@@ -34,6 +47,10 @@ func (p *Portage) Scan() ([]model.Package, error) {
 		}
 		name, version := splitPortageCPV(line)
 		if name == "" {
+			continue
+		}
+		// Skip auto-installed dependencies when we have the world set
+		if len(worldPkgs) > 0 && !worldPkgs[name] {
 			continue
 		}
 

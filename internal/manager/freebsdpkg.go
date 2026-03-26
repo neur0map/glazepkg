@@ -24,13 +24,42 @@ func (f *FreeBSDPkg) Available() bool {
 }
 
 func (f *FreeBSDPkg) Scan() ([]model.Package, error) {
+	// Use pkg query to get only explicitly installed packages (not auto-installed deps).
+	// %a=0 means non-automatic, %n=name, %v=version, %c=comment/description.
+	out, err := exec.Command("pkg", "query", "-e", "%a = 0", "%n\t%v\t%c").Output()
+	if err != nil {
+		// Fall back to pkg info (shows all packages) if query fails
+		return f.scanAll()
+	}
+
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		parts := strings.SplitN(scanner.Text(), "\t", 3)
+		if len(parts) < 2 || parts[0] == "" {
+			continue
+		}
+		desc := ""
+		if len(parts) == 3 {
+			desc = parts[2]
+		}
+		pkgs = append(pkgs, model.Package{
+			Name:        parts[0],
+			Version:     parts[1],
+			Description: desc,
+			Source:      model.SourcePkg,
+			InstalledAt: time.Now(),
+		})
+	}
+	return pkgs, nil
+}
+
+func (f *FreeBSDPkg) scanAll() ([]model.Package, error) {
 	out, err := exec.Command("pkg", "info").Output()
 	if err != nil {
 		return nil, err
 	}
 
-	// Output: "name-version    description"
-	// The last hyphen separates name from version.
 	var pkgs []model.Package
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
@@ -47,17 +76,13 @@ func (f *FreeBSDPkg) Scan() ([]model.Package, error) {
 		if idx <= 0 {
 			continue
 		}
-		name := nameVer[:idx]
-		version := nameVer[idx+1:]
-
 		desc := ""
 		if len(fields) > 1 {
 			desc = strings.Join(fields[1:], " ")
 		}
-
 		pkgs = append(pkgs, model.Package{
-			Name:        name,
-			Version:     version,
+			Name:        nameVer[:idx],
+			Version:     nameVer[idx+1:],
 			Description: desc,
 			Source:      model.SourcePkg,
 			InstalledAt: time.Now(),

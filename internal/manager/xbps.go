@@ -16,6 +16,19 @@ func (x *Xbps) Name() model.Source { return model.SourceXbps }
 func (x *Xbps) Available() bool { return commandExists("xbps-query") }
 
 func (x *Xbps) Scan() ([]model.Package, error) {
+	// Build set of manually installed packages (excludes auto-installed deps)
+	manualPkgs := make(map[string]bool)
+	if mOut, err := exec.Command("xbps-query", "-m").Output(); err == nil {
+		sc := bufio.NewScanner(strings.NewReader(string(mOut)))
+		for sc.Scan() {
+			// Output: "pkgname-version_rev" per line
+			name, _ := SplitXbpsNameVersion(strings.TrimSpace(sc.Text()))
+			if name != "" {
+				manualPkgs[name] = true
+			}
+		}
+	}
+
 	out, err := exec.Command("xbps-query", "-l").Output()
 	if err != nil {
 		return nil, err
@@ -32,6 +45,10 @@ func (x *Xbps) Scan() ([]model.Package, error) {
 		// fields[0] = state (ii, uu, etc), fields[1] = name-version_rev
 		name, version := SplitXbpsNameVersion(fields[1])
 		if name == "" {
+			continue
+		}
+		// Skip auto-installed dependencies when we have the manual set
+		if len(manualPkgs) > 0 && !manualPkgs[name] {
 			continue
 		}
 		desc := ""

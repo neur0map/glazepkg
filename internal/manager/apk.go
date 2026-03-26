@@ -2,6 +2,7 @@ package manager
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -16,6 +17,17 @@ func (a *Apk) Name() model.Source { return model.SourceApk }
 func (a *Apk) Available() bool { return commandExists("apk") }
 
 func (a *Apk) Scan() ([]model.Package, error) {
+	// Build set of explicitly installed packages from /etc/apk/world
+	worldPkgs := make(map[string]bool)
+	if data, err := os.ReadFile("/etc/apk/world"); err == nil {
+		sc := bufio.NewScanner(strings.NewReader(string(data)))
+		for sc.Scan() {
+			if name := strings.TrimSpace(sc.Text()); name != "" {
+				worldPkgs[name] = true
+			}
+		}
+	}
+
 	// -vv gives "name-version description" per line
 	out, err := exec.Command("apk", "info", "-vv").Output()
 	if err != nil {
@@ -48,6 +60,10 @@ func (a *Apk) Scan() ([]model.Package, error) {
 
 		name, version := SplitApkNameVersion(nameVer)
 		if name == "" {
+			continue
+		}
+		// Skip auto-installed dependencies when we have the world file
+		if len(worldPkgs) > 0 && !worldPkgs[name] {
 			continue
 		}
 

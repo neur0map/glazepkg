@@ -16,6 +16,17 @@ func (d *Dnf) Name() model.Source { return model.SourceDnf }
 func (d *Dnf) Available() bool { return commandExists("dnf") }
 
 func (d *Dnf) Scan() ([]model.Package, error) {
+	// Build set of user-installed packages (excludes auto-installed deps)
+	userInstalled := make(map[string]bool)
+	if uiOut, err := exec.Command("dnf", "repoquery", "--userinstalled", "--qf", "%{name}").Output(); err == nil {
+		sc := bufio.NewScanner(strings.NewReader(string(uiOut)))
+		for sc.Scan() {
+			if name := strings.TrimSpace(sc.Text()); name != "" {
+				userInstalled[name] = true
+			}
+		}
+	}
+
 	out, err := exec.Command("dnf", "list", "installed", "--quiet").Output()
 	if err != nil {
 		return nil, err
@@ -36,6 +47,10 @@ func (d *Dnf) Scan() ([]model.Package, error) {
 		name := fields[0]
 		if idx := strings.LastIndex(name, "."); idx > 0 {
 			name = name[:idx]
+		}
+		// Skip auto-installed dependencies when we have the user-installed set
+		if len(userInstalled) > 0 && !userInstalled[name] {
+			continue
 		}
 		pkgs = append(pkgs, model.Package{
 			Name:        name,

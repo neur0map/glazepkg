@@ -27,6 +27,29 @@ func (c *Conda) condaCmd() string {
 }
 
 func (c *Conda) Scan() ([]model.Package, error) {
+	// Build set of explicitly installed packages (excludes auto-installed deps)
+	explicit := make(map[string]bool)
+	if hOut, err := exec.Command(c.condaCmd(), "env", "export", "--from-history", "--json").Output(); err == nil {
+		var hist struct {
+			Dependencies []string `json:"dependencies"`
+		}
+		if json.Unmarshal(hOut, &hist) == nil {
+			for _, dep := range hist.Dependencies {
+				// Format: "name" or "name=version" or "name>=version"
+				name := dep
+				for i, ch := range dep {
+					if ch == '=' || ch == '>' || ch == '<' || ch == '!' {
+						name = dep[:i]
+						break
+					}
+				}
+				if name != "" {
+					explicit[name] = true
+				}
+			}
+		}
+	}
+
 	out, err := exec.Command(c.condaCmd(), "list", "--json").Output()
 	if err != nil {
 		return nil, err
@@ -43,6 +66,10 @@ func (c *Conda) Scan() ([]model.Package, error) {
 
 	pkgs := make([]model.Package, 0, len(entries))
 	for _, e := range entries {
+		// Skip auto-installed dependencies when we have the explicit set
+		if len(explicit) > 0 && !explicit[e.Name] {
+			continue
+		}
 		pkgs = append(pkgs, model.Package{
 			Name:        e.Name,
 			Version:     e.Version,
