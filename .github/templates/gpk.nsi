@@ -35,7 +35,7 @@ Section "Install gpk"
 SectionEnd
 
 ; ── Uninstall ─────────────────────────────────────────────────────
-Section "Uninstall gpk"
+Section "Uninstall"
   ; Remove $INSTDIR from system PATH
   ExecWait 'powershell -NoProfile -NonInteractive -Command ^
     $p = [Environment]::GetEnvironmentVariable("Path","Machine"); ^
