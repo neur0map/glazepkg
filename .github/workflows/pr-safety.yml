@@ -1,0 +1,43 @@
+name: PR Safety
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  protect-github-dir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for .github modifications
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CHANGED=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+            --paginate --jq '.[].filename' | grep '^\\.github/' || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No .github/ modifications — OK"
+            exit 0
+          fi
+
+          AUTHOR="${{ github.event.pull_request.author_association }}"
+          echo "PR modifies .github/ paths:"
+          echo "$CHANGED"
+          echo ""
+          echo "Author association: $AUTHOR"
+
+          case "$AUTHOR" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "Authorized — allowing .github/ changes."
+              ;;
+            *)
+              echo ""
+              echo "::error::External contributors cannot modify .github/ (workflows, templates, actions)."
+              echo "These files control CI/CD and have access to repository secrets."
+              echo "Please open an issue if you need build/release changes."
+              exit 1
+              ;;
+          esac
