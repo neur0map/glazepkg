@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install package managers
         run: |
@@ -60,7 +60,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install package managers
         run: |
@@ -71,4 +71,3 @@ jobs:
 
       - name: Integration tests
         run: go test ./tests/integration/... -v -timeout 120s
-        

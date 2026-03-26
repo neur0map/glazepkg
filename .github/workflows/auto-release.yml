@@ -127,7 +127,7 @@ jobs:
           done
 
           for arch in amd64 arm64; do
-            cp "./artifacts/gpk-windows-${arch}/gpk.exe" "./dist/gpk-windows-${arch}.exe"
+            cp "./artifacts/gpk-windows-${arch}/bin/windows-${arch}/gpk.exe" "./dist/gpk-windows-${arch}.exe"
             setup="./artifacts/gpk-windows-${arch}/gpk-${TAG}-${arch}-setup.exe"
             [ -f "$setup" ] && cp "$setup" ./dist/
           done
@@ -178,4 +178,3 @@ jobs:
           git add Formula/gpk.rb
           git commit -m "gpk ${VER}"
           git push
-          
