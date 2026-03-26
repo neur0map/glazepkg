@@ -69,6 +69,7 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourcePowerShell, "pwsh"},
 		{model.SourceWindowsUpdates, "winupd"},
 		{model.SourceScoop, "scoop"},
+		{model.SourceMaven, "maven"},
 	}
 
 	for _, s := range sources {

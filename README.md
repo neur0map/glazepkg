@@ -28,7 +28,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **34 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Windows Update
+- **35 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Size filter** — press `f` to cycle through size filters (< 1 MB, 1–10 MB, 10–100 MB, > 100 MB, has updates); sorted largest-first
 - **Fuzzy search** — find any package across all managers instantly with `/`
@@ -160,6 +160,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 | **scoop** | Windows | Scoop packages | — |
 | **nuget** | Cross-platform | NuGet global package cache | — |
 | **powershell** | Cross-platform | PowerShell modules | via scan |
+| **maven** | Cross-platform | Local Maven artifacts in `~/.m2/repository` | — |
 | **windows-updates** | Windows | Pending Windows system updates | — |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
