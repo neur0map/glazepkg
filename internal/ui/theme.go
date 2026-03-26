@@ -88,6 +88,7 @@ func defaultManagerColorMap() map[model.Source]lipgloss.Color {
 		model.SourceNuget:          ColorPurple,
 		model.SourcePowerShell:     ColorBlue,
 		model.SourceWindowsUpdates: ColorRed,
+		model.SourceMaven:          ColorOrange,
 	}
 }
 

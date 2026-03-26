@@ -54,6 +54,7 @@ func All() []Manager {
 		&PowerShell{},
 		&WindowsUpdates{},
 		&Scoop{},
+		&Maven{},
 	}
 }
 
