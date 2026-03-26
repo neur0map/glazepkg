@@ -27,11 +27,7 @@ Section "Install gpk"
   SetRegView lastused
 
   ; Add $INSTDIR to the system PATH if not already present
-  ExecWait 'powershell -NoProfile -NonInteractive -Command ^
-    $p = [Environment]::GetEnvironmentVariable("Path","Machine"); ^
-    if ($p -notmatch [regex]::Escape("$INSTDIR")) { ^
-      [Environment]::SetEnvironmentVariable("Path","$p;$INSTDIR","Machine") ^
-    }'
+  ExecWait "powershell -NoProfile -NonInteractive -Command $$p=[Environment]::GetEnvironmentVariable('Path','Machine');if($$p -notmatch [regex]::Escape('$INSTDIR')){[Environment]::SetEnvironmentVariable('Path',($$p+';$INSTDIR'),'Machine')}"
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
   Sleep 1000
 SectionEnd
@@ -39,10 +35,7 @@ SectionEnd
 ; ── Uninstall ─────────────────────────────────────────────────────
 Section "Uninstall"
   ; Remove $INSTDIR from system PATH
-  ExecWait 'powershell -NoProfile -NonInteractive -Command ^
-    $p = [Environment]::GetEnvironmentVariable("Path","Machine"); ^
-    $entries = ($p -split ";") | Where-Object { $_ -ne "$INSTDIR" }; ^
-    [Environment]::SetEnvironmentVariable("Path", ($entries -join ";"), "Machine")'
+  ExecWait "powershell -NoProfile -NonInteractive -Command $$p=[Environment]::GetEnvironmentVariable('Path','Machine');$$entries=($$p -split ';')|Where-Object{$$_ -ne '$INSTDIR'};[Environment]::SetEnvironmentVariable('Path',($$entries -join ';'),'Machine')"
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
   Sleep 1000
 
