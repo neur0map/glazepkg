@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./cmd/gpk
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./tests/parsing/... -v
+
+  integration-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install package managers
+        run: |
+          npm install -g npm
+          pip3 install --break-system-packages pipx 2>/dev/null || true
+          gem list --local > /dev/null
+
+      - name: Integration tests
+        run: go test ./tests/integration/... -v -timeout 120s
+
+  integration-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install package managers
+        run: |
+          sudo apt-get update -qq
+          npm install -g npm
+          pip3 install pipx 2>/dev/null || true
+          cargo --version 2>/dev/null || true
+          gem list --local > /dev/null 2>&1 || true
+
+      - name: Integration tests
+        run: go test ./tests/integration/... -v -timeout 120s
