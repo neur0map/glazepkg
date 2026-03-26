@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **34 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **35 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
