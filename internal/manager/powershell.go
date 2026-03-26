@@ -107,6 +107,44 @@ func (ps *PowerShell) RemoveCmd(name string) *exec.Cmd {
 
 // Describe returns module descriptions, reusing cached Scan() data when available
 // to avoid spawning a second PowerShell process.
+func (ps *PowerShell) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command(ps.exe(), "-NoProfile", "-Command", "Update-Module", name)
+}
+
+func (ps *PowerShell) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command(ps.exe(), "-NoProfile", "-Command",
+		"Find-Module", "-Name", "*"+query+"*", "|", "ConvertTo-Json", "-Compress").Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var entries []struct {
+		Name        string `json:"Name"`
+		Version     string `json:"Version"`
+		Description string `json:"Description"`
+	}
+	if err := json.Unmarshal(out, &entries); err != nil {
+		// Single result comes as object, not array
+		var single struct {
+			Name        string `json:"Name"`
+			Version     string `json:"Version"`
+			Description string `json:"Description"`
+		}
+		if err := json.Unmarshal(out, &single); err != nil {
+			return nil, nil
+		}
+		entries = append(entries, single)
+	}
+	pkgs := make([]model.Package, 0, len(entries))
+	for _, e := range entries {
+		pkgs = append(pkgs, model.Package{Name: e.Name, Version: e.Version, Source: model.SourcePowerShell, Description: e.Description})
+	}
+	return pkgs, nil
+}
+
+func (ps *PowerShell) InstallCmd(name string) *exec.Cmd {
+	return exec.Command(ps.exe(), "-NoProfile", "-Command", "Install-Module", "-Name", name, "-Scope", "CurrentUser", "-Force")
+}
+
 func (ps *PowerShell) Describe(pkgs []model.Package) map[string]string {
 	psModCacheMu.RLock()
 	cache := psModCache

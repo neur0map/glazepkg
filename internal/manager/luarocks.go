@@ -120,6 +120,32 @@ func (l *Luarocks) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
+func (l *Luarocks) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("luarocks", "search", query, "--porcelain").Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	seen := make(map[string]bool)
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		if seen[fields[0]] {
+			continue
+		}
+		seen[fields[0]] = true
+		pkgs = append(pkgs, model.Package{Name: fields[0], Version: fields[1], Source: model.SourceLuarocks})
+	}
+	return pkgs, nil
+}
+
+func (l *Luarocks) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("luarocks", "install", name)
+}
+
 func (l *Luarocks) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("luarocks", "upgrade", name)
 }

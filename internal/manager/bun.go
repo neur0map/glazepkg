@@ -70,3 +70,11 @@ func (b *Bun) Describe(pkgs []model.Package) map[string]string {
 	}
 	return descs
 }
+
+func (b *Bun) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("bun", "update", "-g", name)
+}
+
+func (b *Bun) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("bun", "add", "-g", name)
+}

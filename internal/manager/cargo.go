@@ -51,6 +51,44 @@ func (c *Cargo) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (c *Cargo) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("cargo", "search", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || strings.HasPrefix(line, "...") {
+			continue
+		}
+		// Format: 'name = "version"    # description'
+		eqIdx := strings.Index(line, " = ")
+		if eqIdx < 0 {
+			continue
+		}
+		name := strings.TrimSpace(line[:eqIdx])
+		rest := line[eqIdx+3:]
+		version := ""
+		if q1 := strings.Index(rest, "\""); q1 >= 0 {
+			if q2 := strings.Index(rest[q1+1:], "\""); q2 >= 0 {
+				version = rest[q1+1 : q1+1+q2]
+			}
+		}
+		desc := ""
+		if hashIdx := strings.Index(rest, "# "); hashIdx >= 0 {
+			desc = strings.TrimSpace(rest[hashIdx+2:])
+		}
+		pkgs = append(pkgs, model.Package{Name: name, Version: version, Source: model.SourceCargo, Description: desc})
+	}
+	return pkgs, nil
+}
+
+func (c *Cargo) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("cargo", "install", name)
+}
+
 func (c *Cargo) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("cargo", "install", name)
 }

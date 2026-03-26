@@ -2,6 +2,7 @@ package manager
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -81,6 +82,18 @@ func (n *Nuget) Scan() ([]model.Package, error) {
 		})
 	}
 	return pkgs, nil
+}
+
+func (n *Nuget) RemoveCmd(name string) *exec.Cmd {
+	return exec.Command("dotnet", "tool", "uninstall", "-g", name)
+}
+
+func (n *Nuget) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("dotnet", "tool", "update", "-g", name)
+}
+
+func (n *Nuget) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("dotnet", "tool", "install", "-g", name)
 }
 
 // nugetSemverGT returns true if version a is greater than version b.

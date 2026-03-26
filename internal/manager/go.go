@@ -76,6 +76,14 @@ func (g *Go) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
+func (g *Go) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("go", "install", name+"@latest")
+}
+
+func (g *Go) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("go", "install", name+"@latest")
+}
+
 func goBinDir() string {
 	if gopath := os.Getenv("GOPATH"); gopath != "" {
 		return filepath.Join(gopath, "bin")

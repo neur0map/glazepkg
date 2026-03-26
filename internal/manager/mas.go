@@ -55,6 +55,52 @@ func (m *Mas) Scan() ([]model.Package, error) {
 	return pkgs, nil
 }
 
+func (m *Mas) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("mas", "upgrade")
+}
+
+func (m *Mas) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("mas", "search", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		// Format: "  123456789  App Name          (1.2.3)"
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		id := fields[0]
+		// Find version in parentheses at end
+		version := ""
+		if idx := strings.LastIndex(line, "("); idx >= 0 {
+			version = strings.TrimSuffix(strings.TrimSpace(line[idx+1:]), ")")
+		}
+		// Name is everything between ID and version parens
+		nameEnd := strings.LastIndex(line, "(")
+		if nameEnd < 0 {
+			nameEnd = len(line)
+		}
+		idEnd := strings.Index(line, id) + len(id)
+		name := strings.TrimSpace(line[idEnd:nameEnd])
+		if name == "" {
+			name = id
+		}
+		pkgs = append(pkgs, model.Package{Name: name, Version: version, Source: model.SourceMas, Description: "App Store ID: " + id})
+	}
+	return pkgs, nil
+}
+
+func (m *Mas) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("mas", "install", name)
+}
+
 func (m *Mas) CheckUpdates(pkgs []model.Package) map[string]string {
 	out, err := exec.Command("mas", "outdated").Output()
 	if err != nil || len(out) == 0 {

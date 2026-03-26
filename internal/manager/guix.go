@@ -107,6 +107,31 @@ func (g *Guix) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
+func (g *Guix) UpgradeCmd(name string) *exec.Cmd {
+	return exec.Command("guix", "upgrade", name)
+}
+
+func (g *Guix) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("guix", "package", "-A", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		pkgs = append(pkgs, model.Package{Name: fields[0], Version: fields[1], Source: model.SourceGuix})
+	}
+	return pkgs, nil
+}
+
+func (g *Guix) InstallCmd(name string) *exec.Cmd {
+	return exec.Command("guix", "install", name)
+}
+
 func (g *Guix) ListDependencies(pkgs []model.Package) map[string][]string {
 	deps := make(map[string][]string, len(pkgs))
 	for _, pkg := range pkgs {

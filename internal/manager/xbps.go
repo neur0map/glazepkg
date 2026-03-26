@@ -144,6 +144,36 @@ func (x *Xbps) ListDependencies(pkgs []model.Package) map[string][]string {
 	return deps
 }
 
+func (x *Xbps) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command("xbps-query", "-Rs", query).Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		// fields[0] = state, fields[1] = name-version_rev
+		name, version := SplitXbpsNameVersion(fields[1])
+		if name == "" {
+			continue
+		}
+		desc := ""
+		if len(fields) > 2 {
+			desc = strings.Join(fields[2:], " ")
+		}
+		pkgs = append(pkgs, model.Package{Name: name, Version: version, Source: model.SourceXbps, Description: desc})
+	}
+	return pkgs, nil
+}
+
+func (x *Xbps) InstallCmd(name string) *exec.Cmd {
+	return privilegedCmd("xbps-install", "-S", name)
+}
+
 func (x *Xbps) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("xbps-install", "-S", name)
 }

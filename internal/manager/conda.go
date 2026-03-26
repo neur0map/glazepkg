@@ -169,6 +169,33 @@ func (c *Conda) CheckUpdates(pkgs []model.Package) map[string]string {
 	return updates
 }
 
+func (c *Conda) Search(query string) ([]model.Package, error) {
+	out, err := exec.Command(c.condaCmd(), "search", query, "--json").Output()
+	if err != nil || len(out) == 0 {
+		return nil, nil
+	}
+	var results map[string][]struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(out, &results); err != nil {
+		return nil, nil
+	}
+	var pkgs []model.Package
+	for name, versions := range results {
+		if len(versions) == 0 {
+			continue
+		}
+		latest := versions[len(versions)-1]
+		pkgs = append(pkgs, model.Package{Name: name, Version: latest.Version, Source: model.SourceConda})
+	}
+	return pkgs, nil
+}
+
+func (c *Conda) InstallCmd(name string) *exec.Cmd {
+	return exec.Command(c.condaCmd(), "install", "--yes", name)
+}
+
 func (c *Conda) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command(c.condaCmd(), "update", "--yes", name)
 }
