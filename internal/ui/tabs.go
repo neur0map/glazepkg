@@ -43,6 +43,7 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourceSnap, "snap"},
 		{model.SourcePip, "pip"},
 		{model.SourcePipx, "pipx"},
+		{model.SourceUv, "uv"},
 		{model.SourceCargo, "cargo"},
 		{model.SourceGo, "go"},
 		{model.SourceNpm, "npm"},
