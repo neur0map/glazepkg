@@ -110,16 +110,23 @@ func (u *Uv) Describe(pkgs []model.Package) map[string]string {
 	return descs
 }
 
-var uvToolDirOnce sync.Once
-var uvToolDirVal string
+var (
+	uvToolDirMu   sync.Mutex
+	uvToolDirVal  string
+	uvToolDirDone bool
+)
 
 func uvToolDir() string {
-	uvToolDirOnce.Do(func() {
-		out, err := exec.Command("uv", "tool", "dir").Output()
-		if err == nil {
-			uvToolDirVal = strings.TrimSpace(string(out))
-		}
-	})
+	uvToolDirMu.Lock()
+	defer uvToolDirMu.Unlock()
+	if uvToolDirDone {
+		return uvToolDirVal
+	}
+	out, err := exec.Command("uv", "tool", "dir").Output()
+	if err == nil {
+		uvToolDirVal = strings.TrimSpace(string(out))
+		uvToolDirDone = true
+	}
 	return uvToolDirVal
 }
 
