@@ -1053,7 +1053,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.filterInput.SetValue("")
 			m.applyFilter()
 		}
-	case "/":
+	case "/", "ctrl+f":
 		m.filtering = true
 		m.filterInput.Focus()
 		return m, textinput.Blink

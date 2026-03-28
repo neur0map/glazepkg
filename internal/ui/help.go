@@ -16,7 +16,7 @@ func renderHelpOverlay(width, height int) string {
 		{"Ctrl+d/u", "Half page down/up"},
 		{"PgDn/PgUp", "Page down/up"},
 		{"Tab/Shift+Tab", "Cycle manager tabs"},
-		{"/", "Fuzzy search"},
+		{"/ or Ctrl+f", "Fuzzy search"},
 		{"Esc", "Clear search / close overlay"},
 		{"Enter", "Package details"},
 		{"u (detail)", "Upgrade package"},
