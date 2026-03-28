@@ -16,7 +16,7 @@ func renderHelpOverlay(width, height int) string {
 		{"Ctrl+d/u", "Half page down/up"},
 		{"PgDn/PgUp", "Page down/up"},
 		{"Tab/Shift+Tab", "Cycle manager tabs"},
-		{"/", "Fuzzy search"},
+		{"/ or Ctrl+f", "Fuzzy search"},
 		{"Esc", "Clear search / close overlay"},
 		{"Enter", "Package details"},
 		{"u (detail)", "Upgrade package"},
@@ -31,7 +31,7 @@ func renderHelpOverlay(width, height int) string {
 		{"d", "Diff against last snapshot"},
 		{"e", "Export packages"},
 		{"t", "Switch theme"},
-		{"?", "Toggle this help"},
+		{"?/h", "Toggle this help"},
 		{"q", "Quit"},
 	}
 
@@ -55,13 +55,15 @@ func renderHelpOverlay(width, height int) string {
 	}
 
 	b.WriteString("\n")
+	b.WriteString(StyleDim.Render("  RU layout maps to same key positions"))
+	b.WriteString("\n")
 	b.WriteString(StyleDim.Render("  Press any key to dismiss"))
 
 	content := b.String()
 
 	// Center the overlay
 	overlayWidth := 44
-	overlayHeight := len(keybinds) + 7
+	overlayHeight := len(keybinds) + 8
 
 	overlay := StyleOverlay.
 		Width(overlayWidth).
