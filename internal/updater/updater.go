@@ -92,7 +92,11 @@ func fetchRelease() (*ghRelease, error) {
 }
 
 func binaryName() string {
-	return fmt.Sprintf("gpk-%s-%s", runtime.GOOS, runtime.GOARCH)
+	name := fmt.Sprintf("gpk-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
 }
 
 func resolveExecPath(execPath string) (string, error) {
