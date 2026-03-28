@@ -183,7 +183,7 @@ func (m *Model) showBatchConfirm(ops []batchOp, op string, skipped []string) tea
 }
 
 func (m *Model) handleBatchConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	key := normalizeHotkey(msg.String())
 	hasPw := m.batchNeedsSudo()
 
 	// Password field focused

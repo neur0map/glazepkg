@@ -152,7 +152,6 @@ type searchResultGroup struct {
 	expanded bool
 }
 
-
 type Model struct {
 	width  int
 	height int
@@ -215,27 +214,27 @@ type Model struct {
 	upgradeNotifErr   bool
 
 	// Remove
-	confirmingRemove  bool
-	removeFocus       int // 0 = mode, 1 = password, 2 = Yes, 3 = No
-	removeMode        int // 0 = package only, 1 = package + deps
-	pendingRemove     *removeRequest
-	removeInFlight    bool
-	removingPkgName   string
-	removeCancel      context.CancelFunc
-	removeNotifMsg    string
-	removeNotifErr    bool
+	confirmingRemove bool
+	removeFocus      int // 0 = mode, 1 = password, 2 = Yes, 3 = No
+	removeMode       int // 0 = package only, 1 = package + deps
+	pendingRemove    *removeRequest
+	removeInFlight   bool
+	removingPkgName  string
+	removeCancel     context.CancelFunc
+	removeNotifMsg   string
+	removeNotifErr   bool
 
 	// Search + Install
-	searchInput       textinput.Model
-	searchActive      bool
-	searchPending     int
-	searchResults     []searchResultGroup
-	searchCursor      int
-	showPreRelease    bool
-	installInFlight   bool
-	installCancel     context.CancelFunc
-	installNotifMsg   string
-	installNotifErr   bool
+	searchInput     textinput.Model
+	searchActive    bool
+	searchPending   int
+	searchResults   []searchResultGroup
+	searchCursor    int
+	showPreRelease  bool
+	installInFlight bool
+	installCancel   context.CancelFunc
+	installNotifMsg string
+	installNotifErr bool
 
 	// Descriptions
 	loadingDescs bool
@@ -877,7 +876,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	key := normalizeHotkey(msg.String())
 
 	// Clear status message on any keypress
 	m.statusMsg = ""
@@ -1054,11 +1053,11 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.filterInput.SetValue("")
 			m.applyFilter()
 		}
-	case "/":
+	case "/", "ctrl+f":
 		m.filtering = true
 		m.filterInput.Focus()
 		return m, textinput.Blink
-	case "?":
+	case "?", "h":
 		m.showHelp = true
 	case "tab":
 		m.activeTab = (m.activeTab + 1) % len(m.tabs)
@@ -1735,7 +1734,7 @@ func (m *Model) needsSudoPassword() bool {
 }
 
 func (m *Model) handleUpgradeConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	key := normalizeHotkey(msg.String())
 	hasPwField := m.needsSudoPassword()
 
 	// Password field is focused — let textinput handle typing
@@ -2016,7 +2015,7 @@ func (m *Model) removeNeedsSudo() bool {
 }
 
 func (m *Model) handleRemoveConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	key := normalizeHotkey(msg.String())
 	hasDeep := m.pendingRemove != nil && m.pendingRemove.deepCmd != nil
 	hasPw := m.removeNeedsSudo()
 
