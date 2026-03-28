@@ -40,27 +40,39 @@ func Update(currentVersion string) (string, error) {
 	}
 
 	latest := rel.TagName
-	if latest == currentVersion {
+
+	// Normalize both versions for comparison: strip leading "v"
+	if normalizeVersion(latest) == normalizeVersion(currentVersion) {
 		return latest, fmt.Errorf("already up to date (%s)", latest)
 	}
 
 	assetName := binaryName()
 	var downloadURL string
 	for _, a := range rel.Assets {
-		if a.Name == assetName {
+		// Case-insensitive match to be safe
+		if strings.EqualFold(a.Name, assetName) {
 			downloadURL = a.BrowserDownloadURL
 			break
 		}
 	}
 	if downloadURL == "" {
-		return latest, fmt.Errorf("no binary found for %s/%s in release %s", runtime.GOOS, runtime.GOARCH, latest)
+		// Build a helpful list of what IS available
+		var available []string
+		for _, a := range rel.Assets {
+			available = append(available, a.Name)
+		}
+		return latest, fmt.Errorf(
+			"no binary found for %s/%s in release %s (looked for %q)\navailable assets: %s",
+			runtime.GOOS, runtime.GOARCH, latest, assetName,
+			strings.Join(available, ", "),
+		)
 	}
 
 	execPath, err := os.Executable()
 	if err != nil {
 		return latest, fmt.Errorf("cannot find current binary path: %w", err)
 	}
-	// Resolve symlinks
+
 	resolved, err := resolveExecPath(execPath)
 	if err != nil {
 		return latest, err
@@ -74,14 +86,23 @@ func Update(currentVersion string) (string, error) {
 }
 
 func fetchRelease() (*ghRelease, error) {
-	resp, err := http.Get(repoAPI)
+	req, err := http.NewRequest(http.MethodGet, repoAPI, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Ask GitHub for v3 JSON explicitly; also avoids rate-limit issues
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("github API returned %s", resp.Status)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("github API returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 
 	var rel ghRelease
@@ -91,13 +112,29 @@ func fetchRelease() (*ghRelease, error) {
 	return &rel, nil
 }
 
+// binaryName returns the exact asset filename used in GitHub releases.
+//
+// Naming convention in releases:
+//
+//	Linux / macOS : gpk-{os}-{arch}          (no extension)
+//	Windows       : gpk-{os}-{arch}.exe
 func binaryName() string {
-	return fmt.Sprintf("gpk-%s-%s", runtime.GOOS, runtime.GOARCH)
+	name := fmt.Sprintf("gpk-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// normalizeVersion strips a leading "v" so "v0.3.20" == "0.3.20".
+func normalizeVersion(v string) string {
+	return strings.TrimPrefix(strings.TrimSpace(v), "v")
 }
 
 func resolveExecPath(execPath string) (string, error) {
 	info, err := os.Lstat(execPath)
 	if err != nil {
+		// Path not stat-able; proceed with raw path
 		return execPath, nil
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
@@ -111,21 +148,28 @@ func resolveExecPath(execPath string) (string, error) {
 }
 
 func downloadAndReplace(url, destPath string) error {
-	resp, err := http.Get(url)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("cannot build download request: %w", err)
+	}
+	// GitHub redirects release asset downloads; Go's http client follows them,
+	// but setting Accept here avoids any accidental HTML error pages.
+	req.Header.Set("Accept", "application/octet-stream")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download returned %s", resp.Status)
 	}
 
-	// Write to a temp file next to the binary, then atomic rename
+	// Write to a temp file next to the binary, then atomic rename.
 	tmpPath := destPath + ".tmp"
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
-		// If we can't write next to it, might need sudo
 		if strings.Contains(err.Error(), "permission denied") {
 			return fmt.Errorf("permission denied — try: sudo gpk update")
 		}
@@ -139,7 +183,6 @@ func downloadAndReplace(url, destPath string) error {
 	}
 	f.Close()
 
-	// Atomic replace
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("cannot replace binary: %w", err)
