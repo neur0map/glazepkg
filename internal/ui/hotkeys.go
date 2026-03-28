@@ -90,6 +90,4 @@ var hotkeyAliases = map[string]string{
 	"\u042c": "M",
 	"\u0411": "<",
 	"\u042e": ">",
-	".":      "/",
-	",":      "?",
 }

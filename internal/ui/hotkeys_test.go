@@ -17,8 +17,6 @@ func TestNormalizeHotkeyMapsRussianLayout(t *testing.T) {
 		"\u041f":      "G",
 		"\u0440":      "h",
 		"ctrl+\u0441": "ctrl+c",
-		".":           "/",
-		",":           "?",
 	}
 
 	for input, want := range tests {

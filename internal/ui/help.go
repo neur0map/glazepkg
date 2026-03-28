@@ -55,7 +55,7 @@ func renderHelpOverlay(width, height int) string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  Russian layout follows the same key positions"))
+	b.WriteString(StyleDim.Render("  RU layout maps to same key positions"))
 	b.WriteString("\n")
 	b.WriteString(StyleDim.Render("  Press any key to dismiss"))
 
