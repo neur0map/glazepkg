@@ -2,7 +2,10 @@ package manager
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -55,4 +58,51 @@ func (p *Pipx) InstallCmd(name string) *exec.Cmd {
 
 func (p *Pipx) RemoveCmd(name string) *exec.Cmd {
 	return exec.Command("pipx", "uninstall", name)
+}
+
+// Describe reads package summaries from the dist-info METADATA files inside
+// each pipx tool's virtual environment. No network calls needed.
+func (p *Pipx) Describe(pkgs []model.Package) map[string]string {
+	venvsDir := pipxVenvsDir()
+	if venvsDir == "" {
+		return nil
+	}
+	descs := make(map[string]string, len(pkgs))
+	for _, pkg := range pkgs {
+		if desc := pipxLocalSummary(venvsDir, pkg.Name); desc != "" {
+			descs[pkg.Name] = desc
+		}
+	}
+	return descs
+}
+
+// pipxVenvsDir returns the path to the pipx venvs directory.
+// It uses the PIPX_HOME env var when set, otherwise falls back to the
+// default of ~/.local/share/pipx.
+func pipxVenvsDir() string {
+	home := os.Getenv("PIPX_HOME")
+	if home == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		home = filepath.Join(userHome, ".local", "share", "pipx")
+	}
+	return filepath.Join(home, "venvs")
+}
+
+// pipxLocalSummary reads the Summary field from the installed METADATA file
+// for a pipx tool venv. The layout mirrors that of uv tools.
+func pipxLocalSummary(venvsDir, name string) string {
+	normalized := strings.ReplaceAll(name, "-", "_")
+	pattern := filepath.Join(venvsDir, name, "lib", "python*", "site-packages", normalized+"-*.dist-info", "METADATA")
+	matches, err := filepath.Glob(pattern)
+	if (err != nil || len(matches) == 0) && normalized != name {
+		pattern = filepath.Join(venvsDir, name, "lib", "python*", "site-packages", name+"-*.dist-info", "METADATA")
+		matches, _ = filepath.Glob(pattern)
+	}
+	if len(matches) == 0 {
+		return ""
+	}
+	return parseMetadataSummary(matches[0])
 }

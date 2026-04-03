@@ -2,12 +2,19 @@ package manager
 
 import (
 	"bufio"
+	"encoding/json"
+	"net/http"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/neur0map/glazepkg/internal/model"
 )
+
+var masHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
+const masMaxDescLength = 200
 
 type Mas struct{}
 
@@ -43,6 +50,7 @@ func (m *Mas) Scan() ([]model.Package, error) {
 			continue
 		}
 		// First field is the numeric ID, rest is the app name
+		id := fields[0]
 		name := strings.Join(fields[1:], " ")
 
 		pkgs = append(pkgs, model.Package{
@@ -50,9 +58,69 @@ func (m *Mas) Scan() ([]model.Package, error) {
 			Version:     version,
 			Source:      model.SourceMas,
 			InstalledAt: time.Now(),
+			Location:    id, // store App Store numeric ID for Describe()
 		})
 	}
 	return pkgs, nil
+}
+
+// Describe fetches app descriptions from the iTunes lookup API using the
+// App Store IDs stored in Package.Location by Scan().
+func (m *Mas) Describe(pkgs []model.Package) map[string]string {
+	descs := make(map[string]string, len(pkgs))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 5)
+
+	for _, pkg := range pkgs {
+		if pkg.Location == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(id, name string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			desc := masLookupDescription(id)
+			if desc != "" {
+				mu.Lock()
+				descs[name] = desc
+				mu.Unlock()
+			}
+		}(pkg.Location, pkg.Name)
+	}
+	wg.Wait()
+	return descs
+}
+
+// masLookupDescription queries the iTunes Store API for an app description.
+func masLookupDescription(id string) string {
+	resp, err := masHTTPClient.Get("https://itunes.apple.com/lookup?id=" + id)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	var result struct {
+		Results []struct {
+			Description string `json:"description"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil || len(result.Results) == 0 {
+		return ""
+	}
+	// Trim to first line and cap length to keep it concise in the TUI.
+	desc := strings.TrimSpace(result.Results[0].Description)
+	if idx := strings.IndexAny(desc, "\n\r"); idx > 0 {
+		desc = strings.TrimSpace(desc[:idx])
+	}
+	if len(desc) > masMaxDescLength {
+		desc = desc[:masMaxDescLength]
+	}
+	return desc
 }
 
 func (m *Mas) UpgradeCmd(name string) *exec.Cmd {

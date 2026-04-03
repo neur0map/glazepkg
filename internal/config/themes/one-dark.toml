@@ -1,0 +1,15 @@
+name = "One Dark"
+
+[palette]
+base = "#282c34"
+surface = "#3e4451"
+text = "#abb2bf"
+subtext = "#5c6370"
+blue = "#61afef"
+purple = "#c678dd"
+green = "#98c379"
+red = "#e06c75"
+yellow = "#e5c07b"
+cyan = "#56b6c2"
+orange = "#d19a66"
+white = "#c8ccd4"
