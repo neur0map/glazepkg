@@ -1,0 +1,15 @@
+name = "Rosé Pine"
+
+[palette]
+base = "#191724"
+surface = "#26233a"
+text = "#e0def4"
+subtext = "#6e6a86"
+blue = "#9ccfd8"
+purple = "#c4a7e7"
+green = "#31748f"
+red = "#eb6f92"
+yellow = "#f6c177"
+cyan = "#9ccfd8"
+orange = "#ebbcba"
+white = "#e0def4"
