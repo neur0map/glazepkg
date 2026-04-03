@@ -77,8 +77,11 @@ Keybinds:
   q                Quit
 
 Supported managers:
-  brew, pacman, aur, apt, dnf, snap, pip, pipx,
-  cargo, go, npm, bun, flatpak
+  brew, pacman, aur, apt, dnf, snap, pip, pipx, uv,
+  cargo, go, npm, pnpm, bun, flatpak, macports, pkgsrc,
+  opam, gem, pkg, composer, mas, apk, nix, conda,
+  luarocks, xbps, portage, guix, winget, chocolatey,
+  nuget, powershell, windows-updates, scoop, maven
 
 Data:
   Snapshots   ~/.local/share/glazepkg/snapshots/

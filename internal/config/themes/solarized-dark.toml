@@ -1,0 +1,15 @@
+name = "Solarized Dark"
+
+[palette]
+base = "#002b36"
+surface = "#073642"
+text = "#839496"
+subtext = "#586e75"
+blue = "#268bd2"
+purple = "#6c71c4"
+green = "#859900"
+red = "#dc322f"
+yellow = "#b58900"
+cyan = "#2aa198"
+orange = "#cb4b16"
+white = "#93a1a1"
