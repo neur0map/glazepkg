@@ -100,6 +100,11 @@ func (m *Model) mergeSearchResults(pkgs []model.Package) {
 			return compareVersions(entries[a].Version, entries[b].Version) > 0
 		})
 	}
+
+	// Reorder groups by tier relevance to the current query. Runs after the
+	// per-group version sort so the description tier classifies against the
+	// highest-version entry.
+	m.searchResults = rankGroupsByName(m.searchResults, m.searchInput.Value())
 }
 
 func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
