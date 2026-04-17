@@ -105,6 +105,16 @@ func rankPackages(pkgs []model.Package, query string) []model.Package {
 		return out
 	}
 
-	// Fuzzy fallback added in Task 3.
-	return nil
+	// Fuzzy fallback: no strict match anywhere, so run the library fuzzy
+	// matcher over "Name Description" as the previous implementation did.
+	// Pass the original query (not the trimmed/lowered q); fuzzy.FindFrom
+	// handles case internally and this preserves behavior parity with the
+	// pre-change fuzzyFilter.
+	source := pkgSearchSource{pkgs: pkgs}
+	matches := fuzzy.FindFrom(query, source)
+	out := make([]model.Package, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, pkgs[m.Index])
+	}
+	return out
 }

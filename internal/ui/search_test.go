@@ -123,3 +123,43 @@ func TestRankPackages_NonMatchesDropped(t *testing.T) {
 		t.Fatalf("expected only [git], got %v", got)
 	}
 }
+
+func TestRankPackages_FuzzyFallbackTriggersWhenAllTiersEmpty(t *testing.T) {
+	// Query "gt" has no strict substring hit in these names/descriptions,
+	// but fuzzy will match "git" because g-t appears in order.
+	pkgs := []model.Package{
+		{Name: "abc", Description: "xyz"},
+		{Name: "git", Description: "version control"},
+	}
+	got := rankPackages(pkgs, "gt")
+	if len(got) == 0 {
+		t.Fatalf("expected fuzzy fallback to return at least one result")
+	}
+	if got[0].Name != "git" {
+		t.Errorf("expected fuzzy fallback to return git first, got %s", got[0].Name)
+	}
+}
+
+func TestRankPackages_FuzzyFallbackNotMixedWithTiers(t *testing.T) {
+	// "git" is a strict prefix hit; "xyz" would be a fuzzy hit for "gt" but
+	// must NOT appear because the strict tier is non-empty.
+	pkgs := []model.Package{
+		{Name: "git"},
+		{Name: "xyz"},
+	}
+	got := rankPackages(pkgs, "git")
+	if len(got) != 1 || got[0].Name != "git" {
+		t.Fatalf("expected only [git], got %v", got)
+	}
+}
+
+func TestRankPackages_NoMatchAnywhereReturnsEmpty(t *testing.T) {
+	pkgs := []model.Package{
+		{Name: "abc"},
+		{Name: "def"},
+	}
+	got := rankPackages(pkgs, "xyz")
+	if len(got) != 0 {
+		t.Errorf("expected empty result, got %v", got)
+	}
+}
