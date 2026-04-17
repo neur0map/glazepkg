@@ -67,3 +67,44 @@ func fuzzyFilter(pkgs []model.Package, query string) []model.Package {
 	}
 	return result
 }
+
+// rankPackages returns pkgs matching query, ordered by:
+//
+//	tier 1: name has query as a case-insensitive prefix
+//	tier 2: name contains query (case-insensitive), not at start
+//	tier 3: description contains query (case-insensitive)
+//
+// Within each tier, input order is preserved. Packages that match no tier
+// are dropped unless the fuzzy fallback branch matches them (see below).
+// An empty or whitespace-only query returns pkgs unchanged.
+func rankPackages(pkgs []model.Package, query string) []model.Package {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return pkgs
+	}
+
+	var prefix, contains, desc []model.Package
+	for _, p := range pkgs {
+		n := strings.ToLower(p.Name)
+		d := strings.ToLower(p.Description)
+		switch classifyMatch(n, d, q) {
+		case tierPrefix:
+			prefix = append(prefix, p)
+		case tierContains:
+			contains = append(contains, p)
+		case tierDesc:
+			desc = append(desc, p)
+		}
+	}
+
+	if len(prefix)+len(contains)+len(desc) > 0 {
+		out := make([]model.Package, 0, len(prefix)+len(contains)+len(desc))
+		out = append(out, prefix...)
+		out = append(out, contains...)
+		out = append(out, desc...)
+		return out
+	}
+
+	// Fuzzy fallback added in Task 3.
+	return nil
+}
