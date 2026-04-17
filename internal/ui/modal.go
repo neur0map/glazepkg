@@ -356,13 +356,38 @@ func renderExportModalBody(m *Model) ModalFrameOpts {
 }
 
 func handleDepsModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
+	switch key {
+	case "esc", "q", "d":
 		return m, m.closeModal()
+	case "j", "down":
+		if m.depsCursor < total-1 {
+			m.depsCursor++
+		}
+	case "k", "up":
+		if m.depsCursor > 0 {
+			m.depsCursor--
+		}
+	case "g", "home":
+		m.depsCursor = 0
+	case "G", "end":
+		if total > 0 {
+			m.depsCursor = total - 1
+		}
 	}
 	return m, nil
 }
 func renderDepsModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "DEPENDENCIES", Body: "<pending migration>", Footer: "esc close"}
+	title := "DEPENDENCIES"
+	if m.detailPkg.Name != "" {
+		title = "DEPENDENCIES — " + m.detailPkg.Name
+	}
+	return ModalFrameOpts{
+		Title:  title,
+		Body:   depsBody(m),
+		Footer: "↑↓ navigate · esc close",
+	}
 }
 
 func handlePkgHelpModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {

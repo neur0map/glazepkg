@@ -205,7 +205,6 @@ type Model struct {
 	// Overlays
 	showExport        bool
 	exportCursor      int
-	showDeps          bool
 	depsCursor        int
 	pkgHelpLines      []string
 	pkgHelpScroll     int
@@ -1187,34 +1186,8 @@ func (m Model) selectedPackage() (model.Package, bool) {
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
-	// Deps overlay intercepts keys
-	if m.showDeps {
-		switch key {
-		case "esc", "q", "d":
-			m.showDeps = false
-		case "j", "down":
-			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
-			if m.depsCursor < total-1 {
-				m.depsCursor++
-			}
-		case "k", "up":
-			if m.depsCursor > 0 {
-				m.depsCursor--
-			}
-		case "g", "home":
-			m.depsCursor = 0
-		case "G", "end":
-			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
-			if total > 0 {
-				m.depsCursor = total - 1
-			}
-		}
-		return m, nil
-	}
-
 	switch key {
 	case "esc", "q":
-		m.showDeps = false
 		m.view = viewList
 	case "e":
 		m.editingDesc = true
@@ -1223,8 +1196,8 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 	case "d":
 		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
-			m.showDeps = true
 			m.depsCursor = 0
+			return m, m.openModal(ModalDeps)
 		}
 	case "h":
 		m.statusMsg = "loading help..."
@@ -1425,9 +1398,6 @@ func (m Model) View() string {
 	if m.showExport {
 		return content + "\n" + renderExportOverlay(m.exportCursor, m.width, m.height)
 	}
-	if m.showDeps {
-		return content + "\n" + renderDepsOverlay(m.detailPkg, m.depsCursor, m.width, m.height)
-	}
 	if m.showThemePicker {
 		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
 	}
@@ -1585,7 +1555,7 @@ func (m Model) renderStatusBar() string {
 				{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
 			})
 		}
-		if m.showDeps {
+		if m.modal == ModalDeps {
 			return " " + formatBinds([]struct{ key, desc string }{
 				{"j/k", "navigate"}, {"esc", "close"},
 			})

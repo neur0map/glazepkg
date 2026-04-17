@@ -107,25 +107,22 @@ func formatListShort(items []string) string {
 	return fmt.Sprintf("%s  +%d more", strings.Join(items[:3], ", "), len(items)-3)
 }
 
-func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
-	var b strings.Builder
+// depsBody returns the scrollable body content for the dependencies modal.
+// Pure content — the modal frame owns the title and outer border.
+func depsBody(m *Model) string {
+	pkg := m.detailPkg
+	cursor := m.depsCursor
+	height := m.height
 
-	// Title
-	title := fmt.Sprintf("  Dependencies — %s", pkg.Name)
-	b.WriteString(StyleOverlayTitle.Render(title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 46)))
-	b.WriteString("\n")
+	var b strings.Builder
 
 	hasDeps := len(pkg.DependsOn) > 0
 	hasReqBy := len(pkg.RequiredBy) > 0
 	total := len(pkg.DependsOn) + len(pkg.RequiredBy)
 
 	if total == 0 {
-		b.WriteString("\n")
 		b.WriteString(StyleDim.Render("  No dependencies"))
-		b.WriteString("\n")
-		return renderDepsOverlayFrame(b.String(), width, height, 6)
+		return b.String()
 	}
 
 	maxVisible := height - 12
@@ -149,7 +146,6 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 
 	// Render "Depends on" section
 	if hasDeps {
-		b.WriteString("\n")
 		b.WriteString(StyleDetailKey.Render(fmt.Sprintf("  Depends on (%d)", len(pkg.DependsOn))))
 		b.WriteString("\n")
 	}
@@ -197,19 +193,7 @@ func renderDepsOverlay(pkg model.Package, cursor, width, height int) string {
 	indicator := fmt.Sprintf("  %d/%d", cursor+1, total)
 	b.WriteString(StyleDim.Render(indicator))
 
-	overlayHeight := min(maxVisible+10, height-4)
-	return renderDepsOverlayFrame(b.String(), width, height, overlayHeight)
-}
-
-func renderDepsOverlayFrame(content string, width, height, overlayHeight int) string {
-	overlayWidth := 54
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(width, height, overlay)
+	return b.String()
 }
 
 // pkgHelpBody returns the visible slice of m.pkgHelpLines starting at
