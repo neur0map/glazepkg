@@ -212,95 +212,74 @@ func renderDepsOverlayFrame(content string, width, height, overlayHeight int) st
 	return placeOverlay(width, height, overlay)
 }
 
-func renderPkgHelpOverlay(name string, lines []string, scroll, width, height int) string {
-	var b strings.Builder
-
-	overlayWidth := width - 10
-	if overlayWidth > 120 {
-		overlayWidth = 120
-	}
-	if overlayWidth < 40 {
-		overlayWidth = 40
-	}
-	contentWidth := overlayWidth - 6
-
-	// Title
-	title := fmt.Sprintf("  %s --help", name)
-	b.WriteString(StyleOverlayTitle.Render(title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(contentWidth, overlayWidth-4))))
-	b.WriteString("\n")
-
+// pkgHelpBody returns the visible slice of m.pkgHelpLines starting at
+// m.pkgHelpScroll, styled with heading/flag/normal colors, truncated to a
+// reasonable width. Pure content — no framing, no overlay.
+func pkgHelpBody(m *Model) string {
+	lines := m.pkgHelpLines
+	scroll := m.pkgHelpScroll
 	if len(lines) == 0 {
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  No help available"))
-		b.WriteString("\n")
-	} else {
-		visibleLines := height - 10
-		if visibleLines < 5 {
-			visibleLines = 5
+		return StyleDim.Render("No help available")
+	}
+
+	// Match old behavior: cap visible lines to terminal height minus modal chrome.
+	visibleLines := m.height - 10
+	if visibleLines < 5 {
+		visibleLines = 5
+	}
+
+	// Content width: cap at 100 cols to match old "min(120, width-10)" intent
+	// while leaving room for frame border + padding.
+	contentWidth := m.width - 10
+	if contentWidth > 100 {
+		contentWidth = 100
+	}
+	if contentWidth < 30 {
+		contentWidth = 30
+	}
+
+	end := scroll + visibleLines
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	headingStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+	flagStyle := lipgloss.NewStyle().Foreground(ColorGreen)
+	normalStyle := lipgloss.NewStyle().Foreground(ColorText)
+
+	var b strings.Builder
+	for i := scroll; i < end; i++ {
+		line := lines[i]
+		if len(line) > contentWidth {
+			line = line[:contentWidth-1] + "…"
 		}
+		trimmed := strings.TrimSpace(line)
 
-		end := scroll + visibleLines
-		if end > len(lines) {
-			end = len(lines)
+		// Style classification: cyan bold for headings, green for flags, normal for body.
+		var styled string
+		switch {
+		case trimmed == "":
+			styled = line
+		case isHelpHeading(trimmed):
+			styled = headingStyle.Render(line)
+		case strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "--"):
+			styled = flagStyle.Render(line)
+		default:
+			styled = normalStyle.Render(line)
 		}
-
-		headingStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
-		flagStyle := lipgloss.NewStyle().Foreground(ColorGreen)
-		normalStyle := lipgloss.NewStyle().Foreground(ColorText)
-
-		for i := scroll; i < end; i++ {
-			line := lines[i]
-			// Truncate long lines
-			if len(line) > contentWidth {
-				line = line[:contentWidth-1] + "…"
-			}
-
-			trimmed := strings.TrimSpace(line)
-
-			// Style based on content
-			var styled string
-			switch {
-			case trimmed == "":
-				styled = ""
-			case isHelpHeading(trimmed):
-				styled = headingStyle.Render("  " + line)
-			case strings.HasPrefix(trimmed, "-") || strings.HasPrefix(trimmed, "--"):
-				styled = "  " + flagStyle.Render(line)
-			default:
-				styled = "  " + normalStyle.Render(line)
-			}
-
-			b.WriteString(styled)
+		b.WriteString(styled)
+		if i < end-1 {
 			b.WriteString("\n")
 		}
-
-		// Scroll indicator
-		if len(lines) > visibleLines {
-			pct := (scroll + visibleLines) * 100 / len(lines)
-			if pct > 100 {
-				pct = 100
-			}
-			indicator := fmt.Sprintf("  ─── %d%% ───", pct)
-			b.WriteString(StyleDim.Render(indicator))
-		}
 	}
 
-	overlayHeight := min(height-4, len(lines)+6)
-	if overlayHeight < 8 {
-		overlayHeight = 8
-	}
-	if overlayHeight > height-4 {
-		overlayHeight = height - 4
+	// Scroll indicator at the bottom if more content exists.
+	if end < len(lines) {
+		b.WriteString("\n")
+		b.WriteString(StyleDim.Render(fmt.Sprintf("── %d more lines (j/k to scroll) ──", len(lines)-end)))
 	}
 
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(b.String())
-
-	return placeOverlay(width, height, overlay)
+	return b.String()
 }
 
 // isHelpHeading detects section headings in help output.

@@ -366,13 +366,49 @@ func renderDepsModalBody(m *Model) ModalFrameOpts {
 }
 
 func handlePkgHelpModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	maxScroll := len(m.pkgHelpLines) - (m.height - 8)
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	switch key {
+	case "esc", "q", "h":
 		return m, m.closeModal()
+	case "j", "down":
+		if m.pkgHelpScroll < maxScroll {
+			m.pkgHelpScroll++
+		}
+	case "k", "up":
+		if m.pkgHelpScroll > 0 {
+			m.pkgHelpScroll--
+		}
+	case "ctrl+d", "pgdown":
+		m.pkgHelpScroll += m.height / 2
+		if m.pkgHelpScroll > maxScroll {
+			m.pkgHelpScroll = maxScroll
+		}
+	case "ctrl+u", "pgup":
+		m.pkgHelpScroll -= m.height / 2
+		if m.pkgHelpScroll < 0 {
+			m.pkgHelpScroll = 0
+		}
+	case "g", "home":
+		m.pkgHelpScroll = 0
+	case "G", "end":
+		m.pkgHelpScroll = maxScroll
 	}
 	return m, nil
 }
 func renderPkgHelpModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "PACKAGE HELP", Body: "<pending migration>", Footer: "esc close"}
+	title := "PACKAGE HELP"
+	if m.detailPkg.Name != "" {
+		title = strings.ToUpper(m.detailPkg.Name) + " --HELP"
+	}
+	return ModalFrameOpts{
+		Title:  title,
+		Body:   pkgHelpBody(m),
+		Footer: "↑↓ scroll · esc close",
+	}
 }
 
 func handleThemeModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {

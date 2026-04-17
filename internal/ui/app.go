@@ -207,7 +207,6 @@ type Model struct {
 	exportCursor      int
 	showDeps          bool
 	depsCursor        int
-	showPkgHelp       bool
 	pkgHelpLines      []string
 	pkgHelpScroll     int
 	confirmingUpgrade bool
@@ -811,8 +810,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pkgHelpMsg:
 		m.pkgHelpLines = msg.lines
 		m.pkgHelpScroll = 0
-		m.showPkgHelp = true
-		return m, nil
+		return m, m.openModal(ModalPkgHelp)
 
 	case snapshotSavedMsg:
 		if msg.err != nil {
@@ -1189,41 +1187,6 @@ func (m Model) selectedPackage() (model.Package, bool) {
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
-	// Help overlay intercepts keys
-	if m.showPkgHelp {
-		maxScroll := len(m.pkgHelpLines) - (m.height - 8)
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		switch key {
-		case "esc", "q", "h":
-			m.showPkgHelp = false
-		case "j", "down":
-			if m.pkgHelpScroll < maxScroll {
-				m.pkgHelpScroll++
-			}
-		case "k", "up":
-			if m.pkgHelpScroll > 0 {
-				m.pkgHelpScroll--
-			}
-		case "ctrl+d", "pgdown":
-			m.pkgHelpScroll += m.height / 2
-			if m.pkgHelpScroll > maxScroll {
-				m.pkgHelpScroll = maxScroll
-			}
-		case "ctrl+u", "pgup":
-			m.pkgHelpScroll -= m.height / 2
-			if m.pkgHelpScroll < 0 {
-				m.pkgHelpScroll = 0
-			}
-		case "g", "home":
-			m.pkgHelpScroll = 0
-		case "G", "end":
-			m.pkgHelpScroll = maxScroll
-		}
-		return m, nil
-	}
-
 	// Deps overlay intercepts keys
 	if m.showDeps {
 		switch key {
@@ -1252,7 +1215,6 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc", "q":
 		m.showDeps = false
-		m.showPkgHelp = false
 		m.view = viewList
 	case "e":
 		m.editingDesc = true
@@ -1466,9 +1428,6 @@ func (m Model) View() string {
 	if m.showDeps {
 		return content + "\n" + renderDepsOverlay(m.detailPkg, m.depsCursor, m.width, m.height)
 	}
-	if m.showPkgHelp {
-		return content + "\n" + renderPkgHelpOverlay(m.detailPkg.Name, m.pkgHelpLines, m.pkgHelpScroll, m.width, m.height)
-	}
 	if m.showThemePicker {
 		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
 	}
@@ -1621,7 +1580,7 @@ func (m Model) renderStatusBar() string {
 				{"enter", "save"}, {"esc", "cancel"},
 			})
 		}
-		if m.showPkgHelp {
+		if m.modal == ModalPkgHelp {
 			return " " + formatBinds([]struct{ key, desc string }{
 				{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
 			})
