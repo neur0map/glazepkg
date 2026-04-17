@@ -207,7 +207,6 @@ type Model struct {
 	depsCursor        int
 	pkgHelpLines      []string
 	pkgHelpScroll     int
-	confirmingUpgrade bool
 	confirmFocus      int // 0 = password (privileged only), 1 = Yes, 2 = No
 	pendingUpgrade    *upgradeRequest
 	passwordInput     textinput.Model
@@ -527,16 +526,15 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 	}
 
 	m.pendingUpgrade = req
-	m.confirmingUpgrade = true
 	m.passwordInput.SetValue("")
 	if needsSudo {
 		m.confirmFocus = 0 // password field
 		m.passwordInput.Focus()
-		return textinput.Blink
+		return tea.Batch(m.openModal(ModalConfirmUpgrade), textinput.Blink)
 	}
 	m.confirmFocus = 1 // Yes button
 	m.passwordInput.Blur()
-	return nil
+	return m.openModal(ModalConfirmUpgrade)
 }
 
 func (m *Model) rescanManager(source model.Source) tea.Cmd {
@@ -858,12 +856,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.confirmingUpgrade && m.confirmFocus == 0 {
-		var cmd tea.Cmd
-		m.passwordInput, cmd = m.passwordInput.Update(msg)
-		return m, cmd
-	}
-
 	if m.confirmingRemove && m.removeFocus == 1 {
 		var cmd tea.Cmd
 		m.passwordInput, cmd = m.passwordInput.Update(msg)
@@ -921,10 +913,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Clear status message on any non-modal keypress.
 	m.statusMsg = ""
-
-	if m.confirmingUpgrade {
-		return m.handleUpgradeConfirmKey(msg)
-	}
 
 	if m.confirmingRemove {
 		return m.handleRemoveConfirmKey(msg)
@@ -1335,9 +1323,6 @@ func (m Model) View() string {
 	content := b.String()
 
 	// Render overlays on top
-	if m.confirmingUpgrade {
-		return content + "\n" + m.renderUpgradeConfirmOverlay()
-	}
 	if m.confirmingRemove {
 		return content + "\n" + m.renderRemoveConfirmOverlay()
 	}
@@ -1613,7 +1598,6 @@ func extractErrorLines(raw string) string {
 
 func (m *Model) executePendingUpgrade() tea.Cmd {
 	if m.pendingUpgrade == nil {
-		m.confirmingUpgrade = false
 		return nil
 	}
 	req := *m.pendingUpgrade
@@ -1621,7 +1605,6 @@ func (m *Model) executePendingUpgrade() tea.Cmd {
 		req.password = m.passwordInput.Value()
 	}
 	m.pendingUpgrade = nil
-	m.confirmingUpgrade = false
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
@@ -1636,150 +1619,63 @@ func (m *Model) needsSudoPassword() bool {
 	return m.pendingUpgrade != nil && len(m.pendingUpgrade.cmd.Args) > 0 && m.pendingUpgrade.cmd.Args[0] == "sudo"
 }
 
-func (m *Model) handleUpgradeConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := normalizeHotkey(msg.String())
-	hasPwField := m.needsSudoPassword()
-
-	// Password field is focused — let textinput handle typing
-	if hasPwField && m.confirmFocus == 0 {
-		switch key {
-		case "esc":
-			m.cancelUpgradeConfirm()
-			return m, nil
-		case "tab":
-			m.confirmFocus = 1
-			m.passwordInput.Blur()
-			return m, nil
-		case "enter":
-			if m.passwordInput.Value() != "" {
-				m.confirmFocus = 1
-				m.passwordInput.Blur()
-			}
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-			return m, cmd
-		}
-	}
-
-	switch key {
-	case "enter":
-		if m.confirmFocus == 1 { // Yes
-			if hasPwField && m.passwordInput.Value() == "" {
-				m.confirmFocus = 0
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, m.executePendingUpgrade()
-		}
-		// No
-		m.cancelUpgradeConfirm()
-	case "esc":
-		m.cancelUpgradeConfirm()
-	case "tab", "right", "l":
-		if m.confirmFocus == 1 {
-			m.confirmFocus = 2
-		} else {
-			m.confirmFocus = 1
-		}
-	case "shift+tab", "left", "h":
-		if m.confirmFocus == 2 {
-			m.confirmFocus = 1
-		} else if hasPwField {
-			m.confirmFocus = 0
-			m.passwordInput.Focus()
-			return m, textinput.Blink
-		}
-	}
-	return m, nil
-}
-
 func (m *Model) cancelUpgradeConfirm() {
-	m.confirmingUpgrade = false
 	m.pendingUpgrade = nil
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.statusMsg = "upgrade cancelled"
 }
 
-func (m Model) renderUpgradeConfirmOverlay() string {
+// upgradeConfirmBody renders the confirm-upgrade modal body: action summary,
+// optional password field, Yes/No buttons with focus highlight on m.confirmFocus.
+func upgradeConfirmBody(m *Model) string {
 	req := m.pendingUpgrade
 	if req == nil {
 		return ""
 	}
-
 	var b strings.Builder
 	title := "Upgrade"
 	if req.opLabel == "install" {
 		title = "Install"
 	}
-	b.WriteString(StyleOverlayTitle.Render("  Confirm " + title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 40)))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("%s %s (%s)?", title, req.pkg.Name, req.pkg.Source)))
 	b.WriteString("\n\n")
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("  %s %s (%s)?", title, req.pkg.Name, req.pkg.Source)))
-	b.WriteString("\n\n")
-	b.WriteString(StyleDim.Render("  command:"))
+	b.WriteString(StyleDim.Render("command:"))
 	b.WriteString("\n")
-
 	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan)
-	b.WriteString("  " + cmdStyle.Render(req.cmdStr))
+	b.WriteString(cmdStyle.Render(req.cmdStr))
 	b.WriteString("\n")
 
-	overlayHeight := 11
 	needsSudo := len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo"
-
 	if req.privileged {
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
 		if needsSudo {
-			b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+			b.WriteString("\n" + warnStyle.Render("requires elevated privileges"))
 			b.WriteString("\n\n")
 			b.WriteString(m.passwordInput.View())
 			b.WriteString("\n")
-			overlayHeight = 16
 		} else {
-			b.WriteString("\n  " + warnStyle.Render("requires an elevated terminal"))
+			b.WriteString("\n" + warnStyle.Render("requires an elevated terminal"))
 			b.WriteString("\n")
-			overlayHeight = 13
 		}
 	}
 
 	b.WriteString("\n")
-
 	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
-
-	if m.confirmFocus == 1 {
+	switch m.confirmFocus {
+	case 1:
 		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	} else if m.confirmFocus == 2 {
+	case 2:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
-	} else {
+	default:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
-
-	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
-
-	content := b.String()
-
-	cmdLen := len(req.cmdStr) + 8
-	overlayWidth := 48
-	if cmdLen > overlayWidth {
-		overlayWidth = cmdLen
-	}
-	if overlayWidth > m.width-4 {
-		overlayWidth = m.width - 4
-	}
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(m.width, m.height, overlay)
+	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	return b.String()
 }
 
 func isPrivilegedSource(source model.Source) bool {

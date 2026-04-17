@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -494,13 +495,75 @@ func renderThemeModalBody(m *Model) ModalFrameOpts {
 }
 
 func handleUpgradeConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	hasPwField := m.needsSudoPassword()
+
+	// Password field focused: textinput absorbs most keys, but we own tab/enter/esc.
+	if hasPwField && m.confirmFocus == 0 {
+		switch key {
+		case "esc":
+			m.cancelUpgradeConfirm()
+			return m, m.closeModal()
+		case "tab":
+			m.confirmFocus = 1
+			m.passwordInput.Blur()
+			return m, nil
+		case "enter":
+			if m.passwordInput.Value() != "" {
+				m.confirmFocus = 1
+				m.passwordInput.Blur()
+			}
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.passwordInput, cmd = m.passwordInput.Update(msg)
+			return m, cmd
+		}
+	}
+
+	switch key {
+	case "enter":
+		if m.confirmFocus == 1 { // Yes
+			if hasPwField && m.passwordInput.Value() == "" {
+				m.confirmFocus = 0
+				m.passwordInput.Focus()
+				return m, textinput.Blink
+			}
+			return m, tea.Batch(m.closeModal(), m.executePendingUpgrade())
+		}
+		// Yes not focused → treat as No/cancel
+		m.cancelUpgradeConfirm()
 		return m, m.closeModal()
+	case "esc":
+		m.cancelUpgradeConfirm()
+		return m, m.closeModal()
+	case "tab", "right", "l":
+		if m.confirmFocus == 1 {
+			m.confirmFocus = 2
+		} else {
+			m.confirmFocus = 1
+		}
+	case "shift+tab", "left", "h":
+		if m.confirmFocus == 2 {
+			m.confirmFocus = 1
+		} else if hasPwField {
+			m.confirmFocus = 0
+			m.passwordInput.Focus()
+			return m, textinput.Blink
+		}
 	}
 	return m, nil
 }
 func renderUpgradeConfirmModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "CONFIRM UPGRADE", Body: "<pending migration>", Footer: "esc cancel"}
+	title := "CONFIRM UPGRADE"
+	if m.pendingUpgrade != nil && m.pendingUpgrade.opLabel == "install" {
+		title = "CONFIRM INSTALL"
+	}
+	return ModalFrameOpts{
+		Title:  title,
+		Body:   upgradeConfirmBody(m),
+		Footer: "tab cycle · enter confirm · esc cancel",
+	}
 }
 
 func handleRemoveConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {

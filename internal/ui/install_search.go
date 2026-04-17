@@ -264,16 +264,15 @@ func (m *Model) installFromSearch() tea.Cmd {
 		privileged: isPrivilegedSource(pkg.Source),
 		opLabel:    "install",
 	}
-	m.confirmingUpgrade = true
 	m.passwordInput.SetValue("")
 	if needsSudo {
 		m.confirmFocus = 0
 		m.passwordInput.Focus()
-		return textinput.Blink
+		return tea.Batch(m.openModal(ModalConfirmUpgrade), textinput.Blink)
 	}
 	m.confirmFocus = 1
 	m.passwordInput.Blur()
-	return nil
+	return m.openModal(ModalConfirmUpgrade)
 }
 
 func (m Model) renderSearchView(b *strings.Builder) {
