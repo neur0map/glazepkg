@@ -5,6 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/neur0map/glazepkg/internal/config"
 )
 
 // ModalType identifies which modal is currently open. ModalNone means no modal.
@@ -453,13 +455,42 @@ func renderPkgHelpModalBody(m *Model) ModalFrameOpts {
 }
 
 func handleThemeModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	switch key {
+	case "esc", "q":
+		// CRITICAL: revert BEFORE closeModal so the exit animation plays with
+		// the reverted theme, not the previewed one.
+		ApplyTheme(config.ResolveTheme(m.prevThemeID))
+		m.refreshInputStyles()
+		return m, m.closeModal()
+	case "j", "down":
+		if m.themeCursor < len(m.themeList)-1 {
+			m.themeCursor++
+			ApplyTheme(m.themeList[m.themeCursor])
+			m.refreshInputStyles()
+		}
+	case "k", "up":
+		if m.themeCursor > 0 {
+			m.themeCursor--
+			ApplyTheme(m.themeList[m.themeCursor])
+			m.refreshInputStyles()
+		}
+	case "enter":
+		selected := m.themeList[m.themeCursor]
+		ApplyTheme(selected)
+		m.refreshInputStyles()
+		m.appConfig.Appearance.Theme = selected.ID
+		_ = config.Save(m.appConfig)
 		return m, m.closeModal()
 	}
 	return m, nil
 }
 func renderThemeModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "THEME", Body: "<pending migration>", Footer: "esc cancel"}
+	return ModalFrameOpts{
+		Title:  "THEME",
+		Body:   themeBody(m),
+		Footer: "↑↓ preview · enter apply · esc revert",
+	}
 }
 
 func handleUpgradeConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {

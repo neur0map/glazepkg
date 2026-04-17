@@ -257,11 +257,10 @@ type Model struct {
 	updateBanner string
 
 	// Theme picker
-	showThemePicker bool
-	themeCursor     int
-	themeList       []config.Theme
-	prevThemeID     string // for reverting on Esc
-	appConfig       config.Config
+	themeCursor int
+	themeList   []config.Theme
+	prevThemeID string // for reverting on Esc
+	appConfig   config.Config
 
 	// Spinner
 	spinner spinner.Model
@@ -935,37 +934,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleBatchConfirmKey(msg)
 	}
 
-	// Theme picker overlay
-	if m.showThemePicker {
-		switch key {
-		case "esc", "q":
-			// Revert to previous theme
-			ApplyTheme(config.ResolveTheme(m.prevThemeID))
-			m.refreshInputStyles()
-			m.showThemePicker = false
-		case "j", "down":
-			if m.themeCursor < len(m.themeList)-1 {
-				m.themeCursor++
-				ApplyTheme(m.themeList[m.themeCursor])
-				m.refreshInputStyles()
-			}
-		case "k", "up":
-			if m.themeCursor > 0 {
-				m.themeCursor--
-				ApplyTheme(m.themeList[m.themeCursor])
-				m.refreshInputStyles()
-			}
-		case "enter":
-			selected := m.themeList[m.themeCursor]
-			ApplyTheme(selected)
-			m.refreshInputStyles()
-			m.appConfig.Appearance.Theme = selected.ID
-			_ = config.Save(m.appConfig)
-			m.showThemePicker = false
-		}
-		return m, nil
-	}
-
 	// Edit mode intercepts keys
 	if m.editingDesc {
 		switch key {
@@ -1140,7 +1108,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "m":
 		m.toggleMultiSelect()
 	case "t":
-		m.openThemePicker()
+		return m, m.openThemePicker()
 	case " ":
 		if m.multiSelect {
 			m.toggleSelection()
@@ -1197,7 +1165,9 @@ func (m *Model) handleDiffKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) openThemePicker() {
+// openThemePicker initializes theme list and prevThemeID, then opens ModalTheme.
+// Returns the animation-tick Cmd from openModal.
+func (m *Model) openThemePicker() tea.Cmd {
 	// Build theme list: System first, then all named themes
 	systemTheme := config.Theme{
 		ID:      "system",
@@ -1214,7 +1184,7 @@ func (m *Model) openThemePicker() {
 			break
 		}
 	}
-	m.showThemePicker = true
+	return m.openModal(ModalTheme)
 }
 
 // refreshInputStyles updates text input and spinner styles after a theme change.
@@ -1373,9 +1343,6 @@ func (m Model) View() string {
 	}
 	if m.confirmingBatch {
 		return content + "\n" + m.renderBatchConfirmOverlay()
-	}
-	if m.showThemePicker {
-		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
 	}
 
 	return m.renderModal(content)
