@@ -203,7 +203,6 @@ type Model struct {
 	modalSpring  harmonica.Spring
 
 	// Overlays
-	showHelp          bool
 	showExport        bool
 	exportCursor      int
 	showDeps          bool
@@ -941,12 +940,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleBatchConfirmKey(msg)
 	}
 
-	// Help overlay intercepts all keys
-	if m.showHelp {
-		m.showHelp = false
-		return m, nil
-	}
-
 	// Export overlay has its own cursor
 	if m.showExport {
 		switch key {
@@ -1093,7 +1086,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.filterInput.Focus()
 		return m, textinput.Blink
 	case "?", "h":
-		m.showHelp = true
+		return m, m.openModal(ModalHelp)
 	case "tab":
 		if len(m.tabs) == 0 {
 			return m, nil
@@ -1466,9 +1459,6 @@ func (m Model) View() string {
 	}
 	if m.confirmingBatch {
 		return content + "\n" + m.renderBatchConfirmOverlay()
-	}
-	if m.showHelp {
-		return content + "\n" + renderHelpOverlay(m.width, m.height)
 	}
 	if m.showExport {
 		return content + "\n" + renderExportOverlay(m.exportCursor, m.width, m.height)

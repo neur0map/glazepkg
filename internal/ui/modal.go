@@ -338,7 +338,11 @@ func handleHelpModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, m.closeModal()
 }
 func renderHelpModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "HELP", Body: "<pending migration>", Footer: "any key close"}
+	return ModalFrameOpts{
+		Title:  "HELP",
+		Body:   helpBody(),
+		Footer: "any key close",
+	}
 }
 
 func handleExportModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
