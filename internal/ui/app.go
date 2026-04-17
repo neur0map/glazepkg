@@ -812,6 +812,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pkgHelpMsg:
 		m.pkgHelpLines = msg.lines
 		m.pkgHelpScroll = 0
+		m.statusMsg = "" // clear "loading help..." set at trigger
 		return m, m.openModal(ModalPkgHelp)
 
 	case snapshotSavedMsg:
