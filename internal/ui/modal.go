@@ -346,13 +346,29 @@ func renderHelpModalBody(m *Model) ModalFrameOpts {
 }
 
 func handleExportModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	switch key {
+	case "esc", "q":
 		return m, m.closeModal()
+	case "j", "down":
+		if m.exportCursor < len(exportFormats)-1 {
+			m.exportCursor++
+		}
+	case "k", "up":
+		if m.exportCursor > 0 {
+			m.exportCursor--
+		}
+	case "enter":
+		return m, tea.Batch(m.closeModal(), doExport(m.allPkgs, m.exportCursor))
 	}
 	return m, nil
 }
 func renderExportModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "EXPORT", Body: "<pending migration>", Footer: "esc cancel"}
+	return ModalFrameOpts{
+		Title:  "EXPORT PACKAGES",
+		Body:   exportBody(m),
+		Footer: "↑↓ pick · enter export · esc cancel",
+	}
 }
 
 func handleDepsModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {

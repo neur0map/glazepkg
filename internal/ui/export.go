@@ -14,35 +14,24 @@ import (
 
 var exportFormats = []string{"Text", "JSON"}
 
-func renderExportOverlay(cursor, width, height int) string {
+// exportBody returns the two-row format picker with cursor highlight on
+// m.exportCursor. Pure content — no title, no frame.
+func exportBody(m *Model) string {
 	var b strings.Builder
-	b.WriteString(StyleOverlayTitle.Render("  Export Packages"))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 30)))
-	b.WriteString("\n\n")
-
 	for i, format := range exportFormats {
 		prefix := "  "
 		style := StyleNormal
-		if i == cursor {
+		if i == m.exportCursor {
 			prefix = StyleSelected.Render(" > ")
 			style = StyleSelected
 		}
 		b.WriteString(prefix)
 		b.WriteString(style.Render(format))
-		b.WriteString("\n")
+		if i < len(exportFormats)-1 {
+			b.WriteString("\n")
+		}
 	}
-
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  Enter: export  Esc: cancel"))
-
-	content := b.String()
-	overlay := StyleOverlay.
-		Width(36).
-		Height(8).
-		Render(content)
-
-	return placeOverlay(width, height, overlay)
+	return b.String()
 }
 
 func exportPackages(pkgs []model.Package, format int) (string, error) {

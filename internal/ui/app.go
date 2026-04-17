@@ -203,7 +203,6 @@ type Model struct {
 	modalSpring  harmonica.Spring
 
 	// Overlays
-	showExport        bool
 	exportCursor      int
 	depsCursor        int
 	pkgHelpLines      []string
@@ -852,7 +851,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case exportDoneMsg:
-		m.showExport = false
 		if msg.err != nil {
 			m.statusMsg = "export error: " + msg.err.Error()
 		} else {
@@ -935,25 +933,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if m.confirmingBatch {
 		return m.handleBatchConfirmKey(msg)
-	}
-
-	// Export overlay has its own cursor
-	if m.showExport {
-		switch key {
-		case "esc", "q":
-			m.showExport = false
-		case "j", "down":
-			if m.exportCursor < len(exportFormats)-1 {
-				m.exportCursor++
-			}
-		case "k", "up":
-			if m.exportCursor > 0 {
-				m.exportCursor--
-			}
-		case "enter":
-			return m, doExport(m.allPkgs, m.exportCursor)
-		}
-		return m, nil
 	}
 
 	// Theme picker overlay
@@ -1154,8 +1133,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.statusMsg = "computing diff..."
 		return m, computeDiff(m.allPkgs)
 	case "e":
-		m.showExport = true
 		m.exportCursor = 0
+		return m, m.openModal(ModalExport)
 	case "i":
 		return m, m.enterSearchView()
 	case "m":
@@ -1394,9 +1373,6 @@ func (m Model) View() string {
 	}
 	if m.confirmingBatch {
 		return content + "\n" + m.renderBatchConfirmOverlay()
-	}
-	if m.showExport {
-		return content + "\n" + renderExportOverlay(m.exportCursor, m.width, m.height)
 	}
 	if m.showThemePicker {
 		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
