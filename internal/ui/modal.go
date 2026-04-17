@@ -567,13 +567,100 @@ func renderUpgradeConfirmModalBody(m *Model) ModalFrameOpts {
 }
 
 func handleRemoveConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	hasDeep := m.pendingRemove != nil && m.pendingRemove.deepCmd != nil
+	hasPw := m.removeNeedsSudo()
+
+	// Zone 0: Mode selector (only when hasDeep)
+	if hasDeep && m.removeFocus == 0 {
+		switch key {
+		case "esc":
+			m.cancelRemoveConfirm()
+			return m, m.closeModal()
+		case "j", "down":
+			if m.removeMode == 0 {
+				m.removeMode = 1
+			}
+		case "k", "up":
+			if m.removeMode == 1 {
+				m.removeMode = 0
+			}
+		case "tab", "enter":
+			if hasPw {
+				m.removeFocus = 1
+				m.passwordInput.Focus()
+				return m, textinput.Blink
+			}
+			m.removeFocus = 2
+		}
+		return m, nil
+	}
+
+	// Zone 1: Password field (textinput absorbs most keys)
+	if hasPw && m.removeFocus == 1 {
+		switch key {
+		case "esc":
+			m.cancelRemoveConfirm()
+			return m, m.closeModal()
+		case "tab":
+			m.removeFocus = 2
+			m.passwordInput.Blur()
+			return m, nil
+		case "enter":
+			if m.passwordInput.Value() != "" {
+				m.removeFocus = 2
+				m.passwordInput.Blur()
+			}
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.passwordInput, cmd = m.passwordInput.Update(msg)
+			return m, cmd
+		}
+	}
+
+	// Zones 2/3: Yes / No buttons
+	switch key {
+	case "enter":
+		if m.removeFocus == 2 { // Yes
+			if hasPw && m.passwordInput.Value() == "" {
+				m.removeFocus = 1
+				m.passwordInput.Focus()
+				return m, textinput.Blink
+			}
+			return m, tea.Batch(m.closeModal(), m.executeRemove())
+		}
+		// No focused
+		m.cancelRemoveConfirm()
 		return m, m.closeModal()
+	case "esc":
+		m.cancelRemoveConfirm()
+		return m, m.closeModal()
+	case "tab", "right", "l":
+		if m.removeFocus == 2 {
+			m.removeFocus = 3
+		} else {
+			m.removeFocus = 2
+		}
+	case "shift+tab", "left", "h":
+		if m.removeFocus == 3 {
+			m.removeFocus = 2
+		} else if hasPw {
+			m.removeFocus = 1
+			m.passwordInput.Focus()
+			return m, textinput.Blink
+		} else if hasDeep {
+			m.removeFocus = 0
+		}
 	}
 	return m, nil
 }
 func renderRemoveConfirmModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "CONFIRM REMOVE", Body: "<pending migration>", Footer: "esc cancel"}
+	return ModalFrameOpts{
+		Title:  "CONFIRM REMOVE",
+		Body:   removeConfirmBody(m),
+		Footer: "tab cycle · enter confirm · esc cancel",
+	}
 }
 
 func handleBatchConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {

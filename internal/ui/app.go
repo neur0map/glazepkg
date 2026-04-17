@@ -203,29 +203,28 @@ type Model struct {
 	modalSpring  harmonica.Spring
 
 	// Overlays
-	exportCursor      int
-	depsCursor        int
-	pkgHelpLines      []string
-	pkgHelpScroll     int
-	confirmFocus      int // 0 = password (privileged only), 1 = Yes, 2 = No
-	pendingUpgrade    *upgradeRequest
-	passwordInput     textinput.Model
-	upgradeInFlight   bool
-	upgradingPkgName  string
-	upgradeCancel     context.CancelFunc
-	upgradeNotifMsg   string
-	upgradeNotifErr   bool
+	exportCursor     int
+	depsCursor       int
+	pkgHelpLines     []string
+	pkgHelpScroll    int
+	confirmFocus     int // 0 = password (privileged only), 1 = Yes, 2 = No
+	pendingUpgrade   *upgradeRequest
+	passwordInput    textinput.Model
+	upgradeInFlight  bool
+	upgradingPkgName string
+	upgradeCancel    context.CancelFunc
+	upgradeNotifMsg  string
+	upgradeNotifErr  bool
 
 	// Remove
-	confirmingRemove bool
-	removeFocus      int // 0 = mode, 1 = password, 2 = Yes, 3 = No
-	removeMode       int // 0 = package only, 1 = package + deps
-	pendingRemove    *removeRequest
-	removeInFlight   bool
-	removingPkgName  string
-	removeCancel     context.CancelFunc
-	removeNotifMsg   string
-	removeNotifErr   bool
+	removeFocus     int // 0 = mode, 1 = password, 2 = Yes, 3 = No
+	removeMode      int // 0 = package only, 1 = package + deps
+	pendingRemove   *removeRequest
+	removeInFlight  bool
+	removingPkgName string
+	removeCancel    context.CancelFunc
+	removeNotifMsg  string
+	removeNotifErr  bool
 
 	// Search + Install
 	searchInput     textinput.Model
@@ -856,12 +855,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.confirmingRemove && m.removeFocus == 1 {
-		var cmd tea.Cmd
-		m.passwordInput, cmd = m.passwordInput.Update(msg)
-		return m, cmd
-	}
-
 	if m.confirmingBatch && m.batchFocus == 0 {
 		var cmd tea.Cmd
 		m.passwordInput, cmd = m.passwordInput.Update(msg)
@@ -913,10 +906,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Clear status message on any non-modal keypress.
 	m.statusMsg = ""
-
-	if m.confirmingRemove {
-		return m.handleRemoveConfirmKey(msg)
-	}
 
 	if m.confirmingBatch {
 		return m.handleBatchConfirmKey(msg)
@@ -1323,9 +1312,6 @@ func (m Model) View() string {
 	content := b.String()
 
 	// Render overlays on top
-	if m.confirmingRemove {
-		return content + "\n" + m.renderRemoveConfirmOverlay()
-	}
 	if m.confirmingBatch {
 		return content + "\n" + m.renderBatchConfirmOverlay()
 	}
@@ -1729,7 +1715,6 @@ func (m *Model) removeDetailPackage() tea.Cmd {
 	}
 
 	m.pendingRemove = req
-	m.confirmingRemove = true
 	m.removeMode = 0
 	m.passwordInput.SetValue("")
 
@@ -1737,21 +1722,22 @@ func (m *Model) removeDetailPackage() tea.Cmd {
 	hasDeep := req.deepCmd != nil
 
 	if hasDeep {
-		m.removeFocus = 0 // mode selector
-	} else if needsSudo {
-		m.removeFocus = 1 // password
-		m.passwordInput.Focus()
-		return textinput.Blink
-	} else {
-		m.removeFocus = 2 // Yes
+		m.removeFocus = 0
+		m.passwordInput.Blur()
+		return m.openModal(ModalConfirmRemove)
 	}
+	if needsSudo {
+		m.removeFocus = 1
+		m.passwordInput.Focus()
+		return tea.Batch(m.openModal(ModalConfirmRemove), textinput.Blink)
+	}
+	m.removeFocus = 2
 	m.passwordInput.Blur()
-	return nil
+	return m.openModal(ModalConfirmRemove)
 }
 
 func (m *Model) executeRemove() tea.Cmd {
 	if m.pendingRemove == nil {
-		m.confirmingRemove = false
 		return nil
 	}
 	req := *m.pendingRemove
@@ -1767,7 +1753,6 @@ func (m *Model) executeRemove() tea.Cmd {
 	}
 
 	m.pendingRemove = nil
-	m.confirmingRemove = false
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.removeInFlight = true
@@ -1801,7 +1786,6 @@ func (m *Model) runRemoveRequest(req removeRequest) tea.Cmd {
 }
 
 func (m *Model) cancelRemoveConfirm() {
-	m.confirmingRemove = false
 	m.pendingRemove = nil
 	m.removeMode = 0
 	m.passwordInput.SetValue("")
@@ -1813,108 +1797,19 @@ func (m *Model) removeNeedsSudo() bool {
 	return m.pendingRemove != nil && len(m.pendingRemove.cmd.Args) > 0 && m.pendingRemove.cmd.Args[0] == "sudo"
 }
 
-func (m *Model) handleRemoveConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := normalizeHotkey(msg.String())
-	hasDeep := m.pendingRemove != nil && m.pendingRemove.deepCmd != nil
-	hasPw := m.removeNeedsSudo()
-
-	// Mode selector focused
-	if hasDeep && m.removeFocus == 0 {
-		switch key {
-		case "esc":
-			m.cancelRemoveConfirm()
-			return m, nil
-		case "j", "down":
-			if m.removeMode == 0 {
-				m.removeMode = 1
-			}
-		case "k", "up":
-			if m.removeMode == 1 {
-				m.removeMode = 0
-			}
-		case "tab", "enter":
-			if hasPw {
-				m.removeFocus = 1
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			m.removeFocus = 2
-		}
-		return m, nil
-	}
-
-	// Password field focused
-	if hasPw && m.removeFocus == 1 {
-		switch key {
-		case "esc":
-			m.cancelRemoveConfirm()
-			return m, nil
-		case "tab":
-			m.removeFocus = 2
-			m.passwordInput.Blur()
-			return m, nil
-		case "enter":
-			if m.passwordInput.Value() != "" {
-				m.removeFocus = 2
-				m.passwordInput.Blur()
-			}
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-			return m, cmd
-		}
-	}
-
-	// Yes/No buttons
-	switch key {
-	case "enter":
-		if m.removeFocus == 2 { // Yes
-			if hasPw && m.passwordInput.Value() == "" {
-				m.removeFocus = 1
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, m.executeRemove()
-		}
-		m.cancelRemoveConfirm()
-	case "esc":
-		m.cancelRemoveConfirm()
-	case "tab", "right", "l":
-		if m.removeFocus == 2 {
-			m.removeFocus = 3
-		} else {
-			m.removeFocus = 2
-		}
-	case "shift+tab", "left", "h":
-		if m.removeFocus == 3 {
-			m.removeFocus = 2
-		} else if hasPw {
-			m.removeFocus = 1
-			m.passwordInput.Focus()
-			return m, textinput.Blink
-		} else if hasDeep {
-			m.removeFocus = 0
-		}
-	}
-	return m, nil
-}
-
-func (m Model) renderRemoveConfirmOverlay() string {
+// removeConfirmBody renders the confirm-remove modal body: optional
+// DeepRemover mode selector, orphaned-deps preview + conflicts, command
+// preview, optional password field, and Yes/No buttons with focus highlight
+// driven by m.removeFocus / m.removeMode.
+func removeConfirmBody(m *Model) string {
 	req := m.pendingRemove
 	if req == nil {
 		return ""
 	}
 
 	var b strings.Builder
-	b.WriteString(StyleOverlayTitle.Render("  Confirm Remove"))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("Remove %s (%s)?", req.pkg.Name, req.pkg.Source)))
 	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 40)))
-	b.WriteString("\n\n")
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("  Remove %s (%s)?", req.pkg.Name, req.pkg.Source)))
-	b.WriteString("\n")
-
-	overlayHeight := 11
 
 	// RequiredBy warning
 	if len(req.pkg.RequiredBy) > 0 {
@@ -1923,15 +1818,14 @@ func (m Model) renderRemoveConfirmOverlay() string {
 		if len(reqList) > 60 {
 			reqList = reqList[:60] + "..."
 		}
-		b.WriteString("\n  " + warnStyle.Render("⚠ required by: "+reqList))
+		b.WriteString("\n" + warnStyle.Render("⚠ required by: "+reqList))
 		b.WriteString("\n")
-		overlayHeight += 2
 	}
 
 	// Mode selector (DeepRemover only)
 	if req.deepCmd != nil {
 		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  mode:"))
+		b.WriteString(StyleDim.Render("mode:"))
 		b.WriteString("\n")
 
 		modeStyle0 := StyleNormal
@@ -1950,25 +1844,23 @@ func (m Model) renderRemoveConfirmOverlay() string {
 			prefix1 = "› "
 		}
 
-		b.WriteString("  " + modeStyle0.Render(prefix0+"Remove package only"))
+		b.WriteString(modeStyle0.Render(prefix0 + "Remove package only"))
 		b.WriteString("\n")
-		b.WriteString("  " + modeStyle1.Render(prefix1+"Remove package + orphaned deps"))
+		b.WriteString(modeStyle1.Render(prefix1 + "Remove package + orphaned deps"))
 		b.WriteString("\n")
-		overlayHeight += 5
 
 		// Show orphaned deps when deep remove selected
 		if m.removeMode == 1 && len(req.pkg.DependsOn) > 0 {
 			b.WriteString("\n")
-			b.WriteString(StyleDim.Render("  orphaned deps to remove:"))
+			b.WriteString(StyleDim.Render("orphaned deps to remove:"))
 			b.WriteString("\n")
 			depStyle := lipgloss.NewStyle().Foreground(ColorSubtext)
 			depList := strings.Join(req.pkg.DependsOn, ", ")
 			if len(depList) > 60 {
 				depList = depList[:60] + "..."
 			}
-			b.WriteString("  " + depStyle.Render("  "+depList))
+			b.WriteString(depStyle.Render("  " + depList))
 			b.WriteString("\n")
-			overlayHeight += 3
 
 			// Flag deps still required by other packages
 			var conflicts []string
@@ -1988,11 +1880,9 @@ func (m Model) renderRemoveConfirmOverlay() string {
 					if len(c) > 60 {
 						c = c[:60] + "..."
 					}
-					b.WriteString("\n  " + warnStyle.Render("⚠ "+c))
-					overlayHeight++
+					b.WriteString("\n" + warnStyle.Render("⚠ "+c))
 				}
 				b.WriteString("\n")
-				overlayHeight++
 			}
 		}
 	}
@@ -2003,28 +1893,24 @@ func (m Model) renderRemoveConfirmOverlay() string {
 		cmdStr = req.deepCmdStr
 	}
 	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  command:"))
+	b.WriteString(StyleDim.Render("command:"))
 	b.WriteString("\n")
 	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan)
-	b.WriteString("  " + cmdStyle.Render(cmdStr))
+	b.WriteString(cmdStyle.Render(cmdStr))
 	b.WriteString("\n")
-	overlayHeight += 3
 
 	needsSudo := len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo"
 
 	if req.privileged {
+		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
 		if needsSudo {
-			warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-			b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+			b.WriteString("\n" + warnStyle.Render("requires elevated privileges"))
 			b.WriteString("\n\n")
 			b.WriteString(m.passwordInput.View())
 			b.WriteString("\n")
-			overlayHeight += 4
 		} else {
-			warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-			b.WriteString("\n  " + warnStyle.Render("requires an elevated terminal"))
+			b.WriteString("\n" + warnStyle.Render("requires an elevated terminal"))
 			b.WriteString("\n")
-			overlayHeight += 2
 		}
 	}
 
@@ -2033,36 +1919,21 @@ func (m Model) renderRemoveConfirmOverlay() string {
 	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 
-	if m.removeFocus == 2 {
+	switch m.removeFocus {
+	case 2:
 		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	} else if m.removeFocus == 3 {
+	case 3:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
-	} else {
+	default:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
 
-	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
 
-	content := b.String()
-
-	cmdLen := len(cmdStr) + 8
-	overlayWidth := 48
-	if cmdLen > overlayWidth {
-		overlayWidth = cmdLen
-	}
-	if overlayWidth > m.width-4 {
-		overlayWidth = m.width - 4
-	}
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(m.width, m.height, overlay)
+	return b.String()
 }
 
 func renderOpNotification(msg string, isErr, inFlight bool, opLabel, spinnerView string) string {
