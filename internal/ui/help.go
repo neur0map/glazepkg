@@ -51,32 +51,3 @@ func helpBody() string {
 	b.WriteString(StyleDim.Render("RU layout maps to same key positions"))
 	return b.String()
 }
-
-func placeOverlay(width, height int, overlay string) string {
-	overlayW := lipgloss.Width(overlay)
-	overlayH := lipgloss.Height(overlay)
-
-	padLeft := (width - overlayW) / 2
-	padTop := (height - overlayH) / 2
-
-	if padLeft < 0 {
-		padLeft = 0
-	}
-	if padTop < 0 {
-		padTop = 0
-	}
-
-	var b strings.Builder
-	for range padTop {
-		b.WriteString("\n")
-	}
-
-	lines := strings.Split(overlay, "\n")
-	for _, line := range lines {
-		b.WriteString(strings.Repeat(" ", padLeft))
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-
-	return b.String()
-}
