@@ -1060,10 +1060,16 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "?", "h":
 		m.showHelp = true
 	case "tab":
+		if len(m.tabs) == 0 {
+			return m, nil
+		}
 		m.activeTab = (m.activeTab + 1) % len(m.tabs)
 		m.cursor = 0
 		m.applyFilter()
 	case "shift+tab":
+		if len(m.tabs) == 0 {
+			return m, nil
+		}
 		m.activeTab--
 		if m.activeTab < 0 {
 			m.activeTab = len(m.tabs) - 1
