@@ -94,6 +94,8 @@ func (m *Model) mergeSearchResults(pkgs []model.Package) {
 		return m.searchResults[i].name < m.searchResults[j].name
 	})
 
+	m.searchResults = rankGroupsByName(m.searchResults, m.searchInput.Value())
+
 	for i := range m.searchResults {
 		entries := m.searchResults[i].entries
 		sort.Slice(entries, func(a, b int) bool {
