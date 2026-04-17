@@ -596,17 +596,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			target = 0.0
 		}
 		m.modalAnim, m.modalAnimVel = m.modalSpring.Update(m.modalAnim, m.modalAnimVel, target)
-		if modalAnimSettled(m.modalAnim, m.modalAnimVel, target) {
-			if m.modalOpening {
-				m.modalAnim = 1.0
-				return m, nil
-			}
+
+		// Short-circuit close: as soon as the modal overshoots past 0, it's
+		// visually gone. Stop the tick chain immediately — any further spring
+		// oscillation around 0 is invisible and wastes CPU.
+		if !m.modalOpening && m.modalAnim <= 0 {
 			m.modal = ModalNone
 			m.modalAnim = 0
 			m.modalAnimVel = 0
 			m.resetTransientModalState()
 			return m, nil
 		}
+
+		// Short-circuit open: once the modal reaches full size, stop ticking.
+		// clipModalByAnim clamps anim>=1 to the full box, so any continued
+		// oscillation would be visually invisible but CPU-costly.
+		if m.modalOpening && m.modalAnim >= 1.0 {
+			m.modalAnim = 1.0
+			return m, nil
+		}
+
 		return m, modalAnimTick()
 	case upgradeResultMsg:
 		m.upgradeInFlight = false

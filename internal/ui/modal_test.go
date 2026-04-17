@@ -65,7 +65,8 @@ func TestOverlay_DimsBase(t *testing.T) {
 	base := strings.Repeat("abc\n", 4) + "abc"
 	top := "XX\nXX"
 	out := Overlay(base, top, 3, 5)
-	if !strings.Contains(out, "\x1b[38;5;238m") {
+	// Dim is applied with color 244 — match that ANSI escape.
+	if !strings.Contains(out, "\x1b[38;5;244m") {
 		t.Error("Overlay did not apply dim foreground to base")
 	}
 }

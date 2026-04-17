@@ -170,7 +170,7 @@ func Overlay(base, top string, width, height int) string {
 	}
 	baseLines = baseLines[:height]
 
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	dim := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 	for i, line := range baseLines {
 		plain := stripAnsi(line)
 		if w := lipgloss.Width(plain); w < width {
