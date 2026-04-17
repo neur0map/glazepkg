@@ -51,23 +51,6 @@ func (s pkgSearchSource) Len() int {
 	return len(s.pkgs)
 }
 
-// fuzzyFilter returns packages matching the query using fuzzy matching.
-// If query is empty, returns all packages.
-func fuzzyFilter(pkgs []model.Package, query string) []model.Package {
-	if query == "" {
-		return pkgs
-	}
-
-	source := pkgSearchSource{pkgs: pkgs}
-	matches := fuzzy.FindFrom(query, source)
-
-	result := make([]model.Package, 0, len(matches))
-	for _, m := range matches {
-		result = append(result, pkgs[m.Index])
-	}
-	return result
-}
-
 // rankPackages returns pkgs matching query, ordered by:
 //
 //	tier 1: name has query as a case-insensitive prefix
@@ -106,10 +89,9 @@ func rankPackages(pkgs []model.Package, query string) []model.Package {
 	}
 
 	// Fuzzy fallback: no strict match anywhere, so run the library fuzzy
-	// matcher over "Name Description" as the previous implementation did.
-	// Pass the original query (not the trimmed/lowered q); fuzzy.FindFrom
-	// handles case internally and this preserves behavior parity with the
-	// pre-change fuzzyFilter.
+	// matcher over "Name Description" for typo tolerance. Pass the raw
+	// query, not the trimmed/lowered q — fuzzy.FindFrom handles case
+	// folding internally.
 	source := pkgSearchSource{pkgs: pkgs}
 	matches := fuzzy.FindFrom(query, source)
 	out := make([]model.Package, 0, len(matches))

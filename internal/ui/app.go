@@ -1339,8 +1339,8 @@ func (m *Model) applyFilter() {
 		tabFiltered = append(matched, unknown...)
 	}
 
-	// Then apply fuzzy search
-	m.filteredPkgs = fuzzyFilter(tabFiltered, query)
+	// Then apply ranked search (name prefix > name contains > description, with fuzzy fallback)
+	m.filteredPkgs = rankPackages(tabFiltered, query)
 
 	if m.cursor >= len(m.filteredPkgs) {
 		m.cursor = max(0, len(m.filteredPkgs)-1)
