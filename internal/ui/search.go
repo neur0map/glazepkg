@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/sahilm/fuzzy"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -9,6 +11,35 @@ import (
 // pkgSearchSource implements fuzzy.Source for package fuzzy matching.
 type pkgSearchSource struct {
 	pkgs []model.Package
+}
+
+// matchTier describes how well a package matches a query.
+// Lower-valued tiers rank higher in search results.
+type matchTier int
+
+const (
+	tierPrefix   matchTier = iota // name has query as a prefix
+	tierContains                  // name contains query but not as a prefix
+	tierDesc                      // description contains query
+	tierNone                      // no match
+)
+
+// classifyMatch returns the best tier for (name, desc) against query.
+// All three arguments must already be lowercased.
+func classifyMatch(loweredName, loweredDesc, loweredQuery string) matchTier {
+	if loweredQuery == "" {
+		return tierNone
+	}
+	if strings.HasPrefix(loweredName, loweredQuery) {
+		return tierPrefix
+	}
+	if strings.Contains(loweredName, loweredQuery) {
+		return tierContains
+	}
+	if strings.Contains(loweredDesc, loweredQuery) {
+		return tierDesc
+	}
+	return tierNone
 }
 
 func (s pkgSearchSource) String(i int) string {
