@@ -1254,7 +1254,7 @@ func (m Model) View() string {
 	case viewList:
 		m.renderListView(&b)
 	case viewDetail:
-		b.WriteString(renderDetail(m.detailPkg, m.editingDesc, m.descInput.View()))
+		b.WriteString(renderDetail(&m))
 	case viewDiff:
 		b.WriteString(renderDiffView(m.currentDiff, m.diffSince))
 	case viewSearch:
@@ -1302,11 +1302,15 @@ func (m Model) View() string {
 		b.WriteString("\n  " + renderOpNotification(m.removeNotifMsg, m.removeNotifErr, m.removeInFlight, "REMOVE", m.spinner.View()))
 	}
 
-	// Status bar
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
-	b.WriteString("\n")
-	b.WriteString(m.renderStatusBar())
+	// Status bar. The detail view owns its own keybind bar (pinned to the
+	// bottom inside renderDetail), so we skip the status bar and its
+	// separator rule in that view to avoid duplicate hints.
+	if m.view != viewDetail {
+		b.WriteString("\n")
+		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
+		b.WriteString("\n")
+		b.WriteString(m.renderStatusBar())
+	}
 
 	content := b.String()
 

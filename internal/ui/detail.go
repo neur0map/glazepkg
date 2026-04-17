@@ -9,22 +9,158 @@ import (
 	"github.com/neur0map/glazepkg/internal/model"
 )
 
-func renderDetail(pkg model.Package, editing bool, descInput string) string {
-	var b strings.Builder
+// renderDetail builds the package detail view as a bordered-panel layout.
+// The whole string returned is the full body of the detail view — the
+// top title bar is rendered by View(); renderDetail owns everything below
+// that, including the bottom keybind bar.
+func renderDetail(m *Model) string {
+	pkg := m.detailPkg
+	w, h := m.width, m.height
 
-	// Header
-	title := fmt.Sprintf("  ← %s", pkg.Name)
+	borderColor := ColorSubtext
+	accentColor := ColorBlue
+
+	// Inner panel style (Info / Description / Depends / Required-by).
+	innerPanel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1)
+
+	// Figure out how wide the outer panel should be and how much of that
+	// the inner panels can consume. The outer panel has border (2) + padding
+	// (4) = 6 cols of chrome. Inner panels, when side-by-side, share a 2-col
+	// gutter between them. Each inner panel has its own border (2) + padding
+	// (2) = 4 cols of chrome.
+	outerMaxW := w - 6 // leave 3 cols of horizontal margin on each side
+	if outerMaxW < 40 {
+		outerMaxW = 40
+	}
+	if outerMaxW > 92 {
+		outerMaxW = 92
+	}
+	outerInnerW := outerMaxW - 6 // content area inside outer panel
+
+	// Panel widths for side-by-side layout.
+	sideBySide := w >= 80
+	var panelW int
+	if sideBySide {
+		panelW = (outerInnerW - 2) / 2 // 2-col gutter
+		if panelW < 24 {
+			panelW = 24
+		}
+	} else {
+		panelW = outerInnerW
+		if panelW < 24 {
+			panelW = 24
+		}
+	}
+	// Inner content width inside each panel = panelW - border(2) - padding(2).
+	bodyW := panelW - 4
+	if bodyW < 16 {
+		bodyW = 16
+	}
+
+	header := headerLine(pkg, accentColor, outerInnerW)
+
+	infoPanel := innerPanel.Width(panelW).Render(infoBody(pkg, accentColor, bodyW))
+	descPanel := innerPanel.Width(panelW).Render(descBody(m, accentColor, bodyW))
+	depsPanel := innerPanel.Width(panelW).Render(depsInlineBody(pkg.DependsOn, "Depends on", accentColor, bodyW))
+	reqByPanel := innerPanel.Width(panelW).Render(depsInlineBody(pkg.RequiredBy, "Required by", accentColor, bodyW))
+
+	var row1, row2 string
+	if sideBySide {
+		row1 = lipgloss.JoinHorizontal(lipgloss.Top, infoPanel, "  ", descPanel)
+		row2 = lipgloss.JoinHorizontal(lipgloss.Top, depsPanel, "  ", reqByPanel)
+	} else {
+		row1 = lipgloss.JoinVertical(lipgloss.Left, infoPanel, "", descPanel)
+		row2 = lipgloss.JoinVertical(lipgloss.Left, depsPanel, "", reqByPanel)
+	}
+
+	// Optional update banner, sits between header and row1.
+	blocks := []string{header, ""}
+	if pkg.LatestVersion != "" && pkg.LatestVersion != pkg.Version {
+		updateLine := fmt.Sprintf("↑ Update available: %s → %s", pkg.Version, pkg.LatestVersion)
+		blocks = append(blocks, StyleUpdateBanner.Render(updateLine), "")
+	}
+	blocks = append(blocks, row1, "", row2)
+	innerContent := lipgloss.JoinVertical(lipgloss.Left, blocks...)
+
+	outerPanel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderColor).
+		Padding(1, 2).
+		Render(innerContent)
+
+	// Center the outer panel horizontally.
+	outerWidth := lipgloss.Width(outerPanel)
+	centerPad := (w - outerWidth) / 2
+	if centerPad < 0 {
+		centerPad = 0
+	}
+	pad := strings.Repeat(" ", centerPad)
+	var centered strings.Builder
+	lines := strings.Split(outerPanel, "\n")
+	for i, line := range lines {
+		centered.WriteString(pad)
+		centered.WriteString(line)
+		if i < len(lines)-1 {
+			centered.WriteString("\n")
+		}
+	}
+	content := centered.String()
+
+	// Pin the keybind bar to the bottom of the terminal.
+	keybinds := detailKeybinds(m)
+
+	// Budget: 1 row for the title bar (already consumed by View before us),
+	// 1 blank line after the title (also consumed), 1 row for keybinds at
+	// the bottom. That leaves (h - 3) rows for our content.
+	contentHeight := lipgloss.Height(content)
+	available := h - 3
+	if available < 0 {
+		available = 0
+	}
+	fill := available - contentHeight
+	if fill < 0 {
+		fill = 0
+	}
+
+	var out strings.Builder
+	out.WriteString(content)
+	if fill > 0 {
+		out.WriteString(strings.Repeat("\n", fill))
+	}
+	out.WriteString("\n")
+	out.WriteString(keybinds)
+
+	return out.String()
+}
+
+// headerLine renders "← <name>" left-aligned with the source badge right-aligned.
+func headerLine(pkg model.Package, accent lipgloss.TerminalColor, width int) string {
+	nameStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
+	name := nameStyle.Render("← " + pkg.Name)
 	badge := RenderBadge(pkg.Source)
-	b.WriteString(StyleNormal.Bold(true).Render(title))
-	b.WriteString(strings.Repeat(" ", max(2, 60-len(title)-8)))
-	b.WriteString(badge)
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 75)))
-	b.WriteString("\n\n")
 
-	hasUpdate := pkg.LatestVersion != "" && pkg.LatestVersion != pkg.Version
+	gap := width - lipgloss.Width(name) - lipgloss.Width(badge)
+	if gap < 2 {
+		gap = 2
+	}
+	return name + strings.Repeat(" ", gap) + badge
+}
 
-	// Fields
+// infoBody renders the metadata field list inside the Info panel.
+func infoBody(pkg model.Package, accent lipgloss.TerminalColor, bodyW int) string {
+	title := lipgloss.NewStyle().Foreground(accent).Bold(true).Render("Info")
+
+	keyStyle := lipgloss.NewStyle().Foreground(ColorSubtext).Width(11)
+	valStyle := lipgloss.NewStyle().Foreground(ColorText)
+
+	valW := bodyW - 11
+	if valW < 8 {
+		valW = 8
+	}
+
 	fields := []struct {
 		key string
 		val string
@@ -34,46 +170,124 @@ func renderDetail(pkg model.Package, editing bool, descInput string) string {
 		{"Installed", formatInstalled(pkg)},
 		{"Location", pkg.Location},
 		{"Size", pkg.Size},
-		{"Depends on", formatListShort(pkg.DependsOn)},
-		{"Required by", formatListShort(pkg.RequiredBy)},
 	}
 
+	var rows []string
 	for _, f := range fields {
 		if f.val == "" {
 			continue
 		}
-		b.WriteString("  ")
-		b.WriteString(StyleDetailKey.Render(f.key))
-		b.WriteString(StyleDetailVal.Render(f.val))
-		b.WriteString("\n")
+		val := truncateToWidth(f.val, valW)
+		rows = append(rows, keyStyle.Render(f.key)+valStyle.Render(val))
+	}
+	if len(rows) == 0 {
+		rows = append(rows, StyleDim.Render("(no metadata)"))
 	}
 
-	// Update available banner
-	if hasUpdate {
-		b.WriteString("\n")
-		updateLine := fmt.Sprintf("  ↑ Update available: %s → %s", pkg.Version, pkg.LatestVersion)
-		b.WriteString(StyleUpdateBanner.Render(updateLine))
-		b.WriteString("\n")
-	}
+	return title + "\n" + strings.Join(rows, "\n")
+}
 
-	// Description field (always shown)
-	if editing {
-		b.WriteString("  ")
-		b.WriteString(descInput)
-		b.WriteString("\n")
-	} else if pkg.Description != "" {
-		b.WriteString("  ")
-		b.WriteString(StyleDetailKey.Render("Description"))
-		b.WriteString(StyleDetailVal.Render(pkg.Description))
-		b.WriteString("\n")
+// descBody renders the description (or the edit input when editing).
+func descBody(m *Model, accent lipgloss.TerminalColor, bodyW int) string {
+	pkg := m.detailPkg
+	title := lipgloss.NewStyle().Foreground(accent).Bold(true).Render("Description")
+	if m.editingDesc {
+		return title + "\n" + m.descInput.View()
+	}
+	body := pkg.Description
+	if body == "" {
+		body = StyleDim.Render("(none) — press e to add")
 	} else {
-		b.WriteString("  ")
-		b.WriteString(StyleDetailKey.Render("Description"))
-		b.WriteString(StyleDim.Render("(none) — press e to add"))
-		b.WriteString("\n")
+		body = lipgloss.NewStyle().Foreground(ColorText).Width(bodyW).Render(body)
+	}
+	return title + "\n" + body
+}
+
+// depsInlineBody renders a "Depends on (N)" or "Required by (N)" section
+// with the first handful of items listed inline. Shows "—" for empty lists.
+func depsInlineBody(items []string, label string, accent lipgloss.TerminalColor, bodyW int) string {
+	title := lipgloss.NewStyle().Foreground(accent).Bold(true).Render(fmt.Sprintf("%s (%d)", label, len(items)))
+	if len(items) == 0 {
+		return title + "\n" + StyleDim.Render("—")
 	}
 
-	return b.String()
+	const maxVisible = 5
+	visible := items
+	if len(visible) > maxVisible {
+		visible = visible[:maxVisible]
+	}
+	valStyle := lipgloss.NewStyle().Foreground(ColorText)
+
+	var lines []string
+	for _, item := range visible {
+		lines = append(lines, valStyle.Render(truncateToWidth(item, bodyW)))
+	}
+	body := strings.Join(lines, "\n")
+	if len(items) > maxVisible {
+		body += "\n" + StyleDim.Render(fmt.Sprintf("…and %d more", len(items)-maxVisible))
+	}
+	return title + "\n" + body
+}
+
+// detailKeybinds returns the bottom keybind hint bar used in the detail view.
+// Adapts to editingDesc / modal state so it replaces the status-bar hints
+// entirely for viewDetail.
+func detailKeybinds(m *Model) string {
+	keyStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(ColorText)
+
+	var pairs []struct{ key, desc string }
+	switch {
+	case m.editingDesc:
+		pairs = []struct{ key, desc string }{
+			{"enter", "save"}, {"esc", "cancel"},
+		}
+	case m.modal == ModalPkgHelp:
+		pairs = []struct{ key, desc string }{
+			{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
+		}
+	case m.modal == ModalDeps:
+		pairs = []struct{ key, desc string }{
+			{"j/k", "navigate"}, {"esc", "close"},
+		}
+	default:
+		pairs = []struct{ key, desc string }{
+			{"u", "upgrade"},
+			{"x", "remove"},
+			{"e", "edit"},
+			{"d", "deps"},
+			{"h", "help"},
+			{"esc", "back"},
+			{"q", "quit"},
+		}
+	}
+
+	var parts []string
+	for _, p := range pairs {
+		parts = append(parts, keyStyle.Render(p.key)+descStyle.Render(" "+p.desc))
+	}
+	return " " + strings.Join(parts, "   ")
+}
+
+// truncateToWidth clips a plain string (no ANSI) to n columns, appending an
+// ellipsis if truncated. Safe for field values that don't contain styling.
+func truncateToWidth(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= n {
+		return s
+	}
+	if n == 1 {
+		return "…"
+	}
+	// Byte-based truncation is fine for the values we pass (paths, versions,
+	// simple identifiers). Multibyte characters are rare here.
+	runes := []rune(s)
+	if len(runes) > n-1 {
+		runes = runes[:n-1]
+	}
+	return string(runes) + "…"
 }
 
 func formatSource(pkg model.Package) string {
