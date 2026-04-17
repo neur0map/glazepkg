@@ -94,14 +94,17 @@ func (m *Model) mergeSearchResults(pkgs []model.Package) {
 		return m.searchResults[i].name < m.searchResults[j].name
 	})
 
-	m.searchResults = rankGroupsByName(m.searchResults, m.searchInput.Value())
-
 	for i := range m.searchResults {
 		entries := m.searchResults[i].entries
 		sort.Slice(entries, func(a, b int) bool {
 			return compareVersions(entries[a].Version, entries[b].Version) > 0
 		})
 	}
+
+	// Reorder groups by tier relevance to the current query. Runs after the
+	// per-group version sort so the description tier classifies against the
+	// highest-version entry.
+	m.searchResults = rankGroupsByName(m.searchResults, m.searchInput.Value())
 }
 
 func (m *Model) handleSearchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

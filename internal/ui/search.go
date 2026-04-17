@@ -105,6 +105,12 @@ func rankPackages(pkgs []model.Package, query string) []model.Package {
 // rankPackages, but never drops groups. Non-matching groups are appended at
 // the end in their original order. An empty or whitespace-only query returns
 // groups unchanged.
+//
+// Unlike rankPackages, this function has no fuzzy fallback: install-search
+// results come from managers' own relevance ranking (aliases, tags, stemmed
+// matches) and must not be silently removed client-side. A fuzzy fallback
+// would only reorder the non-matching "other" bucket in a less predictable
+// way.
 func rankGroupsByName(groups []searchResultGroup, query string) []searchResultGroup {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
