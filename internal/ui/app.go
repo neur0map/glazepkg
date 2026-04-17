@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/neur0map/glazepkg/internal/config"
@@ -193,6 +194,13 @@ type Model struct {
 	batchPassword   string
 	batchOpLabel    string
 	batchCtx        context.Context
+
+	// Modal subsystem — see internal/ui/modal.go.
+	modal        ModalType
+	modalAnim    float64
+	modalAnimVel float64
+	modalOpening bool
+	modalSpring  harmonica.Spring
 
 	// Overlays
 	showHelp          bool
@@ -587,6 +595,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
+
+	case modalAnimTickMsg:
+		if m.modal == ModalNone {
+			return m, nil
+		}
+		target := 1.0
+		if !m.modalOpening {
+			target = 0.0
+		}
+		m.modalAnim, m.modalAnimVel = m.modalSpring.Update(m.modalAnim, m.modalAnimVel, target)
+		if modalAnimSettled(m.modalAnim, m.modalAnimVel, target) {
+			if m.modalOpening {
+				m.modalAnim = 1.0
+				return m, nil
+			}
+			m.modal = ModalNone
+			m.modalAnim = 0
+			m.modalAnimVel = 0
+			m.resetTransientModalState()
+			return m, nil
+		}
+		return m, modalAnimTick()
 	case upgradeResultMsg:
 		m.upgradeInFlight = false
 		m.upgradingPkgName = ""
@@ -878,9 +908,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := normalizeHotkey(msg.String())
 
-	// Clear status message on any keypress
-	m.statusMsg = ""
-
 	// Quit — cancel any in-flight upgrade first
 	if key == "ctrl+c" {
 		if m.upgradeCancel != nil {
@@ -893,6 +920,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Quit
 	}
+
+	// Modal guard: a modal absorbs all input while open.
+	if m.modal != ModalNone {
+		return m.handleModalKey(msg)
+	}
+
+	// Clear status message on any non-modal keypress.
+	m.statusMsg = ""
 
 	if m.confirmingUpgrade {
 		return m.handleUpgradeConfirmKey(msg)
@@ -1448,7 +1483,7 @@ func (m Model) View() string {
 		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
 	}
 
-	return content
+	return m.renderModal(content)
 }
 
 func (m Model) renderListView(b *strings.Builder) {
