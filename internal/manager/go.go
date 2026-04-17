@@ -49,31 +49,40 @@ func (g *Go) RemoveCmd(name string) *exec.Cmd {
 	return exec.Command("rm", filepath.Join(goBinDir(), name))
 }
 
+// Describe reads the main module import path embedded in each installed
+// binary using `go version -m`. Reliable because every Go binary built since
+// Go 1.12 carries BuildInfo, whereas `go doc <name>` rarely resolves for
+// installed binaries (their source is not necessarily cached).
 func (g *Go) Describe(pkgs []model.Package) map[string]string {
-	descs := make(map[string]string)
+	binDir := goBinDir()
+	descs := make(map[string]string, len(pkgs))
 	for _, pkg := range pkgs {
-		// Best-effort: run `go doc <name>` and grab the first non-empty comment line
-		out, err := exec.Command("go", "doc", pkg.Name).Output()
-		if err != nil {
-			continue
-		}
-		// The package doc comment is typically the first paragraph of output.
-		// Take the first non-empty line that doesn't start with "package" or "func".
-		for _, line := range strings.Split(string(out), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if strings.HasPrefix(line, "package ") || strings.HasPrefix(line, "func ") ||
-				strings.HasPrefix(line, "var ") || strings.HasPrefix(line, "type ") ||
-				strings.HasPrefix(line, "const ") {
-				continue
-			}
-			descs[pkg.Name] = line
-			break
+		if desc := goBinaryModulePath(filepath.Join(binDir, pkg.Name)); desc != "" {
+			descs[pkg.Name] = desc
 		}
 	}
 	return descs
+}
+
+// goBinaryModulePath returns the main module import path for a Go binary at
+// path, or "" if the binary is not a Go binary or `go` is not installed.
+// Parses the "path" line from `go version -m`:
+//
+//	<path>: go1.21.0
+//		path	github.com/foo/bar/cmd/baz
+//		mod	github.com/foo/bar	v1.2.3	h1:...
+func goBinaryModulePath(path string) string {
+	out, err := exec.Command("go", "version", "-m", path).Output()
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "path" {
+			return fields[1]
+		}
+	}
+	return ""
 }
 
 func (g *Go) UpgradeCmd(name string) *exec.Cmd {

@@ -2,7 +2,10 @@ package manager
 
 import (
 	"bufio"
+	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,19 +59,50 @@ func (b *Bun) RemoveCmd(name string) *exec.Cmd {
 	return exec.Command("bun", "remove", "-g", name)
 }
 
+// Describe reads package descriptions from the package.json that bun installs
+// alongside each global package. Offline — no npm CLI or network required.
 func (b *Bun) Describe(pkgs []model.Package) map[string]string {
-	descs := make(map[string]string)
+	dir := bunGlobalNodeModulesDir()
+	if dir == "" {
+		return nil
+	}
+	descs := make(map[string]string, len(pkgs))
 	for _, pkg := range pkgs {
-		out, err := exec.Command("npm", "info", pkg.Name, "description").Output()
-		if err != nil {
-			continue
-		}
-		desc := strings.TrimSpace(string(out))
-		if desc != "" {
+		if desc := bunLocalDescription(dir, pkg.Name); desc != "" {
 			descs[pkg.Name] = desc
 		}
 	}
 	return descs
+}
+
+// bunGlobalNodeModulesDir returns the path to bun's global node_modules.
+// It honors $BUN_INSTALL when set, otherwise falls back to ~/.bun.
+func bunGlobalNodeModulesDir() string {
+	root := os.Getenv("BUN_INSTALL")
+	if root == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		root = filepath.Join(home, ".bun")
+	}
+	return filepath.Join(root, "install", "global", "node_modules")
+}
+
+// bunLocalDescription reads the "description" field from the installed
+// package.json under the global node_modules directory.
+func bunLocalDescription(nodeModulesDir, name string) string {
+	data, err := os.ReadFile(filepath.Join(nodeModulesDir, name, "package.json"))
+	if err != nil {
+		return ""
+	}
+	var meta struct {
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.Description)
 }
 
 func (b *Bun) UpgradeCmd(name string) *exec.Cmd {
