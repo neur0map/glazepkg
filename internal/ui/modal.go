@@ -664,11 +664,73 @@ func renderRemoveConfirmModalBody(m *Model) ModalFrameOpts {
 }
 
 func handleBatchConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "esc" {
+	key := normalizeHotkey(msg.String())
+	hasPw := m.batchNeedsSudo()
+
+	// Password field focused
+	if hasPw && m.batchFocus == 0 {
+		switch key {
+		case "esc":
+			m.cancelBatchConfirm()
+			return m, m.closeModal()
+		case "tab":
+			m.batchFocus = 1
+			m.passwordInput.Blur()
+			return m, nil
+		case "enter":
+			if m.passwordInput.Value() != "" {
+				m.batchFocus = 1
+				m.passwordInput.Blur()
+			}
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.passwordInput, cmd = m.passwordInput.Update(msg)
+			return m, cmd
+		}
+	}
+
+	// Yes/No buttons
+	switch key {
+	case "enter":
+		if m.batchFocus == 1 { // Yes
+			if hasPw && m.passwordInput.Value() == "" {
+				m.batchFocus = 0
+				m.passwordInput.Focus()
+				return m, textinput.Blink
+			}
+			return m, tea.Batch(m.closeModal(), m.executeBatch())
+		}
+		m.cancelBatchConfirm()
 		return m, m.closeModal()
+	case "esc":
+		m.cancelBatchConfirm()
+		return m, m.closeModal()
+	case "tab", "right", "l":
+		if m.batchFocus == 1 {
+			m.batchFocus = 2
+		} else {
+			m.batchFocus = 1
+		}
+	case "shift+tab", "left", "h":
+		if m.batchFocus == 2 {
+			m.batchFocus = 1
+		} else if hasPw {
+			m.batchFocus = 0
+			m.passwordInput.Focus()
+			return m, textinput.Blink
+		}
 	}
 	return m, nil
 }
 func renderBatchConfirmModalBody(m *Model) ModalFrameOpts {
-	return ModalFrameOpts{Title: "CONFIRM BATCH", Body: "<pending migration>", Footer: "esc cancel"}
+	title := "CONFIRM BATCH"
+	if m.pendingBatch != nil {
+		title = "CONFIRM BATCH " + strings.ToUpper(m.pendingBatch.op)
+	}
+	return ModalFrameOpts{
+		Title:  title,
+		Body:   batchConfirmBody(m),
+		Footer: "tab cycle · enter confirm · esc cancel",
+	}
 }

@@ -160,7 +160,6 @@ type batchConfirmState struct {
 
 func (m *Model) showBatchConfirm(ops []batchOp, op string, skipped []string) tea.Cmd {
 	m.pendingBatch = &batchConfirmState{ops: ops, op: op, skipped: skipped}
-	m.confirmingBatch = true
 
 	// Check if any ops need sudo
 	needsSudo := false
@@ -175,69 +174,11 @@ func (m *Model) showBatchConfirm(ops []batchOp, op string, skipped []string) tea
 	if needsSudo {
 		m.batchFocus = 0 // password
 		m.passwordInput.Focus()
-		return textinput.Blink
+		return tea.Batch(m.openModal(ModalConfirmBatch), textinput.Blink)
 	}
 	m.batchFocus = 1 // Yes
 	m.passwordInput.Blur()
-	return nil
-}
-
-func (m *Model) handleBatchConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := normalizeHotkey(msg.String())
-	hasPw := m.batchNeedsSudo()
-
-	// Password field focused
-	if hasPw && m.batchFocus == 0 {
-		switch key {
-		case "esc":
-			m.cancelBatchConfirm()
-			return m, nil
-		case "tab":
-			m.batchFocus = 1
-			m.passwordInput.Blur()
-			return m, nil
-		case "enter":
-			if m.passwordInput.Value() != "" {
-				m.batchFocus = 1
-				m.passwordInput.Blur()
-			}
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-			return m, cmd
-		}
-	}
-
-	switch key {
-	case "enter":
-		if m.batchFocus == 1 { // Yes
-			if hasPw && m.passwordInput.Value() == "" {
-				m.batchFocus = 0
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, m.executeBatch()
-		}
-		m.cancelBatchConfirm()
-	case "esc":
-		m.cancelBatchConfirm()
-	case "tab", "right", "l":
-		if m.batchFocus == 1 {
-			m.batchFocus = 2
-		} else {
-			m.batchFocus = 1
-		}
-	case "shift+tab", "left", "h":
-		if m.batchFocus == 2 {
-			m.batchFocus = 1
-		} else if hasPw {
-			m.batchFocus = 0
-			m.passwordInput.Focus()
-			return m, textinput.Blink
-		}
-	}
-	return m, nil
+	return m.openModal(ModalConfirmBatch)
 }
 
 func (m *Model) batchNeedsSudo() bool {
@@ -253,7 +194,6 @@ func (m *Model) batchNeedsSudo() bool {
 }
 
 func (m *Model) cancelBatchConfirm() {
-	m.confirmingBatch = false
 	m.pendingBatch = nil
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
@@ -262,7 +202,6 @@ func (m *Model) cancelBatchConfirm() {
 
 func (m *Model) executeBatch() tea.Cmd {
 	if m.pendingBatch == nil {
-		m.confirmingBatch = false
 		return nil
 	}
 	batch := *m.pendingBatch
@@ -272,7 +211,6 @@ func (m *Model) executeBatch() tea.Cmd {
 	}
 
 	m.pendingBatch = nil
-	m.confirmingBatch = false
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
@@ -396,22 +334,17 @@ func (m *Model) handleBatchProgress(msg batchProgressMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) renderBatchConfirmOverlay() string {
+// batchConfirmBody renders the body of ModalConfirmBatch. Pure content.
+// ModalFrame owns the title row and outer framing.
+func batchConfirmBody(m *Model) string {
 	batch := m.pendingBatch
 	if batch == nil {
 		return ""
 	}
 
 	var b strings.Builder
-	title := "Batch " + strings.Title(batch.op)
-	b.WriteString(StyleOverlayTitle.Render("  " + title))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("%s %d packages?", strings.Title(batch.op), len(batch.ops))))
 	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 44)))
-	b.WriteString("\n\n")
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("  %s %d packages?", strings.Title(batch.op), len(batch.ops))))
-	b.WriteString("\n")
-
-	overlayHeight := 11
 
 	// Group by privilege
 	var privPkgs, unprivPkgs []batchOp
@@ -426,7 +359,7 @@ func (m Model) renderBatchConfirmOverlay() string {
 	if len(privPkgs) > 0 {
 		b.WriteString("\n")
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-		b.WriteString("  " + warnStyle.Render("privileged (1 password for all):"))
+		b.WriteString(warnStyle.Render("privileged (1 password for all):"))
 		b.WriteString("\n")
 		// Group by source
 		bySource := make(map[model.Source][]string)
@@ -438,15 +371,13 @@ func (m Model) renderBatchConfirmOverlay() string {
 			if len(nameList) > 50 {
 				nameList = nameList[:50] + "..."
 			}
-			b.WriteString(fmt.Sprintf("    %s: %s\n", src, nameList))
-			overlayHeight++
+			b.WriteString(fmt.Sprintf("  %s: %s\n", src, nameList))
 		}
-		overlayHeight += 2
 	}
 
 	if len(unprivPkgs) > 0 {
 		b.WriteString("\n")
-		b.WriteString("  " + StyleDim.Render("unprivileged:"))
+		b.WriteString(StyleDim.Render("unprivileged:"))
 		b.WriteString("\n")
 		bySource := make(map[model.Source][]string)
 		for _, o := range unprivPkgs {
@@ -457,27 +388,23 @@ func (m Model) renderBatchConfirmOverlay() string {
 			if len(nameList) > 50 {
 				nameList = nameList[:50] + "..."
 			}
-			b.WriteString(fmt.Sprintf("    %s: %s\n", src, nameList))
-			overlayHeight++
+			b.WriteString(fmt.Sprintf("  %s: %s\n", src, nameList))
 		}
-		overlayHeight += 2
 	}
 
 	if len(batch.skipped) > 0 {
 		b.WriteString("\n")
-		b.WriteString("  " + StyleDim.Render(fmt.Sprintf("skipped (%d): %s", len(batch.skipped), strings.Join(batch.skipped, ", "))))
+		b.WriteString(StyleDim.Render(fmt.Sprintf("skipped (%d): %s", len(batch.skipped), strings.Join(batch.skipped, ", "))))
 		b.WriteString("\n")
-		overlayHeight += 2
 	}
 
 	// Password
 	if m.batchNeedsSudo() {
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-		b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+		b.WriteString("\n" + warnStyle.Render("requires elevated privileges"))
 		b.WriteString("\n\n")
 		b.WriteString(m.passwordInput.View())
 		b.WriteString("\n")
-		overlayHeight += 4
 	}
 
 	b.WriteString("\n")
@@ -496,18 +423,7 @@ func (m Model) renderBatchConfirmOverlay() string {
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
 
-	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
 
-	content := b.String()
-	overlayWidth := 52
-	if overlayWidth > m.width-4 {
-		overlayWidth = m.width - 4
-	}
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(m.width, m.height, overlay)
+	return b.String()
 }

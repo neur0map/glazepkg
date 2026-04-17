@@ -185,7 +185,6 @@ type Model struct {
 	// Multi-select
 	multiSelect     bool
 	selections      map[string]bool
-	confirmingBatch bool
 	batchFocus      int // 0 = password, 1 = Yes, 2 = No
 	pendingBatch    *batchConfirmState
 	batchLog        []batchProgressMsg
@@ -855,12 +854,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.confirmingBatch && m.batchFocus == 0 {
-		var cmd tea.Cmd
-		m.passwordInput, cmd = m.passwordInput.Update(msg)
-		return m, cmd
-	}
-
 	if m.view == viewSearch && m.searchInput.Focused() {
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
@@ -906,10 +899,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Clear status message on any non-modal keypress.
 	m.statusMsg = ""
-
-	if m.confirmingBatch {
-		return m.handleBatchConfirmKey(msg)
-	}
 
 	// Edit mode intercepts keys
 	if m.editingDesc {
@@ -1310,11 +1299,6 @@ func (m Model) View() string {
 	b.WriteString(m.renderStatusBar())
 
 	content := b.String()
-
-	// Render overlays on top
-	if m.confirmingBatch {
-		return content + "\n" + m.renderBatchConfirmOverlay()
-	}
 
 	return m.renderModal(content)
 }
