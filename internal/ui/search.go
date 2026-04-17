@@ -100,3 +100,39 @@ func rankPackages(pkgs []model.Package, query string) []model.Package {
 	}
 	return out
 }
+
+// rankGroupsByName reorders search-result groups by the same tier rules as
+// rankPackages, but never drops groups. Non-matching groups are appended at
+// the end in their original order. An empty or whitespace-only query returns
+// groups unchanged.
+func rankGroupsByName(groups []searchResultGroup, query string) []searchResultGroup {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return groups
+	}
+
+	var prefix, contains, desc, other []searchResultGroup
+	for _, g := range groups {
+		var d string
+		if len(g.entries) > 0 {
+			d = g.entries[0].Description
+		}
+		switch classifyMatch(strings.ToLower(g.name), strings.ToLower(d), q) {
+		case tierPrefix:
+			prefix = append(prefix, g)
+		case tierContains:
+			contains = append(contains, g)
+		case tierDesc:
+			desc = append(desc, g)
+		default:
+			other = append(other, g)
+		}
+	}
+
+	out := make([]searchResultGroup, 0, len(groups))
+	out = append(out, prefix...)
+	out = append(out, contains...)
+	out = append(out, desc...)
+	out = append(out, other...)
+	return out
+}
