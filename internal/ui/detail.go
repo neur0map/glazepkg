@@ -253,10 +253,12 @@ func detailKeybinds(m *Model) string {
 		}
 	default:
 		// Mirror the capability checks the key handler uses, so we don't
-		// advertise keys that the current package can't actually act on
-		// (e.g. showing "u upgrade" for a manager with no Upgrader impl,
-		// or "d deps" on a package with no dependency data).
-		if mgr := manager.BySource(m.detailPkg.Source); mgr != nil {
+		// advertise keys that the current package can't actually act on:
+		// hide u/x when the manager lacks the interface OR is currently
+		// unavailable (the handler would otherwise bail out with a
+		// "not available" status message), and hide d when there is no
+		// dependency data to show.
+		if mgr := manager.BySource(m.detailPkg.Source); mgr != nil && mgr.Available() {
 			if _, ok := mgr.(manager.Upgrader); ok {
 				pairs = append(pairs, struct{ key, desc string }{"u", "upgrade"})
 			}
