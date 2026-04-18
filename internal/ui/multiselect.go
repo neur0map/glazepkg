@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -355,7 +356,7 @@ func batchConfirmBody(m *Model) string {
 	}
 
 	// --- Header (always visible) ---
-	header := StyleNormal.Render(fmt.Sprintf("%s %d packages?", strings.Title(batch.op), len(batch.ops)))
+	header := StyleNormal.Render(fmt.Sprintf("%s %d packages?", batchOpTitle(batch.op), len(batch.ops)))
 
 	// --- Package list (scrollable region) ---
 	var privPkgs, unprivPkgs []batchOp
@@ -372,13 +373,7 @@ func batchConfirmBody(m *Model) string {
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
 		listBuf.WriteString(warnStyle.Render("privileged (1 password for all):"))
 		listBuf.WriteString("\n")
-		bySource := make(map[model.Source][]string)
-		for _, o := range privPkgs {
-			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
-		}
-		for src, names := range bySource {
-			listBuf.WriteString(formatSourceNameList(string(src), names, wrapW))
-		}
+		writeSortedSourceLists(&listBuf, privPkgs, wrapW)
 	}
 	if len(unprivPkgs) > 0 {
 		if listBuf.Len() > 0 {
@@ -386,13 +381,7 @@ func batchConfirmBody(m *Model) string {
 		}
 		listBuf.WriteString(StyleDim.Render("unprivileged:"))
 		listBuf.WriteString("\n")
-		bySource := make(map[model.Source][]string)
-		for _, o := range unprivPkgs {
-			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
-		}
-		for src, names := range bySource {
-			listBuf.WriteString(formatSourceNameList(string(src), names, wrapW))
-		}
+		writeSortedSourceLists(&listBuf, unprivPkgs, wrapW)
 	}
 	if len(batch.skipped) > 0 {
 		if listBuf.Len() > 0 {
@@ -502,6 +491,41 @@ func sliceScrollable(lines []string, scroll, maxH int) (visible []string, scroll
 	return visible, scrollHint
 }
 
+
+// batchOpTitle returns the Title-Case label for a known batch op verb.
+// Avoids strings.Title (deprecated in Go 1.18+) for a small closed set of
+// values we control.
+func batchOpTitle(op string) string {
+	switch op {
+	case "upgrade":
+		return "Upgrade"
+	case "remove":
+		return "Remove"
+	default:
+		return op
+	}
+}
+
+// writeSortedSourceLists groups ops by manager source, then writes them in
+// a deterministic order: sources alphabetical, names alphabetical within
+// each source. Needed because ranging over the intermediate map would
+// otherwise shuffle the package list between renders.
+func writeSortedSourceLists(buf *strings.Builder, ops []batchOp, wrapW int) {
+	bySource := make(map[model.Source][]string)
+	for _, o := range ops {
+		bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
+	}
+	sources := make([]model.Source, 0, len(bySource))
+	for src := range bySource {
+		sources = append(sources, src)
+	}
+	sort.Slice(sources, func(i, j int) bool { return string(sources[i]) < string(sources[j]) })
+	for _, src := range sources {
+		names := bySource[src]
+		sort.Strings(names)
+		buf.WriteString(formatSourceNameList(string(src), names, wrapW))
+	}
+}
 
 // formatSourceNameList renders "  <src>: a, b, c, d" with continuation lines
 // indented to align under the first name so long package lists wrap cleanly
