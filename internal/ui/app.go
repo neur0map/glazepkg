@@ -1416,9 +1416,12 @@ func (m Model) View() string {
 	}
 
 	// Status bar. Detail and search views own their own keybind bar (centered
-	// inside their render functions), so we skip the status bar and its
-	// separator rule in those views to avoid duplicate hints.
-	if m.view != viewDetail && m.view != viewSearch {
+	// inside their render functions), so we skip the keybind help in those
+	// views to avoid duplicate hints — but still show m.statusMsg if one is
+	// set, otherwise transient messages (operation errors, progress) silently
+	// disappear while the user is looking at a package detail or search.
+	showKeybinds := m.view != viewDetail && m.view != viewSearch
+	if showKeybinds || m.statusMsg != "" {
 		b.WriteString("\n")
 		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
 		b.WriteString("\n")
