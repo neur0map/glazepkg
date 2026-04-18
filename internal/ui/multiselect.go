@@ -436,11 +436,14 @@ func batchConfirmBody(m *Model) string {
 	footer := footerBuf.String()
 
 	// --- Compose with scroll ---
-	// Budget: ModalFrame adds ~5 rows of chrome (title + top/bottom borders +
-	// footer separator+row), leave a little margin on top/bottom.
+	// Budget breakdown: ModalFrame adds 4 rows of chrome (top border +
+	// footer separator + footer row + bottom border); composition adds 1
+	// blank row between header and list. maxListH is the upper bound on
+	// list region height (including the scroll hint line when shown) — so
+	// the modal grows until the list has no more room, then scrolls.
 	headerH := lipgloss.Height(header)
 	footerH := lipgloss.Height(footer)
-	chromeH := 5 + 4 // frame chrome + vertical margin
+	const chromeH = 5 // modal chrome (4) + blank row between header & list (1)
 	maxListH := m.height - headerH - footerH - chromeH
 	if maxListH < 3 {
 		maxListH = 3
