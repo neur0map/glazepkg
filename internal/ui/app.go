@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -52,6 +54,32 @@ type scanDoneMsg struct {
 	pkgs      []model.Package
 	err       error
 	fromCache bool
+}
+
+// scanStartMsg announces how many managers will be scanned concurrently.
+// Only emitted for live scans (cache hits skip straight to scanDoneMsg).
+type scanStartMsg struct {
+	total int
+}
+
+// scanManagerDoneMsg reports the result of a single manager's scan. One is
+// emitted per available manager during a live scan. When all have arrived
+// the Update handler synthesizes a scanDoneMsg to finalize.
+type scanManagerDoneMsg struct {
+	source model.Source
+	pkgs   []model.Package
+	err    error
+}
+
+// titleTickMsg advances the title typewriter animation by one character.
+type titleTickMsg struct{}
+
+// titleTick returns a command that fires titleTickMsg after the typewriter
+// delay — tuned so the full "GlazePKG" reveals in ~300ms.
+func titleTick() tea.Cmd {
+	return tea.Tick(35*time.Millisecond, func(time.Time) tea.Msg {
+		return titleTickMsg{}
+	})
 }
 
 type snapshotSavedMsg struct {
@@ -261,6 +289,22 @@ type Model struct {
 
 	// Spinner
 	spinner spinner.Model
+
+	// Help (footer keybinds rendered by bubbles/help).
+	help help.Model
+
+	// Scan progress — populated while a live scan is in flight. Reset to
+	// zero when the scan ends (cache hits skip the progress bar entirely).
+	progress       progress.Model
+	scanTotal      int
+	scanCompleted  int
+	scanAccum      []model.Package
+	scanCurrentMgr string
+
+	// Title intro animation. `titleReveal` is the number of characters of
+	// "GlazePKG" currently visible; tea.Tick increments it on mount until
+	// the full title is shown, then stops.
+	titleReveal int
 }
 
 func NewModel(version string) Model {
@@ -299,9 +343,24 @@ func NewModel(version string) Model {
 	si := textinput.New()
 	si.Placeholder = "search packages..."
 	si.CharLimit = 64
-	si.Prompt = "  search: "
+	si.Prompt = "search: "
 	si.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
 	si.TextStyle = StyleNormal
+
+	pr := progress.New(
+		progress.WithGradient(string(ColorBlue), string(ColorCyan)),
+		progress.WithoutPercentage(),
+	)
+
+	hp := help.New()
+	hp.ShortSeparator = "  "
+	hp.FullSeparator = "   "
+	hp.Styles.ShortKey = lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+	hp.Styles.ShortDesc = lipgloss.NewStyle().Foreground(ColorText)
+	hp.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(ColorSubtext)
+	hp.Styles.FullKey = hp.Styles.ShortKey
+	hp.Styles.FullDesc = hp.Styles.ShortDesc
+	hp.Styles.FullSeparator = hp.Styles.ShortSeparator
 
 	return Model{
 		appConfig:     cfg,
@@ -310,6 +369,8 @@ func NewModel(version string) Model {
 		filterInput:   ti,
 		descInput:     di,
 		passwordInput: pi,
+		help:          hp,
+		progress:      pr,
 		view:          viewList,
 		scanning:      true,
 		descCache:     manager.NewDescriptionCache(),
@@ -321,7 +382,7 @@ func NewModel(version string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, loadOrScan, checkForUpdate(m.version))
+	return tea.Batch(m.spinner.Tick, loadOrScan, checkForUpdate(m.version), titleTick())
 }
 
 func checkForUpdate(currentVersion string) tea.Cmd {
@@ -337,41 +398,56 @@ func checkForUpdate(currentVersion string) tea.Cmd {
 	}
 }
 
-// loadOrScan tries the scan cache first; if fresh, returns cached packages instantly.
-// Otherwise does a full live scan and saves the result to cache.
+// loadOrScan tries the scan cache first; if fresh, returns a cached scanDoneMsg
+// instantly. Otherwise it falls through to the live concurrent scan path.
 func loadOrScan() tea.Msg {
 	if cached := manager.LoadScanCache(); cached != nil {
 		return scanDoneMsg{pkgs: cached, fromCache: true}
 	}
-	return freshScan()
+	return scanStartMsg{total: availableManagerCount()}
 }
 
-func freshScan() tea.Msg {
-	managers := manager.All()
-	var all []model.Package
+// availableManagerCount returns how many managers will actually run during
+// a live scan, used to size the progress bar.
+func availableManagerCount() int {
+	n := 0
+	for _, mgr := range manager.All() {
+		if mgr.Available() {
+			n++
+		}
+	}
+	return n
+}
 
-	for _, mgr := range managers {
+// scanManagerCmds returns one command per available manager. Each command
+// runs the manager's Scan and emits a scanManagerDoneMsg when finished, so
+// the UI can update progress as results arrive.
+func scanManagerCmds() []tea.Cmd {
+	var cmds []tea.Cmd
+	for _, mgr := range manager.All() {
 		if !mgr.Available() {
 			continue
 		}
-		pkgs, err := mgr.Scan()
-		if err != nil {
-			continue
-		}
-		all = append(all, pkgs...)
+		m := mgr
+		cmds = append(cmds, func() tea.Msg {
+			pkgs, err := m.Scan()
+			return scanManagerDoneMsg{source: m.Name(), pkgs: pkgs, err: err}
+		})
 	}
+	return cmds
+}
 
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].Name < all[j].Name
-	})
-
-	manager.SaveScanCache(all)
-	return scanDoneMsg{pkgs: all}
+// startFreshScan emits the start message followed by per-manager scan commands.
+func startFreshScan() tea.Cmd {
+	cmds := append([]tea.Cmd{func() tea.Msg {
+		return scanStartMsg{total: availableManagerCount()}
+	}}, scanManagerCmds()...)
+	return tea.Batch(cmds...)
 }
 
 // forceRescan always does a live scan, ignoring cache.
 func forceRescan() tea.Msg {
-	return freshScan()
+	return scanStartMsg{total: availableManagerCount()}
 }
 
 func saveSnapshot(pkgs []model.Package) tea.Cmd {
@@ -744,8 +820,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = fmt.Sprintf("refreshed %s packages", msg.source)
 		return m, nil
 
+	case scanStartMsg:
+		m.scanning = true
+		m.scanTotal = msg.total
+		m.scanCompleted = 0
+		m.scanAccum = m.scanAccum[:0]
+		m.scanCurrentMgr = ""
+		return m, tea.Batch(scanManagerCmds()...)
+
+	case scanManagerDoneMsg:
+		if msg.err == nil {
+			m.scanAccum = append(m.scanAccum, msg.pkgs...)
+		}
+		m.scanCompleted++
+		m.scanCurrentMgr = string(msg.source)
+		if m.scanCompleted >= m.scanTotal {
+			pkgs := m.scanAccum
+			m.scanAccum = nil
+			return m, func() tea.Msg {
+				sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].Name < pkgs[j].Name })
+				manager.SaveScanCache(pkgs)
+				return scanDoneMsg{pkgs: pkgs}
+			}
+		}
+		return m, nil
+
+	case titleTickMsg:
+		const titleText = "GlazePKG"
+		if m.titleReveal < len(titleText) {
+			m.titleReveal++
+			return m, titleTick()
+		}
+		return m, nil
+
 	case scanDoneMsg:
 		m.scanning = false
+		m.scanTotal = 0
+		m.scanCompleted = 0
+		m.scanCurrentMgr = ""
 		if msg.err != nil {
 			m.statusMsg = "scan error: " + msg.err.Error()
 			return m, nil
@@ -1242,13 +1354,13 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Title bar
-	title := StyleTitle.Render("GlazePKG")
-	b.WriteString(title)
-	if m.updateBanner != "" {
-		b.WriteString("  " + StyleUpdateBanner.Render(m.updateBanner))
+	// Title bar — detail and search views render their own title inside their
+	// render function so the title, panel, and keybinds stay grouped together
+	// as one centered block.
+	if m.view != viewDetail && m.view != viewSearch {
+		b.WriteString(m.renderHeader())
+		b.WriteString("\n")
 	}
-	b.WriteString("\n\n")
 
 	switch m.view {
 	case viewList:
@@ -1258,7 +1370,7 @@ func (m Model) View() string {
 	case viewDiff:
 		b.WriteString(renderDiffView(m.currentDiff, m.diffSince))
 	case viewSearch:
-		m.renderSearchView(&b)
+		b.WriteString(m.renderSearchView())
 	}
 
 	// Batch progress log
@@ -1302,10 +1414,10 @@ func (m Model) View() string {
 		b.WriteString("\n  " + renderOpNotification(m.removeNotifMsg, m.removeNotifErr, m.removeInFlight, "REMOVE", m.spinner.View()))
 	}
 
-	// Status bar. The detail view owns its own keybind bar (pinned to the
-	// bottom inside renderDetail), so we skip the status bar and its
-	// separator rule in that view to avoid duplicate hints.
-	if m.view != viewDetail {
+	// Status bar. Detail and search views own their own keybind bar (centered
+	// inside their render functions), so we skip the status bar and its
+	// separator rule in those views to avoid duplicate hints.
+	if m.view != viewDetail && m.view != viewSearch {
 		b.WriteString("\n")
 		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
 		b.WriteString("\n")
@@ -1318,54 +1430,123 @@ func (m Model) View() string {
 }
 
 func (m Model) renderListView(b *strings.Builder) {
-	// Tabs
+	// Outer panel sizing matches the detail view: leave 3 cols of horizontal
+	// margin on each side, clamped between 40 and 120 so the panel stays
+	// readable on narrow terminals but doesn't stretch absurdly wide on
+	// ultrawide ones. Inner width subtracts the panel's border(2)+padding(4).
+	outerMaxW := m.width - 6
+	if outerMaxW < 40 {
+		outerMaxW = 40
+	}
+	if outerMaxW > 120 {
+		outerMaxW = 120
+	}
+	innerW := outerMaxW - 6
+
+	// Tabs — centered within the panel's inner width.
+	var panelContent strings.Builder
 	if len(m.tabs) > 0 {
-		b.WriteString("  ")
-		b.WriteString(renderTabs(m.tabs, m.activeTab))
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
-		b.WriteString("\n\n")
+		tabs := renderTabs(m.tabs, m.activeTab)
+		panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, tabs))
+		panelContent.WriteString("\n")
+		panelContent.WriteString(StyleDim.Render(strings.Repeat("─", innerW)))
+		panelContent.WriteString("\n")
 	}
 
-	// Filter
+	// Filter line (search input or active-filter display).
 	if m.filtering {
-		b.WriteString("  ")
-		b.WriteString(m.filterInput.View())
-		b.WriteString("\n\n")
+		panelContent.WriteString("\n")
+		panelContent.WriteString(m.filterInput.View())
+		panelContent.WriteString("\n")
 	} else if m.filterInput.Value() != "" {
-		b.WriteString("  ")
-		b.WriteString(StyleFilterPrompt.Render("/ "))
-		b.WriteString(StyleFilterText.Render(m.filterInput.Value()))
-		b.WriteString("\n\n")
+		panelContent.WriteString("\n")
+		panelContent.WriteString(StyleFilterPrompt.Render("/ "))
+		panelContent.WriteString(StyleFilterText.Render(m.filterInput.Value()))
+		panelContent.WriteString("\n")
 	}
 
-	// Scanning spinner
+	// Scanning indicator. Live scans show a progress bar driven by
+	// per-manager completions; cache loads (no scanTotal) fall back to a
+	// spinner since there's nothing meaningful to measure.
 	if m.scanning {
-		b.WriteString("  ")
-		b.WriteString(m.spinner.View())
-		b.WriteString(" Scanning package managers...")
-		b.WriteString("\n")
+		panelContent.WriteString("\n")
+		if m.scanTotal > 0 {
+			barW := innerW - 4
+			if barW > 60 {
+				barW = 60
+			}
+			if barW < 20 {
+				barW = 20
+			}
+			pr := m.progress
+			pr.Width = barW
+			percent := float64(m.scanCompleted) / float64(m.scanTotal)
+			label := fmt.Sprintf("Scanning %d/%d managers", m.scanCompleted, m.scanTotal)
+			if m.scanCurrentMgr != "" && m.scanCompleted < m.scanTotal {
+				label += " — last: " + m.scanCurrentMgr
+			}
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, label))
+			panelContent.WriteString("\n")
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, pr.ViewAs(percent)))
+			panelContent.WriteString("\n")
+		} else {
+			spinLine := m.spinner.View() + " Scanning package managers..."
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, spinLine))
+			panelContent.WriteString("\n")
+		}
+		b.WriteString(renderOuterPanel(panelContent.String(), outerMaxW, m.width))
 		return
 	}
 
-	// Package table
-	listHeight := m.height - 12
+	// Package table. Height budget accounts for: header(2) + summary(1) +
+	// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2).
+	listHeight := m.height - 14
 	if listHeight < 5 {
 		listHeight = 5
 	}
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
+	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
-	// Loading indicators
+	// Loading indicators, inside the panel so they don't break the frame.
 	if m.loadingDescs {
-		b.WriteString("\n  ")
-		b.WriteString(m.spinner.View())
-		b.WriteString(StyleDim.Render(" Loading descriptions..."))
+		panelContent.WriteString("\n")
+		line := m.spinner.View() + StyleDim.Render(" Loading descriptions...")
+		panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, line))
 	} else if m.loadingUpdates || m.loadingDeps {
-		b.WriteString("\n  ")
-		b.WriteString(m.spinner.View())
-		b.WriteString(StyleDim.Render(" Loading details..."))
+		panelContent.WriteString("\n")
+		line := m.spinner.View() + StyleDim.Render(" Loading details...")
+		panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, line))
 	}
+
+	b.WriteString(renderOuterPanel(panelContent.String(), outerMaxW, m.width))
+}
+
+// renderOuterPanel wraps content in a rounded-border outer panel and
+// centers it horizontally within the terminal width.
+func renderOuterPanel(content string, outerMaxW, termW int) string {
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorSubtext).
+		Padding(0, 2).
+		Width(outerMaxW).
+		Render(content)
+
+	pw := lipgloss.Width(panel)
+	pad := (termW - pw) / 2
+	if pad < 0 {
+		pad = 0
+	}
+	leftPad := strings.Repeat(" ", pad)
+	lines := strings.Split(panel, "\n")
+	var out strings.Builder
+	for i, line := range lines {
+		out.WriteString(leftPad)
+		out.WriteString(line)
+		if i < len(lines)-1 {
+			out.WriteString("\n")
+		}
+	}
+	return out.String()
 }
 
 func formatDuration(d time.Duration) string {
@@ -1386,129 +1567,6 @@ func formatDuration(d time.Duration) string {
 		return "1 day"
 	}
 	return fmt.Sprintf("%d days", days)
-}
-
-func (m Model) renderStatusBar() string {
-	if m.statusMsg != "" {
-		return StyleStatusBar.Render(m.statusMsg)
-	}
-
-	keyStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
-	sepStyle := lipgloss.NewStyle().Foreground(ColorSubtext)
-	descStyle := lipgloss.NewStyle().Foreground(ColorText)
-	sep := sepStyle.Render("  ")
-
-	formatBinds := func(binds []struct{ key, desc string }) string {
-		var parts []string
-		for _, b := range binds {
-			parts = append(parts, keyStyle.Render(b.key)+descStyle.Render(" "+b.desc))
-		}
-		if m.width <= 0 {
-			return strings.Join(parts, sep)
-		}
-		// Wrap into multiple lines when too wide
-		maxW := m.width - 2
-		var lines []string
-		var line []string
-		w := 0
-		sepW := lipgloss.Width(sep)
-		for _, p := range parts {
-			pw := lipgloss.Width(p)
-			needed := pw
-			if len(line) > 0 {
-				needed += sepW
-			}
-			if w+needed > maxW && len(line) > 0 {
-				lines = append(lines, strings.Join(line, sep))
-				line = nil
-				w = 0
-			}
-			line = append(line, p)
-			w += needed
-		}
-		if len(line) > 0 {
-			lines = append(lines, strings.Join(line, sep))
-		}
-		return strings.Join(lines, "\n ")
-	}
-
-	switch m.view {
-	case viewList:
-		var binds []struct{ key, desc string }
-		if m.multiSelect {
-			count := m.selectionCount()
-			selectStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-			prefix := selectStyle.Render(fmt.Sprintf("[%d selected]", count))
-			binds = []struct{ key, desc string }{
-				{"space", "toggle"}, {"u", "upgrade"}, {"x", "remove"},
-				{"/", "search"}, {"m", "exit select"}, {"q", "quit"},
-			}
-			return " " + prefix + "  " + formatBinds(binds)
-		}
-		binds = []struct{ key, desc string }{
-			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
-			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
-			{"m", "select"}, {"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
-		}
-		bar := formatBinds(binds)
-		if m.sizeFilter > 0 {
-			filterStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-			bar = filterStyle.Render("["+sizeFilters[m.sizeFilter].Label+"]") + sep + bar
-		}
-		return " " + bar
-	case viewDetail:
-		if m.editingDesc {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"enter", "save"}, {"esc", "cancel"},
-			})
-		}
-		if m.modal == ModalPkgHelp {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
-			})
-		}
-		if m.modal == ModalDeps {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"j/k", "navigate"}, {"esc", "close"},
-			})
-		}
-		var binds []struct{ key, desc string }
-		if mgr := manager.BySource(m.detailPkg.Source); mgr != nil {
-			if _, ok := mgr.(manager.Upgrader); ok {
-				binds = append(binds, struct{ key, desc string }{"u", "upgrade"})
-			}
-			if _, ok := mgr.(manager.Remover); ok {
-				binds = append(binds, struct{ key, desc string }{"x", "remove"})
-			}
-		}
-		binds = append(binds, struct{ key, desc string }{"e", "edit description"})
-		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
-			binds = append(binds, struct{ key, desc string }{"d", "dependencies"})
-		}
-		binds = append(binds, struct{ key, desc string }{"h", "help/usage"})
-		binds = append(binds, struct{ key, desc string }{"esc", "back"}, struct{ key, desc string }{"q", "quit"})
-		return " " + formatBinds(binds)
-	case viewDiff:
-		return " " + formatBinds([]struct{ key, desc string }{
-			{"esc", "back"}, {"q", "quit"},
-		})
-	case viewSearch:
-		if m.searchInput.Focused() {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"enter", "search"}, {"esc", "back"},
-			})
-		}
-		binds := []struct{ key, desc string }{
-			{"j/k", "navigate"}, {"enter", "expand"}, {"i", "install"},
-			{"p", "pre-release"}, {"/", "new search"}, {"q", "back"},
-		}
-		if m.showPreRelease {
-			preStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-			return " " + preStyle.Render("[pre-release]") + "  " + formatBinds(binds)
-		}
-		return " " + formatBinds(binds)
-	}
-	return ""
 }
 
 func (m *Model) runUpgradeRequest(req upgradeRequest) tea.Cmd {
