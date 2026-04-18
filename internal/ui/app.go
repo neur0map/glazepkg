@@ -301,6 +301,7 @@ type Model struct {
 	scanCompleted  int
 	scanAccum      []model.Package
 	scanCurrentMgr string
+	scanErrored    bool
 
 	// Title intro animation. `titleReveal` is the number of characters of
 	// "GlazePKG" currently visible; tea.Tick increments it on mount until
@@ -436,14 +437,6 @@ func scanManagerCmds() []tea.Cmd {
 		})
 	}
 	return cmds
-}
-
-// startFreshScan emits the start message followed by per-manager scan commands.
-func startFreshScan() tea.Cmd {
-	cmds := append([]tea.Cmd{func() tea.Msg {
-		return scanStartMsg{total: availableManagerCount()}
-	}}, scanManagerCmds()...)
-	return tea.Batch(cmds...)
 }
 
 // forceRescan always does a live scan, ignoring cache.
@@ -822,15 +815,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case scanStartMsg:
+		cmds := scanManagerCmds()
+		if len(cmds) == 0 {
+			// No available managers — don't leave the UI pinned in the
+			// "scanning" state forever. Emit an empty scanDoneMsg directly.
+			return m, func() tea.Msg { return scanDoneMsg{} }
+		}
 		m.scanning = true
 		m.scanTotal = msg.total
 		m.scanCompleted = 0
 		m.scanAccum = m.scanAccum[:0]
 		m.scanCurrentMgr = ""
-		return m, tea.Batch(scanManagerCmds()...)
+		m.scanErrored = false
+		return m, tea.Batch(cmds...)
 
 	case scanManagerDoneMsg:
-		if msg.err == nil {
+		if msg.err != nil {
+			m.scanErrored = true
+		} else {
 			m.scanAccum = append(m.scanAccum, msg.pkgs...)
 		}
 		m.scanCompleted++
@@ -838,9 +840,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.scanCompleted >= m.scanTotal {
 			pkgs := m.scanAccum
 			m.scanAccum = nil
+			errored := m.scanErrored
 			return m, func() tea.Msg {
 				sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].Name < pkgs[j].Name })
-				manager.SaveScanCache(pkgs)
+				// Only persist the cache when every manager scanned cleanly.
+				// Otherwise a transient failure would be frozen into the
+				// cache and the missing packages would stay invisible until
+				// the user forces a rescan.
+				if !errored {
+					manager.SaveScanCache(pkgs)
+				}
 				return scanDoneMsg{pkgs: pkgs}
 			}
 		}
@@ -1416,9 +1425,12 @@ func (m Model) View() string {
 	}
 
 	// Status bar. Detail and search views own their own keybind bar (centered
-	// inside their render functions), so we skip the status bar and its
-	// separator rule in those views to avoid duplicate hints.
-	if m.view != viewDetail && m.view != viewSearch {
+	// inside their render functions), so we skip the keybind help in those
+	// views to avoid duplicate hints — but still show m.statusMsg if one is
+	// set, otherwise transient messages (operation errors, progress) silently
+	// disappear while the user is looking at a package detail or search.
+	showKeybinds := m.view != viewDetail && m.view != viewSearch
+	if showKeybinds || m.statusMsg != "" {
 		b.WriteString("\n")
 		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
 		b.WriteString("\n")
