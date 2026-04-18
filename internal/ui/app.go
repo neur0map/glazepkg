@@ -439,14 +439,6 @@ func scanManagerCmds() []tea.Cmd {
 	return cmds
 }
 
-// startFreshScan emits the start message followed by per-manager scan commands.
-func startFreshScan() tea.Cmd {
-	cmds := append([]tea.Cmd{func() tea.Msg {
-		return scanStartMsg{total: availableManagerCount()}
-	}}, scanManagerCmds()...)
-	return tea.Batch(cmds...)
-}
-
 // forceRescan always does a live scan, ignoring cache.
 func forceRescan() tea.Msg {
 	return scanStartMsg{total: availableManagerCount()}
