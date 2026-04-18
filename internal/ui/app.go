@@ -51,9 +51,10 @@ type updateAvailableMsg struct {
 }
 
 type scanDoneMsg struct {
-	pkgs      []model.Package
-	err       error
-	fromCache bool
+	pkgs           []model.Package
+	err            error
+	fromCache      bool
+	failedManagers []string // names of managers whose Scan() returned an error
 }
 
 // scanStartMsg announces how many managers will be scanned concurrently.
@@ -301,7 +302,7 @@ type Model struct {
 	scanCompleted  int
 	scanAccum      []model.Package
 	scanCurrentMgr string
-	scanErrored    bool
+	scanFailed     []string // sources whose Scan() errored during the current pass
 
 	// Title intro animation. `titleReveal` is the number of characters of
 	// "GlazePKG" currently visible; tea.Tick increments it on mount until
@@ -825,13 +826,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanTotal = msg.total
 		m.scanCompleted = 0
 		m.scanAccum = m.scanAccum[:0]
+		m.scanFailed = m.scanFailed[:0]
 		m.scanCurrentMgr = ""
-		m.scanErrored = false
 		return m, tea.Batch(cmds...)
 
 	case scanManagerDoneMsg:
 		if msg.err != nil {
-			m.scanErrored = true
+			m.scanFailed = append(m.scanFailed, string(msg.source))
 		} else {
 			m.scanAccum = append(m.scanAccum, msg.pkgs...)
 		}
@@ -839,18 +840,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanCurrentMgr = string(msg.source)
 		if m.scanCompleted >= m.scanTotal {
 			pkgs := m.scanAccum
+			failed := append([]string(nil), m.scanFailed...)
 			m.scanAccum = nil
-			errored := m.scanErrored
 			return m, func() tea.Msg {
 				sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].Name < pkgs[j].Name })
-				// Only persist the cache when every manager scanned cleanly.
-				// Otherwise a transient failure would be frozen into the
-				// cache and the missing packages would stay invisible until
-				// the user forces a rescan.
-				if !errored {
-					manager.SaveScanCache(pkgs)
-				}
-				return scanDoneMsg{pkgs: pkgs}
+				// Save whatever succeeded. Consistently-broken managers
+				// (e.g. bun with no globals always exits 1) must not be
+				// able to veto caching the other 9 managers' data —
+				// otherwise the cache goes stale forever and the user
+				// sees a permanent "loaded from cache (Nh old)" message.
+				manager.SaveScanCache(pkgs)
+				return scanDoneMsg{pkgs: pkgs, failedManagers: failed}
 			}
 		}
 		return m, nil
@@ -881,9 +881,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.tabs = buildTabs(m.allPkgs)
 		m.applyFilter()
-		if msg.fromCache {
+		switch {
+		case msg.fromCache:
 			age := manager.ScanCacheAge()
 			m.statusMsg = fmt.Sprintf("loaded from cache (%s old) — press r to rescan", formatDuration(age))
+		case len(msg.failedManagers) > 0:
+			m.statusMsg = fmt.Sprintf("rescan complete — %d packages (%s scan failed)",
+				len(msg.pkgs), strings.Join(msg.failedManagers, ", "))
+		default:
+			m.statusMsg = fmt.Sprintf("rescan complete — %d packages", len(msg.pkgs))
 		}
 		// Dispatch background description fetch (skip packages with user notes)
 		m.loadingDescs = true
