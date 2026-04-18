@@ -278,6 +278,7 @@ func (m *Model) resetTransientModalState() {
 	m.confirmFocus = 0
 	m.removeFocus = 0
 	m.batchFocus = 0
+	m.batchScroll = 0
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 }
@@ -720,6 +721,19 @@ func handleBatchConfirmModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.passwordInput.Focus()
 			return m, textinput.Blink
 		}
+	case "up", "k":
+		if m.batchScroll > 0 {
+			m.batchScroll--
+		}
+	case "down", "j":
+		m.batchScroll++ // clamped during render by sliceScrollable
+	case "pgup":
+		m.batchScroll -= 5
+		if m.batchScroll < 0 {
+			m.batchScroll = 0
+		}
+	case "pgdown":
+		m.batchScroll += 5
 	}
 	return m, nil
 }
@@ -731,6 +745,6 @@ func renderBatchConfirmModalBody(m *Model) ModalFrameOpts {
 	return ModalFrameOpts{
 		Title:  title,
 		Body:   batchConfirmBody(m),
-		Footer: "tab cycle · enter confirm · esc cancel",
+		Footer: "tab cycle · ↑↓ scroll · enter confirm · esc cancel",
 	}
 }

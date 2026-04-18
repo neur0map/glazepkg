@@ -214,6 +214,7 @@ type Model struct {
 	multiSelect     bool
 	selections      map[string]bool
 	batchFocus      int // 0 = password, 1 = Yes, 2 = No
+	batchScroll     int // scroll offset into the package list inside batch confirm
 	pendingBatch    *batchConfirmState
 	batchLog        []batchProgressMsg
 	batchCurrentPkg string

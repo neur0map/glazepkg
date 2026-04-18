@@ -334,26 +334,16 @@ func (m *Model) handleBatchProgress(msg batchProgressMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// batchConfirmBody renders the body of ModalConfirmBatch. Pure content.
-// ModalFrame owns the title row and outer framing.
+// batchConfirmBody renders the body of ModalConfirmBatch. The package list
+// is rendered into a scrollable region so long lists stay readable: the
+// modal grows to fit the list when the terminal has room, and clamps to a
+// scrollable window (driven by m.batchScroll) when it doesn't. The header
+// ("Upgrade N packages?") and the footer (password field + Yes/No buttons)
+// are always pinned — only the list in between scrolls.
 func batchConfirmBody(m *Model) string {
 	batch := m.pendingBatch
 	if batch == nil {
 		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("%s %d packages?", strings.Title(batch.op), len(batch.ops))))
-	b.WriteString("\n")
-
-	// Group by privilege
-	var privPkgs, unprivPkgs []batchOp
-	for _, o := range batch.ops {
-		if o.privileged {
-			privPkgs = append(privPkgs, o)
-		} else {
-			unprivPkgs = append(unprivPkgs, o)
-		}
 	}
 
 	wrapW := m.width - 10
@@ -364,71 +354,151 @@ func batchConfirmBody(m *Model) string {
 		wrapW = 40
 	}
 
+	// --- Header (always visible) ---
+	header := StyleNormal.Render(fmt.Sprintf("%s %d packages?", strings.Title(batch.op), len(batch.ops)))
+
+	// --- Package list (scrollable region) ---
+	var privPkgs, unprivPkgs []batchOp
+	for _, o := range batch.ops {
+		if o.privileged {
+			privPkgs = append(privPkgs, o)
+		} else {
+			unprivPkgs = append(unprivPkgs, o)
+		}
+	}
+
+	var listBuf strings.Builder
 	if len(privPkgs) > 0 {
-		b.WriteString("\n")
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-		b.WriteString(warnStyle.Render("privileged (1 password for all):"))
-		b.WriteString("\n")
-		// Group by source
+		listBuf.WriteString(warnStyle.Render("privileged (1 password for all):"))
+		listBuf.WriteString("\n")
 		bySource := make(map[model.Source][]string)
 		for _, o := range privPkgs {
 			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
 		}
 		for src, names := range bySource {
-			b.WriteString(formatSourceNameList(string(src), names, wrapW))
+			listBuf.WriteString(formatSourceNameList(string(src), names, wrapW))
 		}
 	}
-
 	if len(unprivPkgs) > 0 {
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("unprivileged:"))
-		b.WriteString("\n")
+		if listBuf.Len() > 0 {
+			listBuf.WriteString("\n")
+		}
+		listBuf.WriteString(StyleDim.Render("unprivileged:"))
+		listBuf.WriteString("\n")
 		bySource := make(map[model.Source][]string)
 		for _, o := range unprivPkgs {
 			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
 		}
 		for src, names := range bySource {
-			b.WriteString(formatSourceNameList(string(src), names, wrapW))
+			listBuf.WriteString(formatSourceNameList(string(src), names, wrapW))
 		}
 	}
-
 	if len(batch.skipped) > 0 {
-		b.WriteString("\n")
-		skippedHeader := fmt.Sprintf("skipped (%d):", len(batch.skipped))
-		b.WriteString(StyleDim.Render(skippedHeader))
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render(wrapCommaList(batch.skipped, "  ", wrapW)))
+		if listBuf.Len() > 0 {
+			listBuf.WriteString("\n")
+		}
+		listBuf.WriteString(StyleDim.Render(fmt.Sprintf("skipped (%d):", len(batch.skipped))))
+		listBuf.WriteString("\n")
+		listBuf.WriteString(StyleDim.Render(wrapCommaList(batch.skipped, "  ", wrapW)))
+	}
+	listStr := strings.TrimRight(listBuf.String(), "\n")
+	listLines := []string{}
+	if listStr != "" {
+		listLines = strings.Split(listStr, "\n")
 	}
 
-	// Password
+	// --- Footer (always visible): password + Yes/No buttons ---
+	var footerBuf strings.Builder
 	if m.batchNeedsSudo() {
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-		b.WriteString("\n" + warnStyle.Render("requires elevated privileges"))
-		b.WriteString("\n\n")
-		b.WriteString(m.passwordInput.View())
-		b.WriteString("\n")
+		footerBuf.WriteString(warnStyle.Render("requires elevated privileges"))
+		footerBuf.WriteString("\n\n")
+		footerBuf.WriteString(m.passwordInput.View())
+		footerBuf.WriteString("\n")
 	}
-
-	b.WriteString("\n")
+	footerBuf.WriteString("\n")
 
 	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
-
-	if m.batchFocus == 1 {
+	switch m.batchFocus {
+	case 1:
 		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	} else if m.batchFocus == 2 {
+	case 2:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
-	} else {
+	default:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
+	footerBuf.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	footer := footerBuf.String()
 
-	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	// --- Compose with scroll ---
+	// Budget: ModalFrame adds ~5 rows of chrome (title + top/bottom borders +
+	// footer separator+row), leave a little margin on top/bottom.
+	headerH := lipgloss.Height(header)
+	footerH := lipgloss.Height(footer)
+	chromeH := 5 + 4 // frame chrome + vertical margin
+	maxListH := m.height - headerH - footerH - chromeH
+	if maxListH < 3 {
+		maxListH = 3
+	}
 
-	return b.String()
+	visibleList, scrollHint := sliceScrollable(listLines, m.batchScroll, maxListH)
+
+	var out strings.Builder
+	out.WriteString(header)
+	out.WriteString("\n")
+	if len(visibleList) > 0 {
+		out.WriteString("\n")
+		out.WriteString(strings.Join(visibleList, "\n"))
+	}
+	if scrollHint != "" {
+		out.WriteString("\n")
+		out.WriteString(StyleDim.Render(scrollHint))
+	}
+	out.WriteString("\n")
+	out.WriteString(footer)
+
+	return out.String()
 }
+
+// sliceScrollable returns the visible window of lines at the given scroll
+// offset and an optional scroll indicator. When all lines fit in maxH,
+// scrollHint is empty and all lines are returned. Scroll is clamped so we
+// never leave a blank gap at the bottom.
+func sliceScrollable(lines []string, scroll, maxH int) (visible []string, scrollHint string) {
+	if len(lines) <= maxH {
+		return lines, ""
+	}
+	// Reserve one line for the scroll hint.
+	windowH := maxH - 1
+	if windowH < 1 {
+		windowH = 1
+	}
+	maxScroll := len(lines) - windowH
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	visible = lines[scroll : scroll+windowH]
+	above := scroll
+	below := len(lines) - scroll - windowH
+	switch {
+	case above > 0 && below > 0:
+		scrollHint = fmt.Sprintf("── %d above · %d below (↑/↓ scroll) ──", above, below)
+	case above > 0:
+		scrollHint = fmt.Sprintf("── %d above (↑ scroll) ──", above)
+	case below > 0:
+		scrollHint = fmt.Sprintf("── %d below (↓ scroll) ──", below)
+	}
+	return visible, scrollHint
+}
+
 
 // formatSourceNameList renders "  <src>: a, b, c, d" with continuation lines
 // indented to align under the first name so long package lists wrap cleanly
