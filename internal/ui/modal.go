@@ -412,9 +412,14 @@ func renderDepsModalBody(m *Model) ModalFrameOpts {
 
 func handlePkgHelpModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := normalizeHotkey(msg.String())
-	// Must match pkgHelpBody's visibleLines = m.height - 10 so the final
-	// lines of `<pkg> --help` output are actually reachable by scrolling.
-	maxScroll := len(m.pkgHelpLines) - (m.height - 10)
+	// Must match pkgHelpBody's visibleLines (including its min-5 floor)
+	// so the final lines of `<pkg> --help` output are actually reachable,
+	// even on very small terminals where m.height - 10 would underflow.
+	visible := m.height - 10
+	if visible < 5 {
+		visible = 5
+	}
+	maxScroll := len(m.pkgHelpLines) - visible
 	if maxScroll < 0 {
 		maxScroll = 0
 	}
