@@ -76,6 +76,9 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 
 	selectedStyle := lipgloss.NewStyle().Foreground(ColorPurple)
 
+	cursorAccent := lipgloss.NewStyle().Foreground(ColorBlue).Bold(true).Render("▎") + " "
+	normalGutter := "  "
+
 	for i := start; i < end; i++ {
 		p := pkgs[i]
 		name := truncate(p.Name, colName-2)
@@ -111,7 +114,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 				verCell += " " + updateIndicator.Render("↑")
 			}
 			lastCell := curSelStyle.Render(desc)
-			line := "  " +
+			line := cursorAccent +
 				padCell(curSelStyle.Render("● "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
@@ -130,7 +133,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			if len(selections) > 0 {
 				namePrefix = "○ " + name
 			}
-			line := "  " +
+			line := cursorAccent +
 				padCell(StyleSelected.Render(namePrefix), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
@@ -142,7 +145,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 				verCell += " " + updateIndicator.Render("↑")
 			}
 			lastCell := selectedStyle.Render(desc)
-			line := "  " +
+			line := normalGutter +
 				padCell(selectedStyle.Render("● "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
@@ -154,7 +157,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 				verCell += " " + upgradingStyle.Render("↑")
 			}
 			lastCell := upgradingStyle.Render(desc)
-			line := "  " +
+			line := normalGutter +
 				padCell(upgradingStyle.Render("▸ "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
@@ -164,7 +167,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			removingStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 			verCell := removingStyle.Render(ver)
 			lastCell := removingStyle.Render(desc)
-			line := "  " +
+			line := normalGutter +
 				padCell(removingStyle.Render("✗ "+name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
@@ -179,7 +182,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 			if showSize && p.Size != "" {
 				lastCell = sizeStyle.Render(desc)
 			}
-			line := "  " +
+			line := normalGutter +
 				padCell(StyleNormal.Render(name), colName) +
 				padCell(verCell, colVer) +
 				padCell(badge, colBadge) +
