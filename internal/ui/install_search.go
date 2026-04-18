@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
@@ -264,67 +265,74 @@ func (m *Model) installFromSearch() tea.Cmd {
 		privileged: isPrivilegedSource(pkg.Source),
 		opLabel:    "install",
 	}
-	m.confirmingUpgrade = true
 	m.passwordInput.SetValue("")
 	if needsSudo {
 		m.confirmFocus = 0
 		m.passwordInput.Focus()
-		return textinput.Blink
+		return tea.Batch(m.openModal(ModalConfirmUpgrade), textinput.Blink)
 	}
 	m.confirmFocus = 1
 	m.passwordInput.Blur()
-	return nil
+	return m.openModal(ModalConfirmUpgrade)
 }
 
-func (m Model) renderSearchView(b *strings.Builder) {
-	b.WriteString("\n  ")
-	b.WriteString(m.searchInput.View())
-	b.WriteString("\n")
+func (m Model) renderSearchView() string {
+	w, h := m.width, m.height
+
+	// Match detail.go's outer-panel sizing: border(2) + padding(4) = 6 cols of
+	// chrome, so the inner content area is outerMaxW - 6.
+	outerMaxW := w - 6
+	if outerMaxW < 40 {
+		outerMaxW = 40
+	}
+	if outerMaxW > 92 {
+		outerMaxW = 92
+	}
+	usable := outerMaxW - 6
+
+	var body strings.Builder
+	body.WriteString(m.searchInput.View())
+	body.WriteString("\n")
 
 	if m.searchActive {
-		b.WriteString("\n  ")
-		b.WriteString(m.spinner.View())
+		body.WriteString("\n")
+		body.WriteString(m.spinner.View())
 		if m.searchPending > 0 {
-			b.WriteString(StyleDim.Render(fmt.Sprintf(" searching %d managers...", m.searchPending)))
+			body.WriteString(StyleDim.Render(fmt.Sprintf(" searching %d managers...", m.searchPending)))
 		}
-		b.WriteString("\n")
+		body.WriteString("\n")
 	}
 
 	if len(m.searchResults) == 0 {
 		if !m.searchActive && !m.searchInput.Focused() {
-			b.WriteString("\n")
-			b.WriteString(StyleDim.Render("  no results found"))
+			body.WriteString("\n")
+			body.WriteString(StyleDim.Render("no results found"))
 		}
-		return
+		return m.composeSearchBlock(m.wrapSearchPanel(body.String(), usable))
 	}
 
-	b.WriteString("\n")
+	body.WriteString("\n")
 
-	usable := m.width - 4
-	if usable < 60 {
-		usable = 60
-	}
 	colName := usable * 25 / 100
 	colVer := usable * 12 / 100
 	colBadge := badgeWidth + 2
 	colDesc := usable - colName - colVer - colBadge
 
-	header := "  " +
-		padCell(StyleTableHeader.Render("PACKAGE"), colName) +
+	header := padCell(StyleTableHeader.Render("PACKAGE"), colName) +
 		padCell(StyleTableHeader.Render("VERSION"), colVer) +
 		padCell(StyleTableHeader.Render("SOURCE"), colBadge) +
 		StyleTableHeader.Render("DESCRIPTION")
-	b.WriteString(header)
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(usable, m.width-4))))
-	b.WriteString("\n")
+	body.WriteString(header)
+	body.WriteString("\n")
+	body.WriteString(StyleDim.Render(strings.Repeat("─", usable)))
+	body.WriteString("\n")
 
 	installed := make(map[string]bool)
 	for _, p := range m.allPkgs {
 		installed[p.Name+":"+string(p.Source)] = true
 	}
 
-	listHeight := m.height - 14
+	listHeight := h - 14
 	if listHeight < 5 {
 		listHeight = 5
 	}
@@ -356,8 +364,7 @@ func (m Model) renderSearchView(b *strings.Builder) {
 			}
 
 			if row == m.searchCursor {
-				line := "  " +
-					padCell(StyleSelected.Render(expandIcon+" "+name), colName) +
+				line := padCell(StyleSelected.Render(expandIcon+" "+name), colName) +
 					padCell(StyleSelected.Render(ver), colVer) +
 					padCell(badge, colBadge)
 				if isInst {
@@ -365,14 +372,13 @@ func (m Model) renderSearchView(b *strings.Builder) {
 				} else {
 					line += StyleSelected.Render(desc)
 				}
-				b.WriteString(line)
+				body.WriteString(line)
 			} else {
 				nameStyle := StyleNormal
 				if isInst {
 					nameStyle = StyleDim
 				}
-				line := "  " +
-					padCell(nameStyle.Render(expandIcon+" "+name), colName) +
+				line := padCell(nameStyle.Render(expandIcon+" "+name), colName) +
 					padCell(StyleDim.Render(ver), colVer) +
 					padCell(badge, colBadge)
 				if isInst {
@@ -380,9 +386,9 @@ func (m Model) renderSearchView(b *strings.Builder) {
 				} else {
 					line += StyleDim.Render(desc)
 				}
-				b.WriteString(line)
+				body.WriteString(line)
 			}
-			b.WriteString("\n")
+			body.WriteString("\n")
 		}
 		row++
 
@@ -402,8 +408,7 @@ func (m Model) renderSearchView(b *strings.Builder) {
 					isInst := installed[entry.Name+":"+string(entry.Source)]
 
 					if row == m.searchCursor {
-						line := "  " +
-							padCell(StyleSelected.Render("  "+prefix), colName) +
+						line := padCell(StyleSelected.Render("  "+prefix), colName) +
 							padCell(StyleSelected.Render(ver), colVer) +
 							padCell(badge, colBadge)
 						if isInst {
@@ -411,10 +416,9 @@ func (m Model) renderSearchView(b *strings.Builder) {
 						} else {
 							line += StyleSelected.Render(desc)
 						}
-						b.WriteString(line)
+						body.WriteString(line)
 					} else {
-						line := "  " +
-							padCell(StyleDim.Render("  "+prefix), colName) +
+						line := padCell(StyleDim.Render("  "+prefix), colName) +
 							padCell(StyleDim.Render(ver), colVer) +
 							padCell(badge, colBadge)
 						if isInst {
@@ -422,9 +426,9 @@ func (m Model) renderSearchView(b *strings.Builder) {
 						} else {
 							line += StyleDim.Render(desc)
 						}
-						b.WriteString(line)
+						body.WriteString(line)
 					}
-					b.WriteString("\n")
+					body.WriteString("\n")
 				}
 				row++
 			}
@@ -434,9 +438,74 @@ func (m Model) renderSearchView(b *strings.Builder) {
 	totalRows := m.searchRowCount()
 	if totalRows > listHeight {
 		pct := (m.searchCursor + 1) * 100 / totalRows
-		b.WriteString(StyleDim.Render(fmt.Sprintf("  %d/%d (%d%%)", m.searchCursor+1, totalRows, pct)))
-		b.WriteString("\n")
+		body.WriteString(StyleDim.Render(fmt.Sprintf("%d/%d (%d%%)", m.searchCursor+1, totalRows, pct)))
+		body.WriteString("\n")
 	}
+
+	return m.composeSearchBlock(m.wrapSearchPanel(body.String(), usable))
+}
+
+// wrapSearchPanel wraps the raw search body in a bordered rounded panel
+// matching the detail view's outer panel, then horizontally centers the
+// panel within the terminal width. innerW is the body text-width budget;
+// lipgloss's Width() sets the box size INCLUDING horizontal padding, so we
+// add 4 for the 2-col padding on each side. If we set Width(innerW)
+// directly, lipgloss wraps body lines at innerW-4, which breaks the table
+// layout (long descriptions wrap into the next row, pushing content down).
+func (m Model) wrapSearchPanel(body string, innerW int) string {
+	w := m.width
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorSubtext).
+		Padding(1, 2).
+		Width(innerW + 4).
+		Render(body)
+
+	panelWidth := lipgloss.Width(panel)
+	centerPad := (w - panelWidth) / 2
+	if centerPad < 0 {
+		centerPad = 0
+	}
+	pad := strings.Repeat(" ", centerPad)
+
+	lines := strings.Split(panel, "\n")
+	var out strings.Builder
+	for i, line := range lines {
+		out.WriteString(pad)
+		out.WriteString(line)
+		if i < len(lines)-1 {
+			out.WriteString("\n")
+		}
+	}
+	return out.String()
+}
+
+// composeSearchBlock wraps the horizontally-centered search content with a
+// centered title at the top and centered keybind bar at the bottom, then
+// vertically centers the whole block in the terminal to match the detail view.
+func (m Model) composeSearchBlock(content string) string {
+	w, h := m.width, m.height
+
+	title := StyleTitle.Render("GlazePKG")
+	if m.updateBanner != "" {
+		title += "  " + StyleUpdateBanner.Render(m.updateBanner)
+	}
+	title = lipgloss.PlaceHorizontal(w, lipgloss.Center, title)
+
+	keybinds := lipgloss.PlaceHorizontal(w, lipgloss.Center, strings.TrimLeft(m.renderStatusBar(), " "))
+
+	block := lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", keybinds)
+	topFill := (h - lipgloss.Height(block)) / 2
+	if topFill < 0 {
+		topFill = 0
+	}
+
+	var out strings.Builder
+	if topFill > 0 {
+		out.WriteString(strings.Repeat("\n", topFill))
+	}
+	out.WriteString(block)
+	return out.String()
 }
 
 func compareVersions(a, b string) int {

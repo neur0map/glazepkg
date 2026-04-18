@@ -8,9 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/neur0map/glazepkg/internal/config"
@@ -51,6 +54,32 @@ type scanDoneMsg struct {
 	pkgs      []model.Package
 	err       error
 	fromCache bool
+}
+
+// scanStartMsg announces how many managers will be scanned concurrently.
+// Only emitted for live scans (cache hits skip straight to scanDoneMsg).
+type scanStartMsg struct {
+	total int
+}
+
+// scanManagerDoneMsg reports the result of a single manager's scan. One is
+// emitted per available manager during a live scan. When all have arrived
+// the Update handler synthesizes a scanDoneMsg to finalize.
+type scanManagerDoneMsg struct {
+	source model.Source
+	pkgs   []model.Package
+	err    error
+}
+
+// titleTickMsg advances the title typewriter animation by one character.
+type titleTickMsg struct{}
+
+// titleTick returns a command that fires titleTickMsg after the typewriter
+// delay — tuned so the full "GlazePKG" reveals in ~300ms.
+func titleTick() tea.Cmd {
+	return tea.Tick(35*time.Millisecond, func(time.Time) tea.Msg {
+		return titleTickMsg{}
+	})
 }
 
 type snapshotSavedMsg struct {
@@ -184,8 +213,8 @@ type Model struct {
 	// Multi-select
 	multiSelect     bool
 	selections      map[string]bool
-	confirmingBatch bool
 	batchFocus      int // 0 = password, 1 = Yes, 2 = No
+	batchScroll     int // scroll offset into the package list inside batch confirm
 	pendingBatch    *batchConfirmState
 	batchLog        []batchProgressMsg
 	batchCurrentPkg string
@@ -194,35 +223,36 @@ type Model struct {
 	batchOpLabel    string
 	batchCtx        context.Context
 
+	// Modal subsystem — see internal/ui/modal.go.
+	modal        ModalType
+	modalAnim    float64
+	modalAnimVel float64
+	modalOpening bool
+	modalSpring  harmonica.Spring
+
 	// Overlays
-	showHelp          bool
-	showExport        bool
-	exportCursor      int
-	showDeps          bool
-	depsCursor        int
-	showPkgHelp       bool
-	pkgHelpLines      []string
-	pkgHelpScroll     int
-	confirmingUpgrade bool
-	confirmFocus      int // 0 = password (privileged only), 1 = Yes, 2 = No
-	pendingUpgrade    *upgradeRequest
-	passwordInput     textinput.Model
-	upgradeInFlight   bool
-	upgradingPkgName  string
-	upgradeCancel     context.CancelFunc
-	upgradeNotifMsg   string
-	upgradeNotifErr   bool
+	exportCursor     int
+	depsCursor       int
+	pkgHelpLines     []string
+	pkgHelpScroll    int
+	confirmFocus     int // 0 = password (privileged only), 1 = Yes, 2 = No
+	pendingUpgrade   *upgradeRequest
+	passwordInput    textinput.Model
+	upgradeInFlight  bool
+	upgradingPkgName string
+	upgradeCancel    context.CancelFunc
+	upgradeNotifMsg  string
+	upgradeNotifErr  bool
 
 	// Remove
-	confirmingRemove bool
-	removeFocus      int // 0 = mode, 1 = password, 2 = Yes, 3 = No
-	removeMode       int // 0 = package only, 1 = package + deps
-	pendingRemove    *removeRequest
-	removeInFlight   bool
-	removingPkgName  string
-	removeCancel     context.CancelFunc
-	removeNotifMsg   string
-	removeNotifErr   bool
+	removeFocus     int // 0 = mode, 1 = password, 2 = Yes, 3 = No
+	removeMode      int // 0 = package only, 1 = package + deps
+	pendingRemove   *removeRequest
+	removeInFlight  bool
+	removingPkgName string
+	removeCancel    context.CancelFunc
+	removeNotifMsg  string
+	removeNotifErr  bool
 
 	// Search + Install
 	searchInput     textinput.Model
@@ -253,14 +283,29 @@ type Model struct {
 	updateBanner string
 
 	// Theme picker
-	showThemePicker bool
-	themeCursor     int
-	themeList       []config.Theme
-	prevThemeID     string // for reverting on Esc
-	appConfig       config.Config
+	themeCursor int
+	themeList   []config.Theme
+	prevThemeID string // for reverting on Esc
+	appConfig   config.Config
 
 	// Spinner
 	spinner spinner.Model
+
+	// Help (footer keybinds rendered by bubbles/help).
+	help help.Model
+
+	// Scan progress — populated while a live scan is in flight. Reset to
+	// zero when the scan ends (cache hits skip the progress bar entirely).
+	progress       progress.Model
+	scanTotal      int
+	scanCompleted  int
+	scanAccum      []model.Package
+	scanCurrentMgr string
+
+	// Title intro animation. `titleReveal` is the number of characters of
+	// "GlazePKG" currently visible; tea.Tick increments it on mount until
+	// the full title is shown, then stops.
+	titleReveal int
 }
 
 func NewModel(version string) Model {
@@ -299,9 +344,24 @@ func NewModel(version string) Model {
 	si := textinput.New()
 	si.Placeholder = "search packages..."
 	si.CharLimit = 64
-	si.Prompt = "  search: "
+	si.Prompt = "search: "
 	si.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
 	si.TextStyle = StyleNormal
+
+	pr := progress.New(
+		progress.WithGradient(string(ColorBlue), string(ColorCyan)),
+		progress.WithoutPercentage(),
+	)
+
+	hp := help.New()
+	hp.ShortSeparator = "  "
+	hp.FullSeparator = "   "
+	hp.Styles.ShortKey = lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
+	hp.Styles.ShortDesc = lipgloss.NewStyle().Foreground(ColorText)
+	hp.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(ColorSubtext)
+	hp.Styles.FullKey = hp.Styles.ShortKey
+	hp.Styles.FullDesc = hp.Styles.ShortDesc
+	hp.Styles.FullSeparator = hp.Styles.ShortSeparator
 
 	return Model{
 		appConfig:     cfg,
@@ -310,6 +370,8 @@ func NewModel(version string) Model {
 		filterInput:   ti,
 		descInput:     di,
 		passwordInput: pi,
+		help:          hp,
+		progress:      pr,
 		view:          viewList,
 		scanning:      true,
 		descCache:     manager.NewDescriptionCache(),
@@ -321,7 +383,7 @@ func NewModel(version string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, loadOrScan, checkForUpdate(m.version))
+	return tea.Batch(m.spinner.Tick, loadOrScan, checkForUpdate(m.version), titleTick())
 }
 
 func checkForUpdate(currentVersion string) tea.Cmd {
@@ -337,41 +399,56 @@ func checkForUpdate(currentVersion string) tea.Cmd {
 	}
 }
 
-// loadOrScan tries the scan cache first; if fresh, returns cached packages instantly.
-// Otherwise does a full live scan and saves the result to cache.
+// loadOrScan tries the scan cache first; if fresh, returns a cached scanDoneMsg
+// instantly. Otherwise it falls through to the live concurrent scan path.
 func loadOrScan() tea.Msg {
 	if cached := manager.LoadScanCache(); cached != nil {
 		return scanDoneMsg{pkgs: cached, fromCache: true}
 	}
-	return freshScan()
+	return scanStartMsg{total: availableManagerCount()}
 }
 
-func freshScan() tea.Msg {
-	managers := manager.All()
-	var all []model.Package
+// availableManagerCount returns how many managers will actually run during
+// a live scan, used to size the progress bar.
+func availableManagerCount() int {
+	n := 0
+	for _, mgr := range manager.All() {
+		if mgr.Available() {
+			n++
+		}
+	}
+	return n
+}
 
-	for _, mgr := range managers {
+// scanManagerCmds returns one command per available manager. Each command
+// runs the manager's Scan and emits a scanManagerDoneMsg when finished, so
+// the UI can update progress as results arrive.
+func scanManagerCmds() []tea.Cmd {
+	var cmds []tea.Cmd
+	for _, mgr := range manager.All() {
 		if !mgr.Available() {
 			continue
 		}
-		pkgs, err := mgr.Scan()
-		if err != nil {
-			continue
-		}
-		all = append(all, pkgs...)
+		m := mgr
+		cmds = append(cmds, func() tea.Msg {
+			pkgs, err := m.Scan()
+			return scanManagerDoneMsg{source: m.Name(), pkgs: pkgs, err: err}
+		})
 	}
+	return cmds
+}
 
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].Name < all[j].Name
-	})
-
-	manager.SaveScanCache(all)
-	return scanDoneMsg{pkgs: all}
+// startFreshScan emits the start message followed by per-manager scan commands.
+func startFreshScan() tea.Cmd {
+	cmds := append([]tea.Cmd{func() tea.Msg {
+		return scanStartMsg{total: availableManagerCount()}
+	}}, scanManagerCmds()...)
+	return tea.Batch(cmds...)
 }
 
 // forceRescan always does a live scan, ignoring cache.
 func forceRescan() tea.Msg {
-	return freshScan()
+	return scanStartMsg{total: availableManagerCount()}
 }
 
 func saveSnapshot(pkgs []model.Package) tea.Cmd {
@@ -524,16 +601,15 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 	}
 
 	m.pendingUpgrade = req
-	m.confirmingUpgrade = true
 	m.passwordInput.SetValue("")
 	if needsSudo {
 		m.confirmFocus = 0 // password field
 		m.passwordInput.Focus()
-		return textinput.Blink
+		return tea.Batch(m.openModal(ModalConfirmUpgrade), textinput.Blink)
 	}
 	m.confirmFocus = 1 // Yes button
 	m.passwordInput.Blur()
-	return nil
+	return m.openModal(ModalConfirmUpgrade)
 }
 
 func (m *Model) rescanManager(source model.Source) tea.Cmd {
@@ -587,6 +663,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.spinner, cmd = m.spinner.Update(msg)
 			return m, cmd
 		}
+
+	case modalAnimTickMsg:
+		if m.modal == ModalNone {
+			return m, nil
+		}
+		target := 1.0
+		if !m.modalOpening {
+			target = 0.0
+		}
+		m.modalAnim, m.modalAnimVel = m.modalSpring.Update(m.modalAnim, m.modalAnimVel, target)
+
+		// Short-circuit close: as soon as the modal overshoots past 0, it's
+		// visually gone. Stop the tick chain immediately — any further spring
+		// oscillation around 0 is invisible and wastes CPU.
+		if !m.modalOpening && m.modalAnim <= 0 {
+			m.modal = ModalNone
+			m.modalAnim = 0
+			m.modalAnimVel = 0
+			m.resetTransientModalState()
+			return m, nil
+		}
+
+		// Short-circuit open: once the modal reaches full size, stop ticking.
+		// clipModalByAnim clamps anim>=1 to the full box, so any continued
+		// oscillation would be visually invisible but CPU-costly.
+		if m.modalOpening && m.modalAnim >= 1.0 {
+			m.modalAnim = 1.0
+			return m, nil
+		}
+
+		return m, modalAnimTick()
 	case upgradeResultMsg:
 		m.upgradeInFlight = false
 		m.upgradingPkgName = ""
@@ -714,8 +821,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statusMsg = fmt.Sprintf("refreshed %s packages", msg.source)
 		return m, nil
 
+	case scanStartMsg:
+		m.scanning = true
+		m.scanTotal = msg.total
+		m.scanCompleted = 0
+		m.scanAccum = m.scanAccum[:0]
+		m.scanCurrentMgr = ""
+		return m, tea.Batch(scanManagerCmds()...)
+
+	case scanManagerDoneMsg:
+		if msg.err == nil {
+			m.scanAccum = append(m.scanAccum, msg.pkgs...)
+		}
+		m.scanCompleted++
+		m.scanCurrentMgr = string(msg.source)
+		if m.scanCompleted >= m.scanTotal {
+			pkgs := m.scanAccum
+			m.scanAccum = nil
+			return m, func() tea.Msg {
+				sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].Name < pkgs[j].Name })
+				manager.SaveScanCache(pkgs)
+				return scanDoneMsg{pkgs: pkgs}
+			}
+		}
+		return m, nil
+
+	case titleTickMsg:
+		const titleText = "GlazePKG"
+		if m.titleReveal < len(titleText) {
+			m.titleReveal++
+			return m, titleTick()
+		}
+		return m, nil
+
 	case scanDoneMsg:
 		m.scanning = false
+		m.scanTotal = 0
+		m.scanCompleted = 0
+		m.scanCurrentMgr = ""
 		if msg.err != nil {
 			m.statusMsg = "scan error: " + msg.err.Error()
 			return m, nil
@@ -782,8 +925,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pkgHelpMsg:
 		m.pkgHelpLines = msg.lines
 		m.pkgHelpScroll = 0
-		m.showPkgHelp = true
-		return m, nil
+		m.statusMsg = "" // clear "loading help..." set at trigger
+		return m, m.openModal(ModalPkgHelp)
 
 	case snapshotSavedMsg:
 		if msg.err != nil {
@@ -826,31 +969,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case exportDoneMsg:
-		m.showExport = false
 		if msg.err != nil {
 			m.statusMsg = "export error: " + msg.err.Error()
 		} else {
 			m.statusMsg = "exported: " + msg.path
 		}
 		return m, nil
-	}
-
-	if m.confirmingUpgrade && m.confirmFocus == 0 {
-		var cmd tea.Cmd
-		m.passwordInput, cmd = m.passwordInput.Update(msg)
-		return m, cmd
-	}
-
-	if m.confirmingRemove && m.removeFocus == 1 {
-		var cmd tea.Cmd
-		m.passwordInput, cmd = m.passwordInput.Update(msg)
-		return m, cmd
-	}
-
-	if m.confirmingBatch && m.batchFocus == 0 {
-		var cmd tea.Cmd
-		m.passwordInput, cmd = m.passwordInput.Update(msg)
-		return m, cmd
 	}
 
 	if m.view == viewSearch && m.searchInput.Focused() {
@@ -878,9 +1002,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := normalizeHotkey(msg.String())
 
-	// Clear status message on any keypress
-	m.statusMsg = ""
-
 	// Quit — cancel any in-flight upgrade first
 	if key == "ctrl+c" {
 		if m.upgradeCancel != nil {
@@ -894,73 +1015,13 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	if m.confirmingUpgrade {
-		return m.handleUpgradeConfirmKey(msg)
+	// Modal guard: a modal absorbs all input while open.
+	if m.modal != ModalNone {
+		return m.handleModalKey(msg)
 	}
 
-	if m.confirmingRemove {
-		return m.handleRemoveConfirmKey(msg)
-	}
-
-	if m.confirmingBatch {
-		return m.handleBatchConfirmKey(msg)
-	}
-
-	// Help overlay intercepts all keys
-	if m.showHelp {
-		m.showHelp = false
-		return m, nil
-	}
-
-	// Export overlay has its own cursor
-	if m.showExport {
-		switch key {
-		case "esc", "q":
-			m.showExport = false
-		case "j", "down":
-			if m.exportCursor < len(exportFormats)-1 {
-				m.exportCursor++
-			}
-		case "k", "up":
-			if m.exportCursor > 0 {
-				m.exportCursor--
-			}
-		case "enter":
-			return m, doExport(m.allPkgs, m.exportCursor)
-		}
-		return m, nil
-	}
-
-	// Theme picker overlay
-	if m.showThemePicker {
-		switch key {
-		case "esc", "q":
-			// Revert to previous theme
-			ApplyTheme(config.ResolveTheme(m.prevThemeID))
-			m.refreshInputStyles()
-			m.showThemePicker = false
-		case "j", "down":
-			if m.themeCursor < len(m.themeList)-1 {
-				m.themeCursor++
-				ApplyTheme(m.themeList[m.themeCursor])
-				m.refreshInputStyles()
-			}
-		case "k", "up":
-			if m.themeCursor > 0 {
-				m.themeCursor--
-				ApplyTheme(m.themeList[m.themeCursor])
-				m.refreshInputStyles()
-			}
-		case "enter":
-			selected := m.themeList[m.themeCursor]
-			ApplyTheme(selected)
-			m.refreshInputStyles()
-			m.appConfig.Appearance.Theme = selected.ID
-			_ = config.Save(m.appConfig)
-			m.showThemePicker = false
-		}
-		return m, nil
-	}
+	// Clear status message on any non-modal keypress.
+	m.statusMsg = ""
 
 	// Edit mode intercepts keys
 	if m.editingDesc {
@@ -1058,7 +1119,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.filterInput.Focus()
 		return m, textinput.Blink
 	case "?", "h":
-		m.showHelp = true
+		return m, m.openModal(ModalHelp)
 	case "tab":
 		if len(m.tabs) == 0 {
 			return m, nil
@@ -1129,14 +1190,14 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.statusMsg = "computing diff..."
 		return m, computeDiff(m.allPkgs)
 	case "e":
-		m.showExport = true
 		m.exportCursor = 0
+		return m, m.openModal(ModalExport)
 	case "i":
 		return m, m.enterSearchView()
 	case "m":
 		m.toggleMultiSelect()
 	case "t":
-		m.openThemePicker()
+		return m, m.openThemePicker()
 	case " ":
 		if m.multiSelect {
 			m.toggleSelection()
@@ -1161,70 +1222,8 @@ func (m Model) selectedPackage() (model.Package, bool) {
 }
 
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
-	// Help overlay intercepts keys
-	if m.showPkgHelp {
-		maxScroll := len(m.pkgHelpLines) - (m.height - 8)
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		switch key {
-		case "esc", "q", "h":
-			m.showPkgHelp = false
-		case "j", "down":
-			if m.pkgHelpScroll < maxScroll {
-				m.pkgHelpScroll++
-			}
-		case "k", "up":
-			if m.pkgHelpScroll > 0 {
-				m.pkgHelpScroll--
-			}
-		case "ctrl+d", "pgdown":
-			m.pkgHelpScroll += m.height / 2
-			if m.pkgHelpScroll > maxScroll {
-				m.pkgHelpScroll = maxScroll
-			}
-		case "ctrl+u", "pgup":
-			m.pkgHelpScroll -= m.height / 2
-			if m.pkgHelpScroll < 0 {
-				m.pkgHelpScroll = 0
-			}
-		case "g", "home":
-			m.pkgHelpScroll = 0
-		case "G", "end":
-			m.pkgHelpScroll = maxScroll
-		}
-		return m, nil
-	}
-
-	// Deps overlay intercepts keys
-	if m.showDeps {
-		switch key {
-		case "esc", "q", "d":
-			m.showDeps = false
-		case "j", "down":
-			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
-			if m.depsCursor < total-1 {
-				m.depsCursor++
-			}
-		case "k", "up":
-			if m.depsCursor > 0 {
-				m.depsCursor--
-			}
-		case "g", "home":
-			m.depsCursor = 0
-		case "G", "end":
-			total := len(m.detailPkg.DependsOn) + len(m.detailPkg.RequiredBy)
-			if total > 0 {
-				m.depsCursor = total - 1
-			}
-		}
-		return m, nil
-	}
-
 	switch key {
 	case "esc", "q":
-		m.showDeps = false
-		m.showPkgHelp = false
 		m.view = viewList
 	case "e":
 		m.editingDesc = true
@@ -1233,8 +1232,8 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		return m, textinput.Blink
 	case "d":
 		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
-			m.showDeps = true
 			m.depsCursor = 0
+			return m, m.openModal(ModalDeps)
 		}
 	case "h":
 		m.statusMsg = "loading help..."
@@ -1255,7 +1254,9 @@ func (m *Model) handleDiffKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) openThemePicker() {
+// openThemePicker initializes theme list and prevThemeID, then opens ModalTheme.
+// Returns the animation-tick Cmd from openModal.
+func (m *Model) openThemePicker() tea.Cmd {
 	// Build theme list: System first, then all named themes
 	systemTheme := config.Theme{
 		ID:      "system",
@@ -1272,7 +1273,7 @@ func (m *Model) openThemePicker() {
 			break
 		}
 	}
-	m.showThemePicker = true
+	return m.openModal(ModalTheme)
 }
 
 // refreshInputStyles updates text input and spinner styles after a theme change.
@@ -1354,23 +1355,23 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Title bar
-	title := StyleTitle.Render("GlazePKG")
-	b.WriteString(title)
-	if m.updateBanner != "" {
-		b.WriteString("  " + StyleUpdateBanner.Render(m.updateBanner))
+	// Title bar — detail and search views render their own title inside their
+	// render function so the title, panel, and keybinds stay grouped together
+	// as one centered block.
+	if m.view != viewDetail && m.view != viewSearch {
+		b.WriteString(m.renderHeader())
+		b.WriteString("\n")
 	}
-	b.WriteString("\n\n")
 
 	switch m.view {
 	case viewList:
 		m.renderListView(&b)
 	case viewDetail:
-		b.WriteString(renderDetail(m.detailPkg, m.editingDesc, m.descInput.View()))
+		b.WriteString(renderDetail(&m))
 	case viewDiff:
 		b.WriteString(renderDiffView(m.currentDiff, m.diffSince))
 	case viewSearch:
-		m.renderSearchView(&b)
+		b.WriteString(m.renderSearchView())
 	}
 
 	// Batch progress log
@@ -1414,92 +1415,139 @@ func (m Model) View() string {
 		b.WriteString("\n  " + renderOpNotification(m.removeNotifMsg, m.removeNotifErr, m.removeInFlight, "REMOVE", m.spinner.View()))
 	}
 
-	// Status bar
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
-	b.WriteString("\n")
-	b.WriteString(m.renderStatusBar())
+	// Status bar. Detail and search views own their own keybind bar (centered
+	// inside their render functions), so we skip the status bar and its
+	// separator rule in those views to avoid duplicate hints.
+	if m.view != viewDetail && m.view != viewSearch {
+		b.WriteString("\n")
+		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
+		b.WriteString("\n")
+		b.WriteString(m.renderStatusBar())
+	}
 
 	content := b.String()
 
-	// Render overlays on top
-	if m.confirmingUpgrade {
-		return content + "\n" + m.renderUpgradeConfirmOverlay()
-	}
-	if m.confirmingRemove {
-		return content + "\n" + m.renderRemoveConfirmOverlay()
-	}
-	if m.confirmingBatch {
-		return content + "\n" + m.renderBatchConfirmOverlay()
-	}
-	if m.showHelp {
-		return content + "\n" + renderHelpOverlay(m.width, m.height)
-	}
-	if m.showExport {
-		return content + "\n" + renderExportOverlay(m.exportCursor, m.width, m.height)
-	}
-	if m.showDeps {
-		return content + "\n" + renderDepsOverlay(m.detailPkg, m.depsCursor, m.width, m.height)
-	}
-	if m.showPkgHelp {
-		return content + "\n" + renderPkgHelpOverlay(m.detailPkg.Name, m.pkgHelpLines, m.pkgHelpScroll, m.width, m.height)
-	}
-	if m.showThemePicker {
-		return content + "\n" + renderThemeOverlay(m.themeList, m.themeCursor, m.prevThemeID, m.width, m.height)
-	}
-
-	return content
+	return m.renderModal(content)
 }
 
 func (m Model) renderListView(b *strings.Builder) {
-	// Tabs
+	// Outer panel sizing matches the detail view: leave 3 cols of horizontal
+	// margin on each side, clamped between 40 and 120 so the panel stays
+	// readable on narrow terminals but doesn't stretch absurdly wide on
+	// ultrawide ones. Inner width subtracts the panel's border(2)+padding(4).
+	outerMaxW := m.width - 6
+	if outerMaxW < 40 {
+		outerMaxW = 40
+	}
+	if outerMaxW > 120 {
+		outerMaxW = 120
+	}
+	innerW := outerMaxW - 6
+
+	// Tabs — centered within the panel's inner width.
+	var panelContent strings.Builder
 	if len(m.tabs) > 0 {
-		b.WriteString("  ")
-		b.WriteString(renderTabs(m.tabs, m.activeTab))
-		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  " + strings.Repeat("─", min(m.width-4, 120))))
-		b.WriteString("\n\n")
+		tabs := renderTabs(m.tabs, m.activeTab)
+		panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, tabs))
+		panelContent.WriteString("\n")
+		panelContent.WriteString(StyleDim.Render(strings.Repeat("─", innerW)))
+		panelContent.WriteString("\n")
 	}
 
-	// Filter
+	// Filter line (search input or active-filter display).
 	if m.filtering {
-		b.WriteString("  ")
-		b.WriteString(m.filterInput.View())
-		b.WriteString("\n\n")
+		panelContent.WriteString("\n")
+		panelContent.WriteString(m.filterInput.View())
+		panelContent.WriteString("\n")
 	} else if m.filterInput.Value() != "" {
-		b.WriteString("  ")
-		b.WriteString(StyleFilterPrompt.Render("/ "))
-		b.WriteString(StyleFilterText.Render(m.filterInput.Value()))
-		b.WriteString("\n\n")
+		panelContent.WriteString("\n")
+		panelContent.WriteString(StyleFilterPrompt.Render("/ "))
+		panelContent.WriteString(StyleFilterText.Render(m.filterInput.Value()))
+		panelContent.WriteString("\n")
 	}
 
-	// Scanning spinner
+	// Scanning indicator. Live scans show a progress bar driven by
+	// per-manager completions; cache loads (no scanTotal) fall back to a
+	// spinner since there's nothing meaningful to measure.
 	if m.scanning {
-		b.WriteString("  ")
-		b.WriteString(m.spinner.View())
-		b.WriteString(" Scanning package managers...")
-		b.WriteString("\n")
+		panelContent.WriteString("\n")
+		if m.scanTotal > 0 {
+			barW := innerW - 4
+			if barW > 60 {
+				barW = 60
+			}
+			if barW < 20 {
+				barW = 20
+			}
+			pr := m.progress
+			pr.Width = barW
+			percent := float64(m.scanCompleted) / float64(m.scanTotal)
+			label := fmt.Sprintf("Scanning %d/%d managers", m.scanCompleted, m.scanTotal)
+			if m.scanCurrentMgr != "" && m.scanCompleted < m.scanTotal {
+				label += " — last: " + m.scanCurrentMgr
+			}
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, label))
+			panelContent.WriteString("\n")
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, pr.ViewAs(percent)))
+			panelContent.WriteString("\n")
+		} else {
+			spinLine := m.spinner.View() + " Scanning package managers..."
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, spinLine))
+			panelContent.WriteString("\n")
+		}
+		b.WriteString(renderOuterPanel(panelContent.String(), outerMaxW, m.width))
 		return
 	}
 
-	// Package table
-	listHeight := m.height - 12
+	// Package table. Height budget accounts for: header(2) + summary(1) +
+	// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2).
+	listHeight := m.height - 14
 	if listHeight < 5 {
 		listHeight = 5
 	}
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	b.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, m.width, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
+	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
-	// Loading indicators
+	// Loading indicators, inside the panel so they don't break the frame.
 	if m.loadingDescs {
-		b.WriteString("\n  ")
-		b.WriteString(m.spinner.View())
-		b.WriteString(StyleDim.Render(" Loading descriptions..."))
+		panelContent.WriteString("\n")
+		line := m.spinner.View() + StyleDim.Render(" Loading descriptions...")
+		panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, line))
 	} else if m.loadingUpdates || m.loadingDeps {
-		b.WriteString("\n  ")
-		b.WriteString(m.spinner.View())
-		b.WriteString(StyleDim.Render(" Loading details..."))
+		panelContent.WriteString("\n")
+		line := m.spinner.View() + StyleDim.Render(" Loading details...")
+		panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, line))
 	}
+
+	b.WriteString(renderOuterPanel(panelContent.String(), outerMaxW, m.width))
+}
+
+// renderOuterPanel wraps content in a rounded-border outer panel and
+// centers it horizontally within the terminal width.
+func renderOuterPanel(content string, outerMaxW, termW int) string {
+	panel := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(ColorSubtext).
+		Padding(0, 2).
+		Width(outerMaxW).
+		Render(content)
+
+	pw := lipgloss.Width(panel)
+	pad := (termW - pw) / 2
+	if pad < 0 {
+		pad = 0
+	}
+	leftPad := strings.Repeat(" ", pad)
+	lines := strings.Split(panel, "\n")
+	var out strings.Builder
+	for i, line := range lines {
+		out.WriteString(leftPad)
+		out.WriteString(line)
+		if i < len(lines)-1 {
+			out.WriteString("\n")
+		}
+	}
+	return out.String()
 }
 
 func formatDuration(d time.Duration) string {
@@ -1520,129 +1568,6 @@ func formatDuration(d time.Duration) string {
 		return "1 day"
 	}
 	return fmt.Sprintf("%d days", days)
-}
-
-func (m Model) renderStatusBar() string {
-	if m.statusMsg != "" {
-		return StyleStatusBar.Render(m.statusMsg)
-	}
-
-	keyStyle := lipgloss.NewStyle().Foreground(ColorCyan).Bold(true)
-	sepStyle := lipgloss.NewStyle().Foreground(ColorSubtext)
-	descStyle := lipgloss.NewStyle().Foreground(ColorText)
-	sep := sepStyle.Render("  ")
-
-	formatBinds := func(binds []struct{ key, desc string }) string {
-		var parts []string
-		for _, b := range binds {
-			parts = append(parts, keyStyle.Render(b.key)+descStyle.Render(" "+b.desc))
-		}
-		if m.width <= 0 {
-			return strings.Join(parts, sep)
-		}
-		// Wrap into multiple lines when too wide
-		maxW := m.width - 2
-		var lines []string
-		var line []string
-		w := 0
-		sepW := lipgloss.Width(sep)
-		for _, p := range parts {
-			pw := lipgloss.Width(p)
-			needed := pw
-			if len(line) > 0 {
-				needed += sepW
-			}
-			if w+needed > maxW && len(line) > 0 {
-				lines = append(lines, strings.Join(line, sep))
-				line = nil
-				w = 0
-			}
-			line = append(line, p)
-			w += needed
-		}
-		if len(line) > 0 {
-			lines = append(lines, strings.Join(line, sep))
-		}
-		return strings.Join(lines, "\n ")
-	}
-
-	switch m.view {
-	case viewList:
-		var binds []struct{ key, desc string }
-		if m.multiSelect {
-			count := m.selectionCount()
-			selectStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-			prefix := selectStyle.Render(fmt.Sprintf("[%d selected]", count))
-			binds = []struct{ key, desc string }{
-				{"space", "toggle"}, {"u", "upgrade"}, {"x", "remove"},
-				{"/", "search"}, {"m", "exit select"}, {"q", "quit"},
-			}
-			return " " + prefix + "  " + formatBinds(binds)
-		}
-		binds = []struct{ key, desc string }{
-			{"/", "search"}, {"tab", "source"}, {"f", "filter"},
-			{"enter", "detail"}, {"r", "rescan"}, {"s", "snap"},
-			{"m", "select"}, {"i", "search/install"}, {"d", "diff"}, {"e", "export"}, {"t", "theme"}, {"?", "help"}, {"q", "quit"},
-		}
-		bar := formatBinds(binds)
-		if m.sizeFilter > 0 {
-			filterStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-			bar = filterStyle.Render("["+sizeFilters[m.sizeFilter].Label+"]") + sep + bar
-		}
-		return " " + bar
-	case viewDetail:
-		if m.editingDesc {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"enter", "save"}, {"esc", "cancel"},
-			})
-		}
-		if m.showPkgHelp {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
-			})
-		}
-		if m.showDeps {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"j/k", "navigate"}, {"esc", "close"},
-			})
-		}
-		var binds []struct{ key, desc string }
-		if mgr := manager.BySource(m.detailPkg.Source); mgr != nil {
-			if _, ok := mgr.(manager.Upgrader); ok {
-				binds = append(binds, struct{ key, desc string }{"u", "upgrade"})
-			}
-			if _, ok := mgr.(manager.Remover); ok {
-				binds = append(binds, struct{ key, desc string }{"x", "remove"})
-			}
-		}
-		binds = append(binds, struct{ key, desc string }{"e", "edit description"})
-		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
-			binds = append(binds, struct{ key, desc string }{"d", "dependencies"})
-		}
-		binds = append(binds, struct{ key, desc string }{"h", "help/usage"})
-		binds = append(binds, struct{ key, desc string }{"esc", "back"}, struct{ key, desc string }{"q", "quit"})
-		return " " + formatBinds(binds)
-	case viewDiff:
-		return " " + formatBinds([]struct{ key, desc string }{
-			{"esc", "back"}, {"q", "quit"},
-		})
-	case viewSearch:
-		if m.searchInput.Focused() {
-			return " " + formatBinds([]struct{ key, desc string }{
-				{"enter", "search"}, {"esc", "back"},
-			})
-		}
-		binds := []struct{ key, desc string }{
-			{"j/k", "navigate"}, {"enter", "expand"}, {"i", "install"},
-			{"p", "pre-release"}, {"/", "new search"}, {"q", "back"},
-		}
-		if m.showPreRelease {
-			preStyle := lipgloss.NewStyle().Foreground(ColorYellow).Bold(true)
-			return " " + preStyle.Render("[pre-release]") + "  " + formatBinds(binds)
-		}
-		return " " + formatBinds(binds)
-	}
-	return ""
 }
 
 func (m *Model) runUpgradeRequest(req upgradeRequest) tea.Cmd {
@@ -1716,7 +1641,6 @@ func extractErrorLines(raw string) string {
 
 func (m *Model) executePendingUpgrade() tea.Cmd {
 	if m.pendingUpgrade == nil {
-		m.confirmingUpgrade = false
 		return nil
 	}
 	req := *m.pendingUpgrade
@@ -1724,7 +1648,6 @@ func (m *Model) executePendingUpgrade() tea.Cmd {
 		req.password = m.passwordInput.Value()
 	}
 	m.pendingUpgrade = nil
-	m.confirmingUpgrade = false
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
@@ -1739,150 +1662,63 @@ func (m *Model) needsSudoPassword() bool {
 	return m.pendingUpgrade != nil && len(m.pendingUpgrade.cmd.Args) > 0 && m.pendingUpgrade.cmd.Args[0] == "sudo"
 }
 
-func (m *Model) handleUpgradeConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := normalizeHotkey(msg.String())
-	hasPwField := m.needsSudoPassword()
-
-	// Password field is focused — let textinput handle typing
-	if hasPwField && m.confirmFocus == 0 {
-		switch key {
-		case "esc":
-			m.cancelUpgradeConfirm()
-			return m, nil
-		case "tab":
-			m.confirmFocus = 1
-			m.passwordInput.Blur()
-			return m, nil
-		case "enter":
-			if m.passwordInput.Value() != "" {
-				m.confirmFocus = 1
-				m.passwordInput.Blur()
-			}
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-			return m, cmd
-		}
-	}
-
-	switch key {
-	case "enter":
-		if m.confirmFocus == 1 { // Yes
-			if hasPwField && m.passwordInput.Value() == "" {
-				m.confirmFocus = 0
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, m.executePendingUpgrade()
-		}
-		// No
-		m.cancelUpgradeConfirm()
-	case "esc":
-		m.cancelUpgradeConfirm()
-	case "tab", "right", "l":
-		if m.confirmFocus == 1 {
-			m.confirmFocus = 2
-		} else {
-			m.confirmFocus = 1
-		}
-	case "shift+tab", "left", "h":
-		if m.confirmFocus == 2 {
-			m.confirmFocus = 1
-		} else if hasPwField {
-			m.confirmFocus = 0
-			m.passwordInput.Focus()
-			return m, textinput.Blink
-		}
-	}
-	return m, nil
-}
-
 func (m *Model) cancelUpgradeConfirm() {
-	m.confirmingUpgrade = false
 	m.pendingUpgrade = nil
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.statusMsg = "upgrade cancelled"
 }
 
-func (m Model) renderUpgradeConfirmOverlay() string {
+// upgradeConfirmBody renders the confirm-upgrade modal body: action summary,
+// optional password field, Yes/No buttons with focus highlight on m.confirmFocus.
+func upgradeConfirmBody(m *Model) string {
 	req := m.pendingUpgrade
 	if req == nil {
 		return ""
 	}
-
 	var b strings.Builder
 	title := "Upgrade"
 	if req.opLabel == "install" {
 		title = "Install"
 	}
-	b.WriteString(StyleOverlayTitle.Render("  Confirm " + title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 40)))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("%s %s (%s)?", title, req.pkg.Name, req.pkg.Source)))
 	b.WriteString("\n\n")
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("  %s %s (%s)?", title, req.pkg.Name, req.pkg.Source)))
-	b.WriteString("\n\n")
-	b.WriteString(StyleDim.Render("  command:"))
+	b.WriteString(StyleDim.Render("command:"))
 	b.WriteString("\n")
-
 	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan)
-	b.WriteString("  " + cmdStyle.Render(req.cmdStr))
+	b.WriteString(cmdStyle.Render(req.cmdStr))
 	b.WriteString("\n")
 
-	overlayHeight := 11
 	needsSudo := len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo"
-
 	if req.privileged {
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
 		if needsSudo {
-			b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+			b.WriteString("\n" + warnStyle.Render("requires elevated privileges"))
 			b.WriteString("\n\n")
 			b.WriteString(m.passwordInput.View())
 			b.WriteString("\n")
-			overlayHeight = 16
 		} else {
-			b.WriteString("\n  " + warnStyle.Render("requires an elevated terminal"))
+			b.WriteString("\n" + warnStyle.Render("requires an elevated terminal"))
 			b.WriteString("\n")
-			overlayHeight = 13
 		}
 	}
 
 	b.WriteString("\n")
-
 	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
-
-	if m.confirmFocus == 1 {
+	switch m.confirmFocus {
+	case 1:
 		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	} else if m.confirmFocus == 2 {
+	case 2:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
-	} else {
+	default:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
-
-	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
-
-	content := b.String()
-
-	cmdLen := len(req.cmdStr) + 8
-	overlayWidth := 48
-	if cmdLen > overlayWidth {
-		overlayWidth = cmdLen
-	}
-	if overlayWidth > m.width-4 {
-		overlayWidth = m.width - 4
-	}
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(m.width, m.height, overlay)
+	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	return b.String()
 }
 
 func isPrivilegedSource(source model.Source) bool {
@@ -1936,7 +1772,6 @@ func (m *Model) removeDetailPackage() tea.Cmd {
 	}
 
 	m.pendingRemove = req
-	m.confirmingRemove = true
 	m.removeMode = 0
 	m.passwordInput.SetValue("")
 
@@ -1944,21 +1779,22 @@ func (m *Model) removeDetailPackage() tea.Cmd {
 	hasDeep := req.deepCmd != nil
 
 	if hasDeep {
-		m.removeFocus = 0 // mode selector
-	} else if needsSudo {
-		m.removeFocus = 1 // password
-		m.passwordInput.Focus()
-		return textinput.Blink
-	} else {
-		m.removeFocus = 2 // Yes
+		m.removeFocus = 0
+		m.passwordInput.Blur()
+		return m.openModal(ModalConfirmRemove)
 	}
+	if needsSudo {
+		m.removeFocus = 1
+		m.passwordInput.Focus()
+		return tea.Batch(m.openModal(ModalConfirmRemove), textinput.Blink)
+	}
+	m.removeFocus = 2
 	m.passwordInput.Blur()
-	return nil
+	return m.openModal(ModalConfirmRemove)
 }
 
 func (m *Model) executeRemove() tea.Cmd {
 	if m.pendingRemove == nil {
-		m.confirmingRemove = false
 		return nil
 	}
 	req := *m.pendingRemove
@@ -1974,7 +1810,6 @@ func (m *Model) executeRemove() tea.Cmd {
 	}
 
 	m.pendingRemove = nil
-	m.confirmingRemove = false
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.removeInFlight = true
@@ -2008,7 +1843,6 @@ func (m *Model) runRemoveRequest(req removeRequest) tea.Cmd {
 }
 
 func (m *Model) cancelRemoveConfirm() {
-	m.confirmingRemove = false
 	m.pendingRemove = nil
 	m.removeMode = 0
 	m.passwordInput.SetValue("")
@@ -2020,108 +1854,19 @@ func (m *Model) removeNeedsSudo() bool {
 	return m.pendingRemove != nil && len(m.pendingRemove.cmd.Args) > 0 && m.pendingRemove.cmd.Args[0] == "sudo"
 }
 
-func (m *Model) handleRemoveConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := normalizeHotkey(msg.String())
-	hasDeep := m.pendingRemove != nil && m.pendingRemove.deepCmd != nil
-	hasPw := m.removeNeedsSudo()
-
-	// Mode selector focused
-	if hasDeep && m.removeFocus == 0 {
-		switch key {
-		case "esc":
-			m.cancelRemoveConfirm()
-			return m, nil
-		case "j", "down":
-			if m.removeMode == 0 {
-				m.removeMode = 1
-			}
-		case "k", "up":
-			if m.removeMode == 1 {
-				m.removeMode = 0
-			}
-		case "tab", "enter":
-			if hasPw {
-				m.removeFocus = 1
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			m.removeFocus = 2
-		}
-		return m, nil
-	}
-
-	// Password field focused
-	if hasPw && m.removeFocus == 1 {
-		switch key {
-		case "esc":
-			m.cancelRemoveConfirm()
-			return m, nil
-		case "tab":
-			m.removeFocus = 2
-			m.passwordInput.Blur()
-			return m, nil
-		case "enter":
-			if m.passwordInput.Value() != "" {
-				m.removeFocus = 2
-				m.passwordInput.Blur()
-			}
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-			return m, cmd
-		}
-	}
-
-	// Yes/No buttons
-	switch key {
-	case "enter":
-		if m.removeFocus == 2 { // Yes
-			if hasPw && m.passwordInput.Value() == "" {
-				m.removeFocus = 1
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, m.executeRemove()
-		}
-		m.cancelRemoveConfirm()
-	case "esc":
-		m.cancelRemoveConfirm()
-	case "tab", "right", "l":
-		if m.removeFocus == 2 {
-			m.removeFocus = 3
-		} else {
-			m.removeFocus = 2
-		}
-	case "shift+tab", "left", "h":
-		if m.removeFocus == 3 {
-			m.removeFocus = 2
-		} else if hasPw {
-			m.removeFocus = 1
-			m.passwordInput.Focus()
-			return m, textinput.Blink
-		} else if hasDeep {
-			m.removeFocus = 0
-		}
-	}
-	return m, nil
-}
-
-func (m Model) renderRemoveConfirmOverlay() string {
+// removeConfirmBody renders the confirm-remove modal body: optional
+// DeepRemover mode selector, orphaned-deps preview + conflicts, command
+// preview, optional password field, and Yes/No buttons with focus highlight
+// driven by m.removeFocus / m.removeMode.
+func removeConfirmBody(m *Model) string {
 	req := m.pendingRemove
 	if req == nil {
 		return ""
 	}
 
 	var b strings.Builder
-	b.WriteString(StyleOverlayTitle.Render("  Confirm Remove"))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("Remove %s (%s)?", req.pkg.Name, req.pkg.Source)))
 	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 40)))
-	b.WriteString("\n\n")
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("  Remove %s (%s)?", req.pkg.Name, req.pkg.Source)))
-	b.WriteString("\n")
-
-	overlayHeight := 11
 
 	// RequiredBy warning
 	if len(req.pkg.RequiredBy) > 0 {
@@ -2130,15 +1875,14 @@ func (m Model) renderRemoveConfirmOverlay() string {
 		if len(reqList) > 60 {
 			reqList = reqList[:60] + "..."
 		}
-		b.WriteString("\n  " + warnStyle.Render("⚠ required by: "+reqList))
+		b.WriteString("\n" + warnStyle.Render("⚠ required by: "+reqList))
 		b.WriteString("\n")
-		overlayHeight += 2
 	}
 
 	// Mode selector (DeepRemover only)
 	if req.deepCmd != nil {
 		b.WriteString("\n")
-		b.WriteString(StyleDim.Render("  mode:"))
+		b.WriteString(StyleDim.Render("mode:"))
 		b.WriteString("\n")
 
 		modeStyle0 := StyleNormal
@@ -2157,25 +1901,23 @@ func (m Model) renderRemoveConfirmOverlay() string {
 			prefix1 = "› "
 		}
 
-		b.WriteString("  " + modeStyle0.Render(prefix0+"Remove package only"))
+		b.WriteString(modeStyle0.Render(prefix0 + "Remove package only"))
 		b.WriteString("\n")
-		b.WriteString("  " + modeStyle1.Render(prefix1+"Remove package + orphaned deps"))
+		b.WriteString(modeStyle1.Render(prefix1 + "Remove package + orphaned deps"))
 		b.WriteString("\n")
-		overlayHeight += 5
 
 		// Show orphaned deps when deep remove selected
 		if m.removeMode == 1 && len(req.pkg.DependsOn) > 0 {
 			b.WriteString("\n")
-			b.WriteString(StyleDim.Render("  orphaned deps to remove:"))
+			b.WriteString(StyleDim.Render("orphaned deps to remove:"))
 			b.WriteString("\n")
 			depStyle := lipgloss.NewStyle().Foreground(ColorSubtext)
 			depList := strings.Join(req.pkg.DependsOn, ", ")
 			if len(depList) > 60 {
 				depList = depList[:60] + "..."
 			}
-			b.WriteString("  " + depStyle.Render("  "+depList))
+			b.WriteString(depStyle.Render("  " + depList))
 			b.WriteString("\n")
-			overlayHeight += 3
 
 			// Flag deps still required by other packages
 			var conflicts []string
@@ -2195,11 +1937,9 @@ func (m Model) renderRemoveConfirmOverlay() string {
 					if len(c) > 60 {
 						c = c[:60] + "..."
 					}
-					b.WriteString("\n  " + warnStyle.Render("⚠ "+c))
-					overlayHeight++
+					b.WriteString("\n" + warnStyle.Render("⚠ "+c))
 				}
 				b.WriteString("\n")
-				overlayHeight++
 			}
 		}
 	}
@@ -2210,28 +1950,24 @@ func (m Model) renderRemoveConfirmOverlay() string {
 		cmdStr = req.deepCmdStr
 	}
 	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  command:"))
+	b.WriteString(StyleDim.Render("command:"))
 	b.WriteString("\n")
 	cmdStyle := lipgloss.NewStyle().Foreground(ColorCyan)
-	b.WriteString("  " + cmdStyle.Render(cmdStr))
+	b.WriteString(cmdStyle.Render(cmdStr))
 	b.WriteString("\n")
-	overlayHeight += 3
 
 	needsSudo := len(req.cmd.Args) > 0 && req.cmd.Args[0] == "sudo"
 
 	if req.privileged {
+		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
 		if needsSudo {
-			warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-			b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
+			b.WriteString("\n" + warnStyle.Render("requires elevated privileges"))
 			b.WriteString("\n\n")
 			b.WriteString(m.passwordInput.View())
 			b.WriteString("\n")
-			overlayHeight += 4
 		} else {
-			warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-			b.WriteString("\n  " + warnStyle.Render("requires an elevated terminal"))
+			b.WriteString("\n" + warnStyle.Render("requires an elevated terminal"))
 			b.WriteString("\n")
-			overlayHeight += 2
 		}
 	}
 
@@ -2240,36 +1976,21 @@ func (m Model) renderRemoveConfirmOverlay() string {
 	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
 
-	if m.removeFocus == 2 {
+	switch m.removeFocus {
+	case 2:
 		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	} else if m.removeFocus == 3 {
+	case 3:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
-	} else {
+	default:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
 
-	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
 
-	content := b.String()
-
-	cmdLen := len(cmdStr) + 8
-	overlayWidth := 48
-	if cmdLen > overlayWidth {
-		overlayWidth = cmdLen
-	}
-	if overlayWidth > m.width-4 {
-		overlayWidth = m.width - 4
-	}
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(m.width, m.height, overlay)
+	return b.String()
 }
 
 func renderOpNotification(msg string, isErr, inFlight bool, opLabel, spinnerView string) string {

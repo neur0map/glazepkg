@@ -160,7 +160,6 @@ type batchConfirmState struct {
 
 func (m *Model) showBatchConfirm(ops []batchOp, op string, skipped []string) tea.Cmd {
 	m.pendingBatch = &batchConfirmState{ops: ops, op: op, skipped: skipped}
-	m.confirmingBatch = true
 
 	// Check if any ops need sudo
 	needsSudo := false
@@ -175,69 +174,11 @@ func (m *Model) showBatchConfirm(ops []batchOp, op string, skipped []string) tea
 	if needsSudo {
 		m.batchFocus = 0 // password
 		m.passwordInput.Focus()
-		return textinput.Blink
+		return tea.Batch(m.openModal(ModalConfirmBatch), textinput.Blink)
 	}
 	m.batchFocus = 1 // Yes
 	m.passwordInput.Blur()
-	return nil
-}
-
-func (m *Model) handleBatchConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := normalizeHotkey(msg.String())
-	hasPw := m.batchNeedsSudo()
-
-	// Password field focused
-	if hasPw && m.batchFocus == 0 {
-		switch key {
-		case "esc":
-			m.cancelBatchConfirm()
-			return m, nil
-		case "tab":
-			m.batchFocus = 1
-			m.passwordInput.Blur()
-			return m, nil
-		case "enter":
-			if m.passwordInput.Value() != "" {
-				m.batchFocus = 1
-				m.passwordInput.Blur()
-			}
-			return m, nil
-		default:
-			var cmd tea.Cmd
-			m.passwordInput, cmd = m.passwordInput.Update(msg)
-			return m, cmd
-		}
-	}
-
-	switch key {
-	case "enter":
-		if m.batchFocus == 1 { // Yes
-			if hasPw && m.passwordInput.Value() == "" {
-				m.batchFocus = 0
-				m.passwordInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, m.executeBatch()
-		}
-		m.cancelBatchConfirm()
-	case "esc":
-		m.cancelBatchConfirm()
-	case "tab", "right", "l":
-		if m.batchFocus == 1 {
-			m.batchFocus = 2
-		} else {
-			m.batchFocus = 1
-		}
-	case "shift+tab", "left", "h":
-		if m.batchFocus == 2 {
-			m.batchFocus = 1
-		} else if hasPw {
-			m.batchFocus = 0
-			m.passwordInput.Focus()
-			return m, textinput.Blink
-		}
-	}
-	return m, nil
+	return m.openModal(ModalConfirmBatch)
 }
 
 func (m *Model) batchNeedsSudo() bool {
@@ -253,7 +194,6 @@ func (m *Model) batchNeedsSudo() bool {
 }
 
 func (m *Model) cancelBatchConfirm() {
-	m.confirmingBatch = false
 	m.pendingBatch = nil
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
@@ -262,7 +202,6 @@ func (m *Model) cancelBatchConfirm() {
 
 func (m *Model) executeBatch() tea.Cmd {
 	if m.pendingBatch == nil {
-		m.confirmingBatch = false
 		return nil
 	}
 	batch := *m.pendingBatch
@@ -272,7 +211,6 @@ func (m *Model) executeBatch() tea.Cmd {
 	}
 
 	m.pendingBatch = nil
-	m.confirmingBatch = false
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 	m.upgradeInFlight = true
@@ -396,24 +334,30 @@ func (m *Model) handleBatchProgress(msg batchProgressMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m Model) renderBatchConfirmOverlay() string {
+// batchConfirmBody renders the body of ModalConfirmBatch. The package list
+// is rendered into a scrollable region so long lists stay readable: the
+// modal grows to fit the list when the terminal has room, and clamps to a
+// scrollable window (driven by m.batchScroll) when it doesn't. The header
+// ("Upgrade N packages?") and the footer (password field + Yes/No buttons)
+// are always pinned — only the list in between scrolls.
+func batchConfirmBody(m *Model) string {
 	batch := m.pendingBatch
 	if batch == nil {
 		return ""
 	}
 
-	var b strings.Builder
-	title := "Batch " + strings.Title(batch.op)
-	b.WriteString(StyleOverlayTitle.Render("  " + title))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 44)))
-	b.WriteString("\n\n")
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("  %s %d packages?", strings.Title(batch.op), len(batch.ops))))
-	b.WriteString("\n")
+	wrapW := m.width - 10
+	if wrapW > 80 {
+		wrapW = 80
+	}
+	if wrapW < 40 {
+		wrapW = 40
+	}
 
-	overlayHeight := 11
+	// --- Header (always visible) ---
+	header := StyleNormal.Render(fmt.Sprintf("%s %d packages?", strings.Title(batch.op), len(batch.ops)))
 
-	// Group by privilege
+	// --- Package list (scrollable region) ---
 	var privPkgs, unprivPkgs []batchOp
 	for _, o := range batch.ops {
 		if o.privileged {
@@ -423,91 +367,211 @@ func (m Model) renderBatchConfirmOverlay() string {
 		}
 	}
 
+	var listBuf strings.Builder
 	if len(privPkgs) > 0 {
-		b.WriteString("\n")
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-		b.WriteString("  " + warnStyle.Render("privileged (1 password for all):"))
-		b.WriteString("\n")
-		// Group by source
+		listBuf.WriteString(warnStyle.Render("privileged (1 password for all):"))
+		listBuf.WriteString("\n")
 		bySource := make(map[model.Source][]string)
 		for _, o := range privPkgs {
 			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
 		}
 		for src, names := range bySource {
-			nameList := strings.Join(names, ", ")
-			if len(nameList) > 50 {
-				nameList = nameList[:50] + "..."
-			}
-			b.WriteString(fmt.Sprintf("    %s: %s\n", src, nameList))
-			overlayHeight++
+			listBuf.WriteString(formatSourceNameList(string(src), names, wrapW))
 		}
-		overlayHeight += 2
 	}
-
 	if len(unprivPkgs) > 0 {
-		b.WriteString("\n")
-		b.WriteString("  " + StyleDim.Render("unprivileged:"))
-		b.WriteString("\n")
+		if listBuf.Len() > 0 {
+			listBuf.WriteString("\n")
+		}
+		listBuf.WriteString(StyleDim.Render("unprivileged:"))
+		listBuf.WriteString("\n")
 		bySource := make(map[model.Source][]string)
 		for _, o := range unprivPkgs {
 			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
 		}
 		for src, names := range bySource {
-			nameList := strings.Join(names, ", ")
-			if len(nameList) > 50 {
-				nameList = nameList[:50] + "..."
-			}
-			b.WriteString(fmt.Sprintf("    %s: %s\n", src, nameList))
-			overlayHeight++
+			listBuf.WriteString(formatSourceNameList(string(src), names, wrapW))
 		}
-		overlayHeight += 2
 	}
-
 	if len(batch.skipped) > 0 {
-		b.WriteString("\n")
-		b.WriteString("  " + StyleDim.Render(fmt.Sprintf("skipped (%d): %s", len(batch.skipped), strings.Join(batch.skipped, ", "))))
-		b.WriteString("\n")
-		overlayHeight += 2
+		if listBuf.Len() > 0 {
+			listBuf.WriteString("\n")
+		}
+		listBuf.WriteString(StyleDim.Render(fmt.Sprintf("skipped (%d):", len(batch.skipped))))
+		listBuf.WriteString("\n")
+		listBuf.WriteString(StyleDim.Render(wrapCommaList(batch.skipped, "  ", wrapW)))
+	}
+	listStr := strings.TrimRight(listBuf.String(), "\n")
+	listLines := []string{}
+	if listStr != "" {
+		listLines = strings.Split(listStr, "\n")
 	}
 
-	// Password
+	// --- Footer (always visible): password + Yes/No buttons ---
+	var footerBuf strings.Builder
 	if m.batchNeedsSudo() {
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
-		b.WriteString("\n  " + warnStyle.Render("requires elevated privileges"))
-		b.WriteString("\n\n")
-		b.WriteString(m.passwordInput.View())
-		b.WriteString("\n")
-		overlayHeight += 4
+		footerBuf.WriteString(warnStyle.Render("requires elevated privileges"))
+		footerBuf.WriteString("\n\n")
+		footerBuf.WriteString(m.passwordInput.View())
+		footerBuf.WriteString("\n")
 	}
-
-	b.WriteString("\n")
+	footerBuf.WriteString("\n")
 
 	yesStyle := lipgloss.NewStyle().Foreground(ColorGreen).Bold(true)
 	noStyle := lipgloss.NewStyle().Foreground(ColorRed).Bold(true)
-
-	if m.batchFocus == 1 {
+	switch m.batchFocus {
+	case 1:
 		yesStyle = yesStyle.Background(ColorGreen).Foreground(ColorBase)
 		noStyle = noStyle.Foreground(ColorSubtext)
-	} else if m.batchFocus == 2 {
+	case 2:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Background(ColorRed).Foreground(ColorBase)
-	} else {
+	default:
 		yesStyle = yesStyle.Foreground(ColorSubtext)
 		noStyle = noStyle.Foreground(ColorSubtext)
 	}
+	footerBuf.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
+	footer := footerBuf.String()
 
-	b.WriteString("      " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
-
-	content := b.String()
-	overlayWidth := 52
-	if overlayWidth > m.width-4 {
-		overlayWidth = m.width - 4
+	// --- Compose with scroll ---
+	// Budget breakdown: ModalFrame adds 4 rows of chrome (top border +
+	// footer separator + footer row + bottom border); composition adds 1
+	// blank row between header and list. maxListH is the upper bound on
+	// list region height (including the scroll hint line when shown) — so
+	// the modal grows until the list has no more room, then scrolls.
+	headerH := lipgloss.Height(header)
+	footerH := lipgloss.Height(footer)
+	const chromeH = 5 // modal chrome (4) + blank row between header & list (1)
+	maxListH := m.height - headerH - footerH - chromeH
+	if maxListH < 3 {
+		maxListH = 3
 	}
 
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
+	visibleList, scrollHint := sliceScrollable(listLines, m.batchScroll, maxListH)
 
-	return placeOverlay(m.width, m.height, overlay)
+	var out strings.Builder
+	out.WriteString(header)
+	out.WriteString("\n")
+	if len(visibleList) > 0 {
+		out.WriteString("\n")
+		out.WriteString(strings.Join(visibleList, "\n"))
+	}
+	if scrollHint != "" {
+		out.WriteString("\n")
+		out.WriteString(StyleDim.Render(scrollHint))
+	}
+	out.WriteString("\n")
+	out.WriteString(footer)
+
+	return out.String()
+}
+
+// sliceScrollable returns the visible window of lines at the given scroll
+// offset and an optional scroll indicator. When all lines fit in maxH,
+// scrollHint is empty and all lines are returned. Scroll is clamped so we
+// never leave a blank gap at the bottom.
+func sliceScrollable(lines []string, scroll, maxH int) (visible []string, scrollHint string) {
+	if len(lines) <= maxH {
+		return lines, ""
+	}
+	// Reserve one line for the scroll hint.
+	windowH := maxH - 1
+	if windowH < 1 {
+		windowH = 1
+	}
+	maxScroll := len(lines) - windowH
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	if scroll < 0 {
+		scroll = 0
+	}
+	visible = lines[scroll : scroll+windowH]
+	above := scroll
+	below := len(lines) - scroll - windowH
+	switch {
+	case above > 0 && below > 0:
+		scrollHint = fmt.Sprintf("── %d above · %d below (↑/↓ scroll) ──", above, below)
+	case above > 0:
+		scrollHint = fmt.Sprintf("── %d above (↑ scroll) ──", above)
+	case below > 0:
+		scrollHint = fmt.Sprintf("── %d below (↓ scroll) ──", below)
+	}
+	return visible, scrollHint
+}
+
+
+// formatSourceNameList renders "  <src>: a, b, c, d" with continuation lines
+// indented to align under the first name so long package lists wrap cleanly
+// inside the confirm modal rather than being truncated to 50 chars.
+func formatSourceNameList(src string, names []string, wrapW int) string {
+	prefix := fmt.Sprintf("  %s: ", src)
+	indent := strings.Repeat(" ", len(prefix))
+
+	avail := wrapW - len(prefix)
+	if avail < 20 {
+		avail = 20
+	}
+
+	lines := packCommaList(names, avail)
+	if len(lines) == 0 {
+		return prefix + "\n"
+	}
+	var b strings.Builder
+	for i, ln := range lines {
+		if i == 0 {
+			b.WriteString(prefix)
+		} else {
+			b.WriteString(indent)
+		}
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// wrapCommaList wraps a comma-separated list with a constant leading indent
+// on every line. Used for the "skipped" list where there's no per-source prefix.
+func wrapCommaList(items []string, indent string, wrapW int) string {
+	avail := wrapW - len(indent)
+	if avail < 20 {
+		avail = 20
+	}
+	lines := packCommaList(items, avail)
+	var b strings.Builder
+	for _, ln := range lines {
+		b.WriteString(indent)
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// packCommaList greedily packs comma-separated items into lines no wider than
+// maxW visible chars. Non-final lines keep their trailing comma so the list
+// reads naturally across a wrap; the final line has no trailing punctuation.
+func packCommaList(items []string, maxW int) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	var lines []string
+	cur := ""
+	for _, it := range items {
+		candidate := it
+		if cur != "" {
+			candidate = cur + ", " + it
+		}
+		if len(candidate) > maxW && cur != "" {
+			lines = append(lines, cur+",")
+			cur = it
+		} else {
+			cur = candidate
+		}
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
 }

@@ -46,7 +46,7 @@ func TestHandleKeyShowsHelpFromRussianLayout(t *testing.T) {
 
 	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("\u0440")})
 
-	if !m.showHelp {
-		t.Fatal("expected help overlay to open from Russian-layout hotkey")
+	if m.modal != ModalHelp {
+		t.Fatal("expected help modal to open from Russian-layout hotkey")
 	}
 }

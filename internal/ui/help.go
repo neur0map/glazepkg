@@ -6,7 +6,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func renderHelpOverlay(width, height int) string {
+// helpBody returns the keybinds reference text shown inside the help modal.
+// Pure content — caller is responsible for framing.
+func helpBody() string {
 	keybinds := []struct {
 		key  string
 		desc string
@@ -36,68 +38,16 @@ func renderHelpOverlay(width, height int) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(StyleOverlayTitle.Render("  Keybinds"))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  " + strings.Repeat("─", 36)))
-	b.WriteString("\n\n")
-
-	for _, kb := range keybinds {
-		keyStyle := lipgloss.NewStyle().
-			Foreground(ColorCyan).
-			Width(18)
-		descStyle := lipgloss.NewStyle().
-			Foreground(ColorText)
-
-		b.WriteString("  ")
+	for i, kb := range keybinds {
+		keyStyle := lipgloss.NewStyle().Foreground(ColorCyan).Width(18)
+		descStyle := lipgloss.NewStyle().Foreground(ColorText)
 		b.WriteString(keyStyle.Render(kb.key))
 		b.WriteString(descStyle.Render(kb.desc))
-		b.WriteString("\n")
+		if i < len(keybinds)-1 {
+			b.WriteString("\n")
+		}
 	}
-
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  RU layout maps to same key positions"))
-	b.WriteString("\n")
-	b.WriteString(StyleDim.Render("  Press any key to dismiss"))
-
-	content := b.String()
-
-	// Center the overlay
-	overlayWidth := 44
-	overlayHeight := len(keybinds) + 8
-
-	overlay := StyleOverlay.
-		Width(overlayWidth).
-		Height(overlayHeight).
-		Render(content)
-
-	return placeOverlay(width, height, overlay)
-}
-
-func placeOverlay(width, height int, overlay string) string {
-	overlayW := lipgloss.Width(overlay)
-	overlayH := lipgloss.Height(overlay)
-
-	padLeft := (width - overlayW) / 2
-	padTop := (height - overlayH) / 2
-
-	if padLeft < 0 {
-		padLeft = 0
-	}
-	if padTop < 0 {
-		padTop = 0
-	}
-
-	var b strings.Builder
-	for range padTop {
-		b.WriteString("\n")
-	}
-
-	lines := strings.Split(overlay, "\n")
-	for _, line := range lines {
-		b.WriteString(strings.Repeat(" ", padLeft))
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-
+	b.WriteString("\n\n")
+	b.WriteString(StyleDim.Render("RU layout maps to same key positions"))
 	return b.String()
 }

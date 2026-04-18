@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/neur0map/glazepkg/internal/model"
 )
 
@@ -87,14 +89,42 @@ func buildTabs(pkgs []model.Package) []tabItem {
 }
 
 func renderTabs(tabs []tabItem, active int) string {
+	sep := lipgloss.NewStyle().Foreground(ColorSubtext).Render(" · ")
+
 	var parts []string
 	for i, t := range tabs {
-		label := fmt.Sprintf("%s (%d)", t.Label, t.Count)
-		if i == active {
-			parts = append(parts, StyleActiveTab.Render(label))
-		} else {
-			parts = append(parts, StyleInactiveTab.Render(label))
-		}
+		parts = append(parts, renderTab(t, i == active))
 	}
-	return strings.Join(parts, "  ")
+	return strings.Join(parts, sep)
+}
+
+// renderTab renders a single tab as a pill. Active tabs use the source's
+// theme color as a background (with the base color as foreground) so the
+// currently-focused manager stands out at a glance. Inactive tabs are
+// plain dim text with a dim count.
+func renderTab(t tabItem, active bool) string {
+	countStr := fmt.Sprintf("%d", t.Count)
+	if active {
+		bg := ColorBlue
+		if t.Source != "" {
+			if c, ok := ManagerColors[model.Source(t.Source)]; ok {
+				bg = c
+			}
+		}
+		name := lipgloss.NewStyle().
+			Foreground(ColorBase).
+			Background(bg).
+			Bold(true).
+			Padding(0, 1).
+			Render(t.Label)
+		count := lipgloss.NewStyle().
+			Foreground(ColorBase).
+			Background(bg).
+			Padding(0, 1).
+			Render(countStr)
+		return name + count
+	}
+	name := lipgloss.NewStyle().Foreground(ColorSubtext).Padding(0, 1).Render(t.Label)
+	count := lipgloss.NewStyle().Foreground(ColorSubtext).Faint(true).Padding(0, 1).Render(countStr)
+	return name + count
 }
