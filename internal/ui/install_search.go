@@ -447,16 +447,18 @@ func (m Model) renderSearchView() string {
 
 // wrapSearchPanel wraps the raw search body in a bordered rounded panel
 // matching the detail view's outer panel, then horizontally centers the
-// panel within the terminal width. innerW fixes the content-area width so
-// the panel doesn't visibly resize when the body's longest line shrinks
-// (e.g. short search input vs. full results table).
+// panel within the terminal width. innerW is the body text-width budget;
+// lipgloss's Width() sets the box size INCLUDING horizontal padding, so we
+// add 4 for the 2-col padding on each side. If we set Width(innerW)
+// directly, lipgloss wraps body lines at innerW-4, which breaks the table
+// layout (long descriptions wrap into the next row, pushing content down).
 func (m Model) wrapSearchPanel(body string, innerW int) string {
 	w := m.width
 	panel := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(ColorSubtext).
 		Padding(1, 2).
-		Width(innerW).
+		Width(innerW + 4).
 		Render(body)
 
 	panelWidth := lipgloss.Width(panel)
