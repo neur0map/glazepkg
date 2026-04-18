@@ -19,7 +19,7 @@ func helpBody() string {
 		{"PgDn/PgUp", "Page down/up"},
 		{"Tab/Shift+Tab", "Cycle manager tabs"},
 		{"/ or Ctrl+f", "Fuzzy search"},
-		{"Esc", "Clear search / close overlay"},
+		{"Esc", "Clear search / close modal"},
 		{"Enter", "Package details"},
 		{"u (detail)", "Upgrade package"},
 		{"x (detail)", "Remove package"},
