@@ -109,29 +109,29 @@ func renderDetail(m *Model) string {
 	}
 	content := centered.String()
 
-	// Pin the keybind bar to the bottom of the terminal.
-	keybinds := detailKeybinds(m)
-
-	// Budget: 1 row for the title bar (already consumed by View before us),
-	// 1 blank line after the title (also consumed), 1 row for keybinds at
-	// the bottom. That leaves (h - 3) rows for our content.
-	contentHeight := lipgloss.Height(content)
-	available := h - 3
-	if available < 0 {
-		available = 0
+	// App title + keybinds, both centered to the terminal width so they group
+	// visually with the centered panel.
+	title := StyleTitle.Render("GlazePKG")
+	if m.updateBanner != "" {
+		title += "  " + StyleUpdateBanner.Render(m.updateBanner)
 	}
-	fill := available - contentHeight
-	if fill < 0 {
-		fill = 0
+	title = lipgloss.PlaceHorizontal(w, lipgloss.Center, title)
+	keybinds := lipgloss.PlaceHorizontal(w, lipgloss.Center, detailKeybinds(m))
+
+	// Stack title + panel + keybinds into one block with a 1-row gap around
+	// the panel, then vertically center the block inside the terminal.
+	block := lipgloss.JoinVertical(lipgloss.Left, title, "", content, "", keybinds)
+	blockHeight := lipgloss.Height(block)
+	topFill := (h - blockHeight) / 2
+	if topFill < 0 {
+		topFill = 0
 	}
 
 	var out strings.Builder
-	out.WriteString(content)
-	if fill > 0 {
-		out.WriteString(strings.Repeat("\n", fill))
+	if topFill > 0 {
+		out.WriteString(strings.Repeat("\n", topFill))
 	}
-	out.WriteString("\n")
-	out.WriteString(keybinds)
+	out.WriteString(block)
 
 	return out.String()
 }
@@ -266,7 +266,7 @@ func detailKeybinds(m *Model) string {
 	for _, p := range pairs {
 		parts = append(parts, keyStyle.Render(p.key)+descStyle.Render(" "+p.desc))
 	}
-	return " " + strings.Join(parts, "   ")
+	return strings.Join(parts, "   ")
 }
 
 // truncateToWidth clips a plain string (no ANSI) to n columns, appending an
