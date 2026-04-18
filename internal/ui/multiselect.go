@@ -356,6 +356,14 @@ func batchConfirmBody(m *Model) string {
 		}
 	}
 
+	wrapW := m.width - 10
+	if wrapW > 80 {
+		wrapW = 80
+	}
+	if wrapW < 40 {
+		wrapW = 40
+	}
+
 	if len(privPkgs) > 0 {
 		b.WriteString("\n")
 		warnStyle := lipgloss.NewStyle().Foreground(ColorYellow)
@@ -367,11 +375,7 @@ func batchConfirmBody(m *Model) string {
 			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
 		}
 		for src, names := range bySource {
-			nameList := strings.Join(names, ", ")
-			if len(nameList) > 50 {
-				nameList = nameList[:50] + "..."
-			}
-			b.WriteString(fmt.Sprintf("  %s: %s\n", src, nameList))
+			b.WriteString(formatSourceNameList(string(src), names, wrapW))
 		}
 	}
 
@@ -384,18 +388,16 @@ func batchConfirmBody(m *Model) string {
 			bySource[o.pkg.Source] = append(bySource[o.pkg.Source], o.pkg.Name)
 		}
 		for src, names := range bySource {
-			nameList := strings.Join(names, ", ")
-			if len(nameList) > 50 {
-				nameList = nameList[:50] + "..."
-			}
-			b.WriteString(fmt.Sprintf("  %s: %s\n", src, nameList))
+			b.WriteString(formatSourceNameList(string(src), names, wrapW))
 		}
 	}
 
 	if len(batch.skipped) > 0 {
 		b.WriteString("\n")
-		b.WriteString(StyleDim.Render(fmt.Sprintf("skipped (%d): %s", len(batch.skipped), strings.Join(batch.skipped, ", "))))
+		skippedHeader := fmt.Sprintf("skipped (%d):", len(batch.skipped))
+		b.WriteString(StyleDim.Render(skippedHeader))
 		b.WriteString("\n")
+		b.WriteString(StyleDim.Render(wrapCommaList(batch.skipped, "  ", wrapW)))
 	}
 
 	// Password
@@ -426,4 +428,77 @@ func batchConfirmBody(m *Model) string {
 	b.WriteString("    " + yesStyle.Render("  Yes  ") + "   " + noStyle.Render("  No  "))
 
 	return b.String()
+}
+
+// formatSourceNameList renders "  <src>: a, b, c, d" with continuation lines
+// indented to align under the first name so long package lists wrap cleanly
+// inside the confirm modal rather than being truncated to 50 chars.
+func formatSourceNameList(src string, names []string, wrapW int) string {
+	prefix := fmt.Sprintf("  %s: ", src)
+	indent := strings.Repeat(" ", len(prefix))
+
+	avail := wrapW - len(prefix)
+	if avail < 20 {
+		avail = 20
+	}
+
+	lines := packCommaList(names, avail)
+	if len(lines) == 0 {
+		return prefix + "\n"
+	}
+	var b strings.Builder
+	for i, ln := range lines {
+		if i == 0 {
+			b.WriteString(prefix)
+		} else {
+			b.WriteString(indent)
+		}
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// wrapCommaList wraps a comma-separated list with a constant leading indent
+// on every line. Used for the "skipped" list where there's no per-source prefix.
+func wrapCommaList(items []string, indent string, wrapW int) string {
+	avail := wrapW - len(indent)
+	if avail < 20 {
+		avail = 20
+	}
+	lines := packCommaList(items, avail)
+	var b strings.Builder
+	for _, ln := range lines {
+		b.WriteString(indent)
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// packCommaList greedily packs comma-separated items into lines no wider than
+// maxW visible chars. Non-final lines keep their trailing comma so the list
+// reads naturally across a wrap; the final line has no trailing punctuation.
+func packCommaList(items []string, maxW int) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	var lines []string
+	cur := ""
+	for _, it := range items {
+		candidate := it
+		if cur != "" {
+			candidate = cur + ", " + it
+		}
+		if len(candidate) > maxW && cur != "" {
+			lines = append(lines, cur+",")
+			cur = it
+		} else {
+			cur = candidate
+		}
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
 }
