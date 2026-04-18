@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 )
 
@@ -251,15 +252,27 @@ func detailKeybinds(m *Model) string {
 			{"j/k", "navigate"}, {"esc", "close"},
 		}
 	default:
-		pairs = []struct{ key, desc string }{
-			{"u", "upgrade"},
-			{"x", "remove"},
-			{"e", "edit"},
-			{"d", "deps"},
-			{"h", "help"},
-			{"esc", "back"},
-			{"q", "quit"},
+		// Mirror the capability checks the key handler uses, so we don't
+		// advertise keys that the current package can't actually act on
+		// (e.g. showing "u upgrade" for a manager with no Upgrader impl,
+		// or "d deps" on a package with no dependency data).
+		if mgr := manager.BySource(m.detailPkg.Source); mgr != nil {
+			if _, ok := mgr.(manager.Upgrader); ok {
+				pairs = append(pairs, struct{ key, desc string }{"u", "upgrade"})
+			}
+			if _, ok := mgr.(manager.Remover); ok {
+				pairs = append(pairs, struct{ key, desc string }{"x", "remove"})
+			}
 		}
+		pairs = append(pairs, struct{ key, desc string }{"e", "edit"})
+		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
+			pairs = append(pairs, struct{ key, desc string }{"d", "deps"})
+		}
+		pairs = append(pairs,
+			struct{ key, desc string }{"h", "help"},
+			struct{ key, desc string }{"esc", "back"},
+			struct{ key, desc string }{"q", "quit"},
+		)
 	}
 
 	var parts []string
