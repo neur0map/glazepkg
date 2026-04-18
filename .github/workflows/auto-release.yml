@@ -5,6 +5,17 @@ on:
     branches: [main]
     paths-ignore:
       - README.md
+      - .github/**
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Tag to release (e.g. v0.4.0). Blank = auto-bump patch.'
+        required: false
+        default: ''
+      release_name:
+        description: 'Release title override. Blank = tag name.'
+        required: false
+        default: ''
 
 concurrency:
   group: release
@@ -25,18 +36,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Bump patch version
+      - name: Resolve version
         id: bump
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
-          if [ -z "$latest" ]; then
-            tag="v0.1.1"
-            ver="0.1.1"
+          if [ -n "$INPUT_VERSION" ]; then
+            tag="$INPUT_VERSION"
+            ver="${tag#v}"
           else
-            IFS='.' read -r major minor patch <<< "${latest#v}"
-            patch=$((patch + 1))
-            tag="v${major}.${minor}.${patch}"
-            ver="${major}.${minor}.${patch}"
+            latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+            if [ -z "$latest" ]; then
+              tag="v0.1.1"
+              ver="0.1.1"
+            else
+              IFS='.' read -r major minor patch <<< "${latest#v}"
+              patch=$((patch + 1))
+              tag="v${major}.${minor}.${patch}"
+              ver="${major}.${minor}.${patch}"
+            fi
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "ver=$ver" >> "$GITHUB_OUTPUT"
@@ -142,6 +160,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.TAG }}
+          name: ${{ inputs.release_name != '' && inputs.release_name || env.TAG }}
           generate_release_notes: true
           files: ./dist/*
 
