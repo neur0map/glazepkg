@@ -14,7 +14,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config
 [![Downloads](https://img.shields.io/github/downloads/neur0map/glazepkg/total?style=for-the-badge&color=orange)](https://github.com/neur0map/glazepkg/releases)
 [![Stars](https://img.shields.io/github/stars/neur0map/glazepkg?style=for-the-badge&color=yellow)](https://github.com/neur0map/glazepkg/stargazers)
 
-![demo](demo.gif)
+![demo](demo.gif?v=2026-05-09)
 
 </div>
 

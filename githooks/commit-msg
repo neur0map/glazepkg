@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+hook_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
+exec "$hook_dir/lib/commit-message-policy.sh" "$1" commit

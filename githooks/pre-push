@@ -1,0 +1,37 @@
+#!/bin/sh
+set -eu
+
+hook_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
+policy="$hook_dir/lib/commit-message-policy.sh"
+zero_oid=0000000000000000000000000000000000000000
+
+while read -r local_ref local_oid remote_ref remote_oid
+do
+	if [ -z "${local_ref:-}" ]; then
+		continue
+	fi
+
+	if [ "$local_oid" = "$zero_oid" ]; then
+		continue
+	fi
+
+	if [ "$remote_oid" = "$zero_oid" ]; then
+		commits=$(git rev-list "$local_oid" --not --remotes --tags)
+	else
+		commits=$(git rev-list "$remote_oid..$local_oid")
+	fi
+
+	for commit in $commits
+	do
+		msg_file=$(mktemp)
+		git log -1 --format=%B "$commit" > "$msg_file"
+		if ! "$policy" "$msg_file" push; then
+			rm -f "$msg_file"
+			printf '%s\n' "pre-push: rejected $commit on $local_ref -> $remote_ref" >&2
+			exit 1
+		fi
+		rm -f "$msg_file"
+	done
+done
+
+exit 0
