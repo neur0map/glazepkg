@@ -174,7 +174,7 @@ go test ./...
 Install the repo hooks before committing:
 
 ```bash
-./scripts/install-githooks.sh
+git config core.hooksPath .githooks
 ```
 
 The hooks reject generic AI-style commit subjects, AI attribution footers, `Co-authored-by` footers, double hyphen text, and Unicode dash characters in commit messages. The same policy runs again before push for commits that are leaving your machine.
