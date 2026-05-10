@@ -27,25 +27,25 @@ var (
 
 // Styles — rebuilt by ApplyTheme.
 var (
-	StyleTitle         lipgloss.Style
-	StyleActiveTab     lipgloss.Style
-	StyleInactiveTab   lipgloss.Style
-	StyleFilterPrompt  lipgloss.Style
-	StyleFilterText    lipgloss.Style
-	StyleTableHeader   lipgloss.Style
-	StyleSelected      lipgloss.Style
-	StyleNormal        lipgloss.Style
-	StyleDim           lipgloss.Style
-	StyleAdded         lipgloss.Style
-	StyleRemoved       lipgloss.Style
-	StyleUpgrade       lipgloss.Style
-	StyleStatusBar     lipgloss.Style
-	StyleDetailKey     lipgloss.Style
-	StyleDetailVal     lipgloss.Style
-	StyleOverlay       lipgloss.Style
-	StyleUpdateBanner  lipgloss.Style
-	StyleOverlayTitle  lipgloss.Style
-	StyleBadge         lipgloss.Style
+	StyleTitle        lipgloss.Style
+	StyleActiveTab    lipgloss.Style
+	StyleInactiveTab  lipgloss.Style
+	StyleFilterPrompt lipgloss.Style
+	StyleFilterText   lipgloss.Style
+	StyleTableHeader  lipgloss.Style
+	StyleSelected     lipgloss.Style
+	StyleNormal       lipgloss.Style
+	StyleDim          lipgloss.Style
+	StyleAdded        lipgloss.Style
+	StyleRemoved      lipgloss.Style
+	StyleUpgrade      lipgloss.Style
+	StyleStatusBar    lipgloss.Style
+	StyleDetailKey    lipgloss.Style
+	StyleDetailVal    lipgloss.Style
+	StyleOverlay      lipgloss.Style
+	StyleUpdateBanner lipgloss.Style
+	StyleOverlayTitle lipgloss.Style
+	StyleBadge        lipgloss.Style
 )
 
 // ManagerColors maps each source to its badge color.
@@ -55,6 +55,7 @@ var ManagerColors map[model.Source]lipgloss.Color
 func defaultManagerColorMap() map[model.Source]lipgloss.Color {
 	return map[model.Source]lipgloss.Color{
 		model.SourceBrew:           ColorYellow,
+		model.SourceBrewCask:       ColorYellow,
 		model.SourcePacman:         ColorBlue,
 		model.SourceAUR:            ColorCyan,
 		model.SourceApt:            ColorGreen,
@@ -215,7 +216,7 @@ func RenderBadge(source model.Source) string {
 	return StyleBadge.
 		Foreground(ColorBase).
 		Background(color).
-		Render(fmt.Sprintf(" %s ", source))
+		Render(fmt.Sprintf(" %s ", sourceLabel(source)))
 }
 
 // RenderBadgeInline returns a colored source name without background (for inline use).
@@ -224,5 +225,5 @@ func RenderBadgeInline(source model.Source) string {
 	if !ok {
 		color = ColorSubtext
 	}
-	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(string(source))
+	return lipgloss.NewStyle().Foreground(color).Bold(true).Render(sourceLabel(source))
 }

@@ -217,7 +217,7 @@ func renderFixedBadge(source model.Source) string {
 	if !ok {
 		color = ColorSubtext
 	}
-	label := string(source)
+	label := sourceLabel(source)
 	// Center the label within badgeWidth by padding inside the badge
 	inner := badgeWidth - 2 // subtract the 1-char padding on each side from StyleBadge
 	if len(label) < inner {

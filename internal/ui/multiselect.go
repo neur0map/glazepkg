@@ -491,7 +491,6 @@ func sliceScrollable(lines []string, scroll, maxH int) (visible []string, scroll
 	return visible, scrollHint
 }
 
-
 // batchOpTitle returns the Title-Case label for a known batch op verb.
 // Avoids strings.Title (deprecated in Go 1.18+) for a small closed set of
 // values we control.
@@ -523,7 +522,7 @@ func writeSortedSourceLists(buf *strings.Builder, ops []batchOp, wrapW int) {
 	for _, src := range sources {
 		names := bySource[src]
 		sort.Strings(names)
-		buf.WriteString(formatSourceNameList(string(src), names, wrapW))
+		buf.WriteString(formatSourceNameList(sourceLabel(src), names, wrapW))
 	}
 }
 
