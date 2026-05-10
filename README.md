@@ -14,7 +14,7 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config
 [![Downloads](https://img.shields.io/github/downloads/neur0map/glazepkg/total?style=for-the-badge&color=orange)](https://github.com/neur0map/glazepkg/releases)
 [![Stars](https://img.shields.io/github/stars/neur0map/glazepkg?style=for-the-badge&color=yellow)](https://github.com/neur0map/glazepkg/stargazers)
 
-![demo](demo.gif?v=2026-05-09)
+![demo](demo.gif?v=2026-05-10)
 
 </div>
 
@@ -143,7 +143,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 </details>
 
 <details>
-<summary><strong>Supported Package Managers (35)</strong></summary>
+<summary><strong>Supported Package Managers (36)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|

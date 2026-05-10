@@ -85,7 +85,7 @@ func TestBrewCaskPackagesIgnoresEmptyToken(t *testing.T) {
 	}
 }
 
-func TestBrewCaskPackagesIgnoresBlankInstalled(t *testing.T) {
+func TestBrewCaskPackagesUsesVersionWhenInstalledBlank(t *testing.T) {
 	installed := "   "
 	info := &brewInfo{
 		Casks: []brewCask{{
@@ -97,8 +97,11 @@ func TestBrewCaskPackagesIgnoresBlankInstalled(t *testing.T) {
 	}
 
 	pkgs := brewCaskPackages(info, "/opt/homebrew/Caskroom", time.Unix(100, 0))
-	if len(pkgs) != 0 {
-		t.Fatalf("expected no packages for blank installed value, got %#v", pkgs)
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package with version fallback, got %#v", pkgs)
+	}
+	if pkgs[0].Version != "150.0.1" {
+		t.Fatalf("Version = %q, want 150.0.1", pkgs[0].Version)
 	}
 }
 
