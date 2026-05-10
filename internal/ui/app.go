@@ -1317,8 +1317,8 @@ func (m *Model) applyFilter() {
 		if source != "" && string(p.Source) != source {
 			continue
 		}
-		// ALL tab hides dep sources — they only show in their own tab
-		if source == "" && depSources[p.Source] {
+		// ALL tab hides select sources; they only show in their own tab.
+		if source == "" && hiddenFromAllSources[p.Source] {
 			continue
 		}
 		tabFiltered = append(tabFiltered, p)
