@@ -306,10 +306,11 @@ func truncateToWidth(s string, n int) string {
 }
 
 func formatSource(pkg model.Package) string {
+	label := sourceLabel(pkg.Source)
 	if pkg.Repository != "" {
-		return fmt.Sprintf("%s (%s)", pkg.Source, pkg.Repository)
+		return fmt.Sprintf("%s (%s)", label, pkg.Repository)
 	}
-	return string(pkg.Source)
+	return label
 }
 
 func formatInstalled(pkg model.Package) string {

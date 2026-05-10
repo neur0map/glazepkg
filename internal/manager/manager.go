@@ -21,6 +21,7 @@ type Manager interface {
 func All() []Manager {
 	return []Manager{
 		&Brew{},
+		&BrewCask{},
 		&Pacman{},
 		&AUR{},
 		&Apt{},

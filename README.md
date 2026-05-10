@@ -147,7 +147,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
-| **brew** | macOS/Linux | Installed formulae | batch via JSON |
+| **brew** | macOS/Linux | Installed formulae and casks | batch via JSON |
 | **pacman** | Arch | Explicit native packages | `pacman -Qi` |
 | **AUR** | Arch | Foreign/AUR packages | `pacman -Qi` |
 | **apt** | Debian/Ubuntu | Installed packages | `apt-cache show` |

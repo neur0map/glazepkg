@@ -21,6 +21,7 @@ func (b *Brew) Available() bool { return commandExists("brew") }
 // brewInfo is the shared JSON structure from `brew info --json=v2 --installed`.
 type brewInfo struct {
 	Formulae []brewFormula `json:"formulae"`
+	Casks    []brewCask    `json:"casks"`
 }
 
 type brewFormula struct {
@@ -34,6 +35,14 @@ type brewInstall struct {
 	Version               string `json:"version"`
 	InstalledOnRequest    bool   `json:"installed_on_request"`
 	InstalledAsDependency bool   `json:"installed_as_dependency"`
+}
+
+type brewCask struct {
+	Token         string  `json:"token"`
+	Desc          string  `json:"desc"`
+	Version       string  `json:"version"`
+	Installed     *string `json:"installed"`
+	InstalledTime int64   `json:"installed_time"`
 }
 
 func fetchBrewInfo() (*brewInfo, error) {
@@ -102,15 +111,15 @@ func (b *Brew) Scan() ([]model.Package, error) {
 }
 
 func (b *Brew) CheckUpdates(pkgs []model.Package) map[string]string {
-	out, err := exec.Command("brew", "outdated", "--json").Output()
+	out, err := exec.Command("brew", "outdated", "--json=v2").Output()
 	if err != nil || len(out) == 0 {
 		return nil
 	}
 
 	var outdated struct {
 		Formulae []struct {
-			Name           string   `json:"name"`
-			CurrentVersion string   `json:"current_version"`
+			Name              string   `json:"name"`
+			CurrentVersion    string   `json:"current_version"`
 			InstalledVersions []string `json:"installed_versions"`
 		} `json:"formulae"`
 	}

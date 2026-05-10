@@ -11,19 +11,21 @@ import (
 
 type tabItem struct {
 	Label  string
-	Source string // "" means ALL (excludes deps), specific source filters to that
+	Source string // "" means ALL excluding hidden sources; specific source filters to that
 	Count  int
 }
 
-// depSources are sources hidden from the ALL tab (none currently).
-var depSources = map[model.Source]bool{}
+// hiddenFromAllSources are visible in their own tab but omitted from ALL.
+var hiddenFromAllSources = map[model.Source]bool{
+	model.SourceBrewCask: true,
+}
 
 func buildTabs(pkgs []model.Package) []tabItem {
 	counts := make(map[string]int)
 	allCount := 0
 	for _, p := range pkgs {
 		counts[string(p.Source)]++
-		if !depSources[p.Source] {
+		if !hiddenFromAllSources[p.Source] {
 			allCount++
 		}
 	}
@@ -38,6 +40,7 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		label  string
 	}{
 		{model.SourceBrew, "brew"},
+		{model.SourceBrewCask, "cask"},
 		{model.SourcePacman, "pacman"},
 		{model.SourceAUR, "aur"},
 		{model.SourceApt, "apt"},
