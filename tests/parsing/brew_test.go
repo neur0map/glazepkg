@@ -50,6 +50,43 @@ func TestBrewOutdatedJSON(t *testing.T) {
 	}
 }
 
+func TestBrewOutdatedJSONV2Formulae(t *testing.T) {
+	data := `{
+        "formulae": [
+            {
+                "name": "git",
+                "installed_versions": ["2.44.0"],
+                "current_version": "2.45.0",
+                "pinned": false,
+                "pinned_version": null
+            }
+        ],
+        "casks": [
+            {
+                "name": "firefox",
+                "installed_versions": ["149.0"],
+                "current_version": "150.0.1"
+            }
+        ]
+    }`
+
+	var outdated struct {
+		Formulae []struct {
+			Name           string `json:"name"`
+			CurrentVersion string `json:"current_version"`
+		} `json:"formulae"`
+	}
+	if err := json.Unmarshal([]byte(data), &outdated); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
+	if len(outdated.Formulae) != 1 {
+		t.Fatalf("expected 1 formula, got %d", len(outdated.Formulae))
+	}
+	if outdated.Formulae[0].Name != "git" || outdated.Formulae[0].CurrentVersion != "2.45.0" {
+		t.Fatalf("unexpected formula update: %#v", outdated.Formulae[0])
+	}
+}
+
 func TestBrewOutdatedFlatArrayFails(t *testing.T) {
 	// brew outdated --json returns an object, not a flat array
 	data := `{"formulae": [], "casks": []}`

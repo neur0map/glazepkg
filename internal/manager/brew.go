@@ -111,7 +111,7 @@ func (b *Brew) Scan() ([]model.Package, error) {
 }
 
 func (b *Brew) CheckUpdates(pkgs []model.Package) map[string]string {
-	out, err := exec.Command("brew", "outdated", "--json").Output()
+	out, err := exec.Command("brew", "outdated", "--json=v2").Output()
 	if err != nil || len(out) == 0 {
 		return nil
 	}
