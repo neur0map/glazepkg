@@ -51,9 +51,6 @@ func brewCaskPackages(info *brewInfo, caskroom string, now time.Time) []model.Pa
 
 		version := strings.TrimSpace(*c.Installed)
 		if version == "" {
-			version = strings.TrimSpace(c.Version)
-		}
-		if version == "" {
 			continue
 		}
 
@@ -117,7 +114,7 @@ func (b *BrewCask) Describe(pkgs []model.Package) map[string]string {
 
 	descs := make(map[string]string, len(info.Casks))
 	for _, c := range info.Casks {
-		if c.Installed == nil || *c.Installed == "" || c.Desc == "" {
+		if c.Installed == nil || strings.TrimSpace(*c.Installed) == "" || c.Desc == "" {
 			continue
 		}
 		descs[c.Token] = c.Desc

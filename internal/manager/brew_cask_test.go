@@ -85,7 +85,7 @@ func TestBrewCaskPackagesIgnoresEmptyToken(t *testing.T) {
 	}
 }
 
-func TestBrewCaskPackagesFallsBackToVersionForBlankInstalled(t *testing.T) {
+func TestBrewCaskPackagesIgnoresBlankInstalled(t *testing.T) {
 	installed := "   "
 	info := &brewInfo{
 		Casks: []brewCask{{
@@ -97,14 +97,8 @@ func TestBrewCaskPackagesFallsBackToVersionForBlankInstalled(t *testing.T) {
 	}
 
 	pkgs := brewCaskPackages(info, "/opt/homebrew/Caskroom", time.Unix(100, 0))
-	if len(pkgs) != 1 {
-		t.Fatalf("expected 1 cask, got %d", len(pkgs))
-	}
-	if pkgs[0].Version != "150.0.1" {
-		t.Fatalf("Version = %q, want 150.0.1", pkgs[0].Version)
-	}
-	if pkgs[0].Location != "/opt/homebrew/Caskroom/firefox/150.0.1" {
-		t.Fatalf("Location = %q", pkgs[0].Location)
+	if len(pkgs) != 0 {
+		t.Fatalf("expected no packages for blank installed value, got %#v", pkgs)
 	}
 }
 

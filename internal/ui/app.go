@@ -1699,7 +1699,7 @@ func upgradeConfirmBody(m *Model) string {
 	if req.opLabel == "install" {
 		title = "Install"
 	}
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("%s %s (%s)?", title, req.pkg.Name, req.pkg.Source)))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("%s %s (%s)?", title, req.pkg.Name, sourceLabel(req.pkg.Source))))
 	b.WriteString("\n\n")
 	b.WriteString(StyleDim.Render("command:"))
 	b.WriteString("\n")
@@ -1883,7 +1883,7 @@ func removeConfirmBody(m *Model) string {
 	}
 
 	var b strings.Builder
-	b.WriteString(StyleNormal.Render(fmt.Sprintf("Remove %s (%s)?", req.pkg.Name, req.pkg.Source)))
+	b.WriteString(StyleNormal.Render(fmt.Sprintf("Remove %s (%s)?", req.pkg.Name, sourceLabel(req.pkg.Source))))
 	b.WriteString("\n")
 
 	// RequiredBy warning

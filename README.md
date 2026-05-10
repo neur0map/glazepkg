@@ -143,7 +143,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 </details>
 
 <details>
-<summary><strong>Supported Package Managers (36)</strong></summary>
+<summary><strong>Supported Package Managers (35)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
