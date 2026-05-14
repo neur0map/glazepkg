@@ -177,5 +177,5 @@ func (a *AUR) UpgradeCmdYes(name string) *exec.Cmd {
 }
 
 func (a *AUR) RemoveCmdYes(name string) *exec.Cmd {
-	return exec.Command("pacman", "-R", "--noconfirm", name)
+	return privilegedCmd("pacman", "-R", "--noconfirm", name)
 }
