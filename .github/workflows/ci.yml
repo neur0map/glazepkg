@@ -24,7 +24,7 @@ jobs:
         run: go vet ./...
 
       - name: Unit tests
-        run: go test ./tests/parsing/... -v
+        run: go test ./tests/parsing/... ./internal/cli/... -v
 
   integration-macos:
     runs-on: macos-latest
