@@ -6,6 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/neur0map/glazepkg/internal/cli"
+	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/ui"
 	"github.com/neur0map/glazepkg/internal/updater"
 )
@@ -25,6 +27,8 @@ func main() {
 		case "update":
 			runUpdate()
 			return
+		case "list", "installed", "info", "outdated", "source-of":
+			os.Exit(cli.Dispatch(os.Args[1:], manager.All(), version, os.Stdout, os.Stderr))
 		}
 	}
 
@@ -56,7 +60,17 @@ Usage:
   gpk version      Show current version
   gpk --help       Show this help
 
-Keybinds:
+Headless commands (Phase 1, read-only):
+  gpk list                    List installed packages across all managers
+  gpk installed <pkg>...      Exit 0 if all named packages are installed (2 if not)
+  gpk info <pkg>              Show details for one installed package
+  gpk source-of <pkg>         Print which manager has the package
+  gpk outdated                List packages with available updates
+                              (--count for a number, --exit-code for CI gates)
+
+Run "gpk <subcommand> --help" for per-command flags.
+
+Keybinds (TUI):
   j/k, ↑/↓         Navigate up/down
   g/G              Jump to top/bottom
   Ctrl+d/u         Half page down/up
