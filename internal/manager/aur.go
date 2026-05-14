@@ -161,3 +161,21 @@ func (a *AUR) InstallCmd(name string) *exec.Cmd {
 	}
 	return exec.Command("pacman", "-S", name)
 }
+
+func (a *AUR) InstallCmdYes(name string) *exec.Cmd {
+	if h := aurHelper(); h != "" {
+		return exec.Command(h, "-S", "--noconfirm", name)
+	}
+	return privilegedCmd("pacman", "-S", "--noconfirm", name)
+}
+
+func (a *AUR) UpgradeCmdYes(name string) *exec.Cmd {
+	if h := aurHelper(); h != "" {
+		return exec.Command(h, "-S", "--noconfirm", name)
+	}
+	return privilegedCmd("pacman", "-S", "--noconfirm", name)
+}
+
+func (a *AUR) RemoveCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-R", "--noconfirm", name)
+}

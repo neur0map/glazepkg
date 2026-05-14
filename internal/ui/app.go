@@ -583,7 +583,7 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 		return nil
 	}
 
-	cmd := upgrader.UpgradeCmd(pkg.Name)
+	cmd := upgradeCmdFor(mgr, upgrader, pkg.Name)
 	cmdStr := strings.Join(cmd.Args, " ")
 	needsSudo := len(cmd.Args) > 0 && cmd.Args[0] == "sudo"
 	req := &upgradeRequest{
@@ -1739,6 +1739,51 @@ func upgradeConfirmBody(m *Model) string {
 	return b.String()
 }
 
+// upgradeCmdFor returns the non-interactive upgrade command when the manager
+// supports it (pacman, aur, apt, dnf, chocolatey), falling back to the
+// interactive command. The TUI's modal already serves as user confirmation,
+// so a second pacman/yay prompt is both redundant and broken — once the
+// upgrade subprocess opens, the TUI is no longer connected to a tty that can
+// answer y/N.
+func upgradeCmdFor(mgr manager.Manager, up manager.Upgrader, name string) *exec.Cmd {
+	if ni, ok := mgr.(manager.NonInteractiveUpgrader); ok {
+		if cmd := ni.UpgradeCmdYes(name); cmd != nil {
+			return cmd
+		}
+	}
+	return up.UpgradeCmd(name)
+}
+
+// removeCmdFor mirrors upgradeCmdFor for the interactive remove path.
+func removeCmdFor(mgr manager.Manager, rm manager.Remover, name string) *exec.Cmd {
+	if ni, ok := mgr.(manager.NonInteractiveRemover); ok {
+		if cmd := ni.RemoveCmdYes(name); cmd != nil {
+			return cmd
+		}
+	}
+	return rm.RemoveCmd(name)
+}
+
+// deepRemoveCmdFor mirrors the helpers for the "remove + orphan deps" path.
+func deepRemoveCmdFor(mgr manager.Manager, dr manager.DeepRemover, name string) *exec.Cmd {
+	if ni, ok := mgr.(manager.NonInteractiveDeepRemover); ok {
+		if cmd := ni.RemoveCmdWithDepsYes(name); cmd != nil {
+			return cmd
+		}
+	}
+	return dr.RemoveCmdWithDeps(name)
+}
+
+// installCmdFor mirrors the helpers for install (used by the search-install flow).
+func installCmdFor(mgr manager.Manager, inst manager.Installer, name string) *exec.Cmd {
+	if ni, ok := mgr.(manager.NonInteractiveInstaller); ok {
+		if cmd := ni.InstallCmdYes(name); cmd != nil {
+			return cmd
+		}
+	}
+	return inst.InstallCmd(name)
+}
+
 func isPrivilegedSource(source model.Source) bool {
 	switch source {
 	case model.SourceApt, model.SourceDnf, model.SourcePacman, model.SourceSnap,
@@ -1775,7 +1820,7 @@ func (m *Model) removeDetailPackage() tea.Cmd {
 		return nil
 	}
 
-	cmd := remover.RemoveCmd(pkg.Name)
+	cmd := removeCmdFor(mgr, remover, pkg.Name)
 	req := &removeRequest{
 		pkg:        pkg,
 		cmd:        cmd,
@@ -1784,7 +1829,7 @@ func (m *Model) removeDetailPackage() tea.Cmd {
 	}
 
 	if deep, ok := mgr.(manager.DeepRemover); ok {
-		deepCmd := deep.RemoveCmdWithDeps(pkg.Name)
+		deepCmd := deepRemoveCmdFor(mgr, deep, pkg.Name)
 		req.deepCmd = deepCmd
 		req.deepCmdStr = strings.Join(deepCmd.Args, " ")
 	}

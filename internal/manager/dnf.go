@@ -186,3 +186,19 @@ func (d *Dnf) Search(query string) ([]model.Package, error) {
 func (d *Dnf) InstallCmd(name string) *exec.Cmd {
 	return privilegedCmd("dnf", "install", "-y", name)
 }
+
+func (d *Dnf) InstallCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "install", "-y", name)
+}
+
+func (d *Dnf) UpgradeCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "upgrade", "-y", name)
+}
+
+func (d *Dnf) RemoveCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "remove", "-y", name)
+}
+
+func (d *Dnf) RemoveCmdWithDepsYes(name string) *exec.Cmd {
+	return privilegedCmd("dnf", "autoremove", "-y", name)
+}

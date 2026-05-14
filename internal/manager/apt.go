@@ -202,3 +202,19 @@ func (a *Apt) Search(query string) ([]model.Package, error) {
 func (a *Apt) InstallCmd(name string) *exec.Cmd {
 	return privilegedCmd("apt-get", "install", "-y", name)
 }
+
+func (a *Apt) InstallCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "install", "-y", name)
+}
+
+func (a *Apt) UpgradeCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "install", "--only-upgrade", "-y", name)
+}
+
+func (a *Apt) RemoveCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "remove", "-y", name)
+}
+
+func (a *Apt) RemoveCmdWithDepsYes(name string) *exec.Cmd {
+	return privilegedCmd("apt-get", "autoremove", "-y", name)
+}
