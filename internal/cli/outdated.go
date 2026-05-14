@@ -33,6 +33,7 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 	)
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
 	fs.StringVar(mgrFlag, "m", "", "alias for --manager")
+	args = reorderFlagsFirst(args, []string{"manager", "m"})
 	if err := fs.Parse(args); err != nil {
 		return ExitErr
 	}

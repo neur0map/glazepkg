@@ -25,6 +25,7 @@ func runInstalled(args []string, mgrs []manager.Manager, version string, stdout,
 	)
 	fs.BoolVar(quietFlag, "q", *quietFlag, "alias for --quiet")
 	fs.StringVar(mgrFlag, "m", *mgrFlag, "alias for --manager")
+	args = reorderFlagsFirst(args, []string{"manager", "m"})
 	if err := fs.Parse(args); err != nil {
 		return ExitErr
 	}

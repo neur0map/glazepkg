@@ -82,3 +82,17 @@ func TestInstalledReportsMissingOnStderr(t *testing.T) {
 		t.Errorf("stderr = %q, want substring 'nonexistent'", errOut.String())
 	}
 }
+
+func TestInstalledFlagAfterPositional(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// User-style: subcommand, package, then flag. Must work the same as
+	// flags-first.
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"installed", "vim", "--json", "--no-cache", "--quiet"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Fatalf("exit %d (stderr=%q)", code, errOut.String())
+	}
+	if !bytes.Contains(out.Bytes(), []byte("schema")) {
+		t.Errorf("expected JSON envelope on stdout, got %q", out.String())
+	}
+}
