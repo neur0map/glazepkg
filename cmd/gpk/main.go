@@ -27,9 +27,12 @@ func main() {
 		case "update":
 			runUpdate()
 			return
-		case "list", "installed", "info", "outdated", "source-of":
-			os.Exit(cli.Dispatch(os.Args[1:], manager.All(), version, os.Stdout, os.Stderr))
 		}
+		// Any other first arg is treated as a subcommand attempt.
+		// cli.Dispatch handles unknown names with a clean error + ExitErr,
+		// so users typing `gpk install foo` get a real message instead of
+		// the TUI failing with a TTY error.
+		os.Exit(cli.Dispatch(os.Args[1:], manager.All(), version, os.Stdout, os.Stderr))
 	}
 
 	p := tea.NewProgram(ui.NewModel(version), tea.WithAltScreen())
