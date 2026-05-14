@@ -128,3 +128,12 @@ func TestOutdatedJSONEmptyIsEmptyArray(t *testing.T) {
 		t.Errorf("empty data should serialize as [], got: %s", out.String())
 	}
 }
+
+func TestOutdatedHelpExitsZero(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"outdated", "--help"}, mgrSetNoUpdates(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
+	}
+}

@@ -107,3 +107,43 @@ func TestListHumanOutput(t *testing.T) {
 		t.Errorf("output contains ANSI escape codes (writer is not a TTY)")
 	}
 }
+
+func TestListHelpExitsZero(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"list", "--help"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
+	}
+}
+
+func TestListWithManagerFilterDoesNotOverwriteFullScanCache(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	// First call: full scan, populates cache with pacman+brew.
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"list", "--no-cache", "--quiet"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Fatalf("first call exit %d (stderr=%q)", code, errOut.String())
+	}
+
+	// Second call: --manager pacman --no-cache. MUST NOT overwrite the cache.
+	out.Reset()
+	errOut.Reset()
+	code = Dispatch([]string{"list", "--no-cache", "--quiet", "--manager", "pacman"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Fatalf("filtered call exit %d (stderr=%q)", code, errOut.String())
+	}
+
+	// Third call: no flags, must hit cache and still see brew packages.
+	out.Reset()
+	errOut.Reset()
+	code = Dispatch([]string{"list", "--quiet"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Fatalf("third call exit %d (stderr=%q)", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "ripgrep") {
+		t.Errorf("cache poisoned: brew packages dropped. stdout=%q", out.String())
+	}
+}

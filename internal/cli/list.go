@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -29,6 +30,9 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 	fs.StringVar(mgrFlag, "m", *mgrFlag, "alias for --manager")
 	args = reorderFlagsFirst(args, []string{"manager", "m"})
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return ExitOK
+		}
 		return ExitErr
 	}
 
@@ -38,7 +42,8 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 		return ExitErr
 	}
 
-	pkgs, err := collectPackages(filtered, *noCacheFlag, *quietFlag, stderr)
+	cacheOK := *mgrFlag == "" || *mgrFlag == "all"
+	pkgs, err := collectPackages(filtered, *noCacheFlag, *quietFlag, stderr, cacheOK)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: scan failed: %v\n", err)
 		return ExitErr
@@ -64,7 +69,7 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 
 // collectPackages either loads from scan cache or runs a fresh live scan
 // across the filtered manager set, writing back to cache afterward.
-func collectPackages(mgrs []manager.Manager, noCache, quiet bool, stderr io.Writer) ([]model.Package, error) {
+func collectPackages(mgrs []manager.Manager, noCache, quiet bool, stderr io.Writer, cacheOK bool) ([]model.Package, error) {
 	if !noCache {
 		if cached := manager.LoadScanCache(); cached != nil {
 			// Apply the same manager filter to the cached data so --manager
@@ -90,7 +95,7 @@ func collectPackages(mgrs []manager.Manager, noCache, quiet bool, stderr io.Writ
 		}
 		out = append(out, pkgs...)
 	}
-	if !noCache || len(out) > 0 {
+	if cacheOK && (!noCache || len(out) > 0) {
 		manager.SaveScanCache(out)
 	}
 	return out, nil

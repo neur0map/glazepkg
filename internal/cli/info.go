@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -24,6 +25,9 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 	fs.StringVar(mgrFlag, "m", *mgrFlag, "alias for --manager")
 	args = reorderFlagsFirst(args, []string{"manager", "m"})
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return ExitOK
+		}
 		return ExitErr
 	}
 
@@ -40,7 +44,8 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 		return ExitErr
 	}
 
-	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr)
+	cacheOK := *mgrFlag == "" || *mgrFlag == "all"
+	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr, cacheOK)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: scan failed: %v\n", err)
 		return ExitErr

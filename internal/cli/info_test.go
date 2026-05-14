@@ -77,3 +77,12 @@ func TestInfoManagerFilterMiss(t *testing.T) {
 		t.Errorf("exit %d, want %d", code, ExitNegative)
 	}
 }
+
+func TestInfoHelpExitsZero(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"info", "--help"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
+	}
+}

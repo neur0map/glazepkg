@@ -96,3 +96,12 @@ func TestInstalledFlagAfterPositional(t *testing.T) {
 		t.Errorf("expected JSON envelope on stdout, got %q", out.String())
 	}
 }
+
+func TestInstalledHelpExitsZero(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"installed", "--help"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
+	}
+}

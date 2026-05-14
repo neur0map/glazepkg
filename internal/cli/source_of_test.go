@@ -81,3 +81,12 @@ func TestSourceOfJSONNotFoundEmitsNothing(t *testing.T) {
 		t.Errorf("stdout should be empty on exit 2, got %q", out.String())
 	}
 }
+
+func TestSourceOfHelpExitsZero(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"source-of", "--help"}, mgrSet(), "test", &out, &errOut)
+	if code != ExitOK {
+		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
+	}
+}
