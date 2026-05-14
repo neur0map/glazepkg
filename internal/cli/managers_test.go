@@ -95,3 +95,17 @@ func TestParseManagerFilter_MixedPositiveAndNegative(t *testing.T) {
 		t.Fatal("expected error mixing positive+negative selectors, got nil")
 	}
 }
+
+func TestParseManagerFilter_NegationWithSpace(t *testing.T) {
+	// "! pacman" (space slipped after the bang) should behave like "!pacman",
+	// not produce a confusing "unknown manager \" pacman\"" error.
+	got, err := parseManagerFilter("! pacman", realMgrs())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, m := range got {
+		if string(m.Name()) == "pacman" {
+			t.Errorf("pacman should have been excluded")
+		}
+	}
+}

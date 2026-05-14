@@ -35,7 +35,9 @@ func parseManagerFilter(value string, all []manager.Manager) ([]manager.Manager,
 			continue
 		}
 		if strings.HasPrefix(p, "!") {
-			negative = append(negative, strings.TrimPrefix(p, "!"))
+			// Trim again after stripping "!" so "! pacman" and "!pacman" behave
+			// the same — a space slip-up shouldn't produce a confusing error.
+			negative = append(negative, strings.TrimSpace(strings.TrimPrefix(p, "!")))
 		} else {
 			positive = append(positive, p)
 		}
