@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/neur0map/glazepkg/internal/cli"
@@ -91,5 +92,50 @@ func TestCLI_UnknownSubcommand(t *testing.T) {
 	)
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)
+	}
+}
+
+// TestCLI_UpgradeDryRun verifies the upgrade command can resolve and build
+// a command against real installed packages without actually executing.
+// Skips if no packages have updates (nothing to upgrade).
+func TestCLI_UpgradeDryRun(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// First find an outdated package on this system.
+	var outBuf, errBuf bytes.Buffer
+	code := cli.Dispatch(
+		[]string{"outdated", "--json", "--no-cache", "--quiet"},
+		manager.All(), "integration-test", &outBuf, &errBuf, nil,
+	)
+	if code != 0 {
+		t.Skipf("outdated failed (exit %d), skipping: %s", code, errBuf.String())
+	}
+	var env struct {
+		Data []struct {
+			Name   string `json:"name"`
+			Source string `json:"source"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(outBuf.Bytes(), &env); err != nil {
+		t.Skipf("invalid outdated JSON: %v", err)
+	}
+	if len(env.Data) == 0 {
+		t.Skip("no outdated packages on this system; nothing to dry-run upgrade")
+	}
+	target := env.Data[0]
+
+	// Now dry-run upgrade against the first outdated package.
+	var out, errOut bytes.Buffer
+	code = cli.Dispatch(
+		[]string{"upgrade", target.Name, "--dry-run", "--quiet", "--manager", target.Source},
+		manager.All(), "integration-test", &out, &errOut, nil,
+	)
+	if code != 0 {
+		t.Fatalf("upgrade dry-run exit %d, stderr=%q", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), target.Name) {
+		t.Errorf("dry-run output should mention %q: %q", target.Name, out.String())
+	}
+	if !strings.Contains(out.String(), "dry-run") {
+		t.Errorf("expected dry-run notice in stdout: %q", out.String())
 	}
 }

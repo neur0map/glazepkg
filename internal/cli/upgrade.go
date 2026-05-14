@@ -25,6 +25,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		yesFlag    = fs.Bool("yes", false, "skip the y/N confirmation prompt")
 		dryRunFlag = fs.Bool("dry-run", false, "print the command(s) without executing")
 		quietFlag  = fs.Bool("quiet", false, "suppress progress on stderr")
+		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -48,7 +49,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		return ExitErr
 	}
 
-	pkgs, err := collectPackages(filtered, false, true, stderr, false)
+	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr, false)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: scan failed: %v\n", err)
 		return ExitErr

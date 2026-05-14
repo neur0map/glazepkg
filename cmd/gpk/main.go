@@ -63,13 +63,16 @@ Usage:
   gpk version      Show current version
   gpk --help       Show this help
 
-Headless commands (Phase 1, read-only):
+Headless commands:
   gpk list                    List installed packages across all managers
   gpk installed <pkg>...      Exit 0 if all named packages are installed (2 if not)
   gpk info <pkg>              Show details for one installed package
   gpk source-of <pkg>         Print which manager has the package
   gpk outdated                List packages with available updates
                               (--count for a number, --exit-code for CI gates)
+  gpk install <pkg>...        Install one or more packages (prompts unless --yes)
+  gpk remove <pkg>...         Remove a package (--with-deps for orphan cleanup)
+  gpk upgrade <pkg>...        Upgrade installed packages to latest
 
 Run "gpk <subcommand> --help" for per-command flags.
 
