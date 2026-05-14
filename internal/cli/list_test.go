@@ -36,6 +36,7 @@ func mgrSet() []manager.Manager {
 }
 
 func TestListJSON(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := Dispatch([]string{"list", "--json", "--no-cache"}, mgrSet(), "test", &out, &errOut)
 	if code != ExitOK {
@@ -57,6 +58,7 @@ func TestListJSON(t *testing.T) {
 }
 
 func TestListJSONFilterByManager(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := Dispatch([]string{"list", "--json", "--no-cache", "--manager", "brew"}, mgrSet(), "test", &out, &errOut)
 	if code != ExitOK {
@@ -74,6 +76,7 @@ func TestListJSONFilterByManager(t *testing.T) {
 }
 
 func TestListJSONUnknownManagerErrors(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := Dispatch([]string{"list", "--manager", "yum"}, mgrSet(), "test", &out, &errOut)
 	if code != ExitErr {
@@ -88,6 +91,7 @@ func TestListJSONUnknownManagerErrors(t *testing.T) {
 }
 
 func TestListHumanOutput(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := Dispatch([]string{"list", "--no-cache"}, mgrSet(), "test", &out, &errOut)
 	if code != ExitOK {
