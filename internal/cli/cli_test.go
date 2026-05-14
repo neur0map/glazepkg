@@ -2,8 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"io"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/neur0map/glazepkg/internal/manager"
 )
 
 func TestDispatchUnknownSubcommand(t *testing.T) {
@@ -37,5 +41,30 @@ func TestExitCodeConstants(t *testing.T) {
 	}
 	if ExitNegative != 2 {
 		t.Errorf("ExitNegative = %d, want 2", ExitNegative)
+	}
+}
+
+func TestDispatchRoutesToRegisteredSubcommand(t *testing.T) {
+	var (
+		gotArgs    []string
+		gotVersion string
+	)
+	subcommands["__test_echo"] = func(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+		gotArgs = args
+		gotVersion = version
+		return 42
+	}
+	defer delete(subcommands, "__test_echo")
+
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"__test_echo", "a", "b"}, nil, "v1", &out, &errOut)
+	if code != 42 {
+		t.Errorf("exit code = %d, want 42 (handler's return value should propagate)", code)
+	}
+	if !reflect.DeepEqual(gotArgs, []string{"a", "b"}) {
+		t.Errorf("handler got args = %v, want [a b] (Dispatch should strip args[0])", gotArgs)
+	}
+	if gotVersion != "v1" {
+		t.Errorf("handler got version = %q, want %q", gotVersion, "v1")
 	}
 }

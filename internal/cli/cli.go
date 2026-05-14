@@ -8,6 +8,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 )
@@ -43,16 +44,7 @@ func SubcommandNames() []string {
 	for n := range subcommands {
 		names = append(names, n)
 	}
-	sortStrings(names)
+	sort.Strings(names)
 	return names
 }
 
-// sortStrings is in-line so we don't pull "sort" into a file that may not
-// otherwise need it (keeps imports minimal).
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j-1] > s[j]; j-- {
-			s[j-1], s[j] = s[j], s[j-1]
-		}
-	}
-}
