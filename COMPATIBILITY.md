@@ -25,6 +25,21 @@ Each column reports whether the manager implements the matching Go interface in 
 
 A `✓` means the interface is implemented; `─` means it isn't, and `gpk` falls back gracefully (interactive command for `+y`, error message for unsupported ops).
 
+## TUI vs headless coverage
+
+The TUI (`gpk` with no args) and the headless commands share the **same** manager interfaces — there's no manager that the TUI supports but headless doesn't, or vice versa.
+
+| Operation | TUI surface | Headless surface | Interface both call |
+|---|---|---|---|
+| Install | Search panel (`i`) → result row → install confirmation | `gpk install <pkg>` | `manager.Installer.InstallCmd` |
+| Upgrade | Detail view (`Enter`) → `u` | `gpk upgrade <pkg>` | `manager.Upgrader.UpgradeCmd` |
+| Remove | Detail view (`Enter`) → `x` | `gpk remove <pkg>` | `manager.Remover.RemoveCmd` |
+| Remove + deps | Remove modal → "package + orphaned deps" mode | `gpk remove <pkg> --with-deps` | `manager.DeepRemover.RemoveCmdWithDeps` |
+
+So the `Inst` / `Up` / `Rm` / `Deep` columns in the matrix describe **both modes** at once. If a manager has `─` in the `Rm` column, neither `x` in the TUI nor `gpk remove` from the shell works for it.
+
+**The `+y` columns are the one place TUI and headless differ.** They report whether the manager exposes a non-interactive variant (`pacman --noconfirm`, `apt -y`, etc.). The TUI doesn't use these — its modal owns confirmation, and the password field captures sudo input via `-S`. The headless `--yes` flag uses the `*Yes` interfaces when available; for managers without them, `--yes` is a safe no-op because either (a) the interactive command already includes its own non-interactive flag, or (b) the manager doesn't prompt by default. The next section unpacks this.
+
 ## Capability matrix
 
 | Manager | Platform | Inst | Inst+y | Up | Up+y | Rm | Rm+y | Deep | Deep+y |
