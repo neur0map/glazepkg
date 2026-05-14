@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Tag to release (e.g. v0.4.0). Blank = auto-bump patch.'
+        description: 'Tag to release (e.g. v0.5.0). Blank = auto-bump patch, or honor a "release-as: vX.Y.Z" line in the head commit message.'
         required: false
         default: ''
       release_name:
@@ -40,10 +40,21 @@ jobs:
         id: bump
         env:
           INPUT_VERSION: ${{ inputs.version }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
+          # Precedence:
+          #   1. workflow_dispatch input (explicit, wins)
+          #   2. a "release-as: vX.Y.Z" line in the head commit message
+          #   3. auto-bump the patch component of the latest tag
+          if [ -z "$INPUT_VERSION" ]; then
+            INPUT_VERSION=$(printf '%s' "$COMMIT_MESSAGE" \
+              | grep -oE 'release-as:[[:space:]]*v?[0-9]+\.[0-9]+\.[0-9]+' \
+              | head -n1 \
+              | sed -E 's/.*release-as:[[:space:]]*//')
+          fi
           if [ -n "$INPUT_VERSION" ]; then
-            tag="$INPUT_VERSION"
-            ver="${tag#v}"
+            ver="${INPUT_VERSION#v}"
+            tag="v${ver}"
           else
             latest=$(git tag -l 'v*' --sort=-v:refname | head -n1)
             if [ -z "$latest" ]; then
