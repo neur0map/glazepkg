@@ -1784,10 +1784,16 @@ func installCmdFor(mgr manager.Manager, inst manager.Installer, name string) *ex
 	return inst.InstallCmd(name)
 }
 
+// isPrivilegedSource flags managers whose Install/Upgrade/Remove commands
+// are wrapped in sudo by internal/manager/privileged_unix.go. The TUI uses
+// this to render the password input inside the confirm modal and to forward
+// the captured password to sudo via stdin. Keep this list in sync with
+// every manager whose *Cmd methods call privilegedCmd.
 func isPrivilegedSource(source model.Source) bool {
 	switch source {
-	case model.SourceApt, model.SourceDnf, model.SourcePacman, model.SourceSnap,
-		model.SourceApk, model.SourceXbps, model.SourceChocolatey:
+	case model.SourceApt, model.SourceDnf, model.SourcePacman, model.SourceAUR,
+		model.SourceSnap, model.SourceApk, model.SourceXbps, model.SourceChocolatey,
+		model.SourceMacPorts, model.SourcePortage, model.SourcePkg, model.SourcePkgsrc:
 		return true
 	default:
 		return false
