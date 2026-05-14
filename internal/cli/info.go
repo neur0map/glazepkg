@@ -44,7 +44,7 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 		return ExitErr
 	}
 
-	cacheOK := *mgrFlag == "" || *mgrFlag == "all"
+	cacheOK := cacheWriteOKFor(*mgrFlag)
 	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr, cacheOK)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: scan failed: %v\n", err)

@@ -255,6 +255,10 @@ func (m *Model) installFromSearch() tea.Cmd {
 	}
 
 	cmd := installCmdFor(mgr, installer, pkg.Name)
+	if cmd == nil {
+		m.statusMsg = fmt.Sprintf("%s returned no install command for %q", mgr.Name(), pkg.Name)
+		return nil
+	}
 	cmdStr := strings.Join(cmd.Args, " ")
 	needsSudo := len(cmd.Args) > 0 && cmd.Args[0] == "sudo"
 

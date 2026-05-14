@@ -104,3 +104,12 @@ func knownNames(all []manager.Manager) string {
 	sort.Strings(names)
 	return strings.Join(names, ", ")
 }
+
+// cacheWriteOKFor reports whether a scan that ran under the given --manager
+// filter is safe to write back to the global scan cache. The cache holds every
+// manager's packages; a partial scan would truncate the non-scanned managers'
+// entries for the cache's 10-day TTL. Only the "all managers" forms (empty or
+// "all") preserve the invariant.
+func cacheWriteOKFor(mgrFlag string) bool {
+	return mgrFlag == "" || mgrFlag == "all"
+}

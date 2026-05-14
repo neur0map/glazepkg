@@ -42,6 +42,9 @@ func TestExitCodeConstants(t *testing.T) {
 	if ExitNegative != 2 {
 		t.Errorf("ExitNegative = %d, want 2", ExitNegative)
 	}
+	if ExitAmbiguous != 3 {
+		t.Errorf("ExitAmbiguous = %d, want 3", ExitAmbiguous)
+	}
 }
 
 func TestDispatchRoutesToRegisteredSubcommand(t *testing.T) {
