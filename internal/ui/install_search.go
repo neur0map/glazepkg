@@ -254,7 +254,7 @@ func (m *Model) installFromSearch() tea.Cmd {
 		return nil
 	}
 
-	cmd := installer.InstallCmd(pkg.Name)
+	cmd := installCmdFor(mgr, installer, pkg.Name)
 	cmdStr := strings.Join(cmd.Args, " ")
 	needsSudo := len(cmd.Args) > 0 && cmd.Args[0] == "sudo"
 

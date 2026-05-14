@@ -96,7 +96,7 @@ func (m *Model) batchUpgradeSelected() tea.Cmd {
 			skipped = append(skipped, pkg.Name)
 			continue
 		}
-		cmd := upgrader.UpgradeCmd(pkg.Name)
+		cmd := upgradeCmdFor(mgr, upgrader, pkg.Name)
 		ops = append(ops, batchOp{
 			pkg:        pkg,
 			cmd:        cmd,
@@ -136,7 +136,7 @@ func (m *Model) batchRemoveSelected() tea.Cmd {
 			skipped = append(skipped, pkg.Name)
 			continue
 		}
-		cmd := remover.RemoveCmd(pkg.Name)
+		cmd := removeCmdFor(mgr, remover, pkg.Name)
 		ops = append(ops, batchOp{
 			pkg:        pkg,
 			cmd:        cmd,
