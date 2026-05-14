@@ -14,7 +14,7 @@ func init() {
 	subcommands["info"] = runInfo
 }
 
-func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 	fs := flag.NewFlagSet("info", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (

@@ -43,7 +43,7 @@ func mgrSetNoUpdates() []manager.Manager {
 func TestOutdatedCountFormat(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--count", "--no-cache"}, mgrSetWithUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--count", "--no-cache"}, mgrSetWithUpdates(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -58,7 +58,7 @@ func TestOutdatedCountFormat(t *testing.T) {
 func TestOutdatedCountZero(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--count", "--no-cache"}, mgrSetNoUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--count", "--no-cache"}, mgrSetNoUpdates(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -70,7 +70,7 @@ func TestOutdatedCountZero(t *testing.T) {
 func TestOutdatedExitCodeWithUpdates(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--exit-code", "--no-cache"}, mgrSetWithUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--exit-code", "--no-cache"}, mgrSetWithUpdates(), "test", &out, &errOut, nil)
 	if code != ExitNegative {
 		t.Errorf("exit %d, want %d", code, ExitNegative)
 	}
@@ -79,7 +79,7 @@ func TestOutdatedExitCodeWithUpdates(t *testing.T) {
 func TestOutdatedExitCodeNoUpdates(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--exit-code", "--no-cache"}, mgrSetNoUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--exit-code", "--no-cache"}, mgrSetNoUpdates(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Errorf("exit %d, want %d", code, ExitOK)
 	}
@@ -88,7 +88,7 @@ func TestOutdatedExitCodeNoUpdates(t *testing.T) {
 func TestOutdatedJSON(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--json", "--no-cache"}, mgrSetWithUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--json", "--no-cache"}, mgrSetWithUpdates(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -119,7 +119,7 @@ func TestOutdatedJSON(t *testing.T) {
 func TestOutdatedJSONEmptyIsEmptyArray(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--json", "--no-cache"}, mgrSetNoUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--json", "--no-cache"}, mgrSetNoUpdates(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -132,7 +132,7 @@ func TestOutdatedJSONEmptyIsEmptyArray(t *testing.T) {
 func TestOutdatedHelpExitsZero(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"outdated", "--help"}, mgrSetNoUpdates(), "test", &out, &errOut)
+	code := Dispatch([]string{"outdated", "--help"}, mgrSetNoUpdates(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
 	}

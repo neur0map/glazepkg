@@ -12,7 +12,7 @@ import (
 
 func TestDispatchUnknownSubcommand(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"bogus"}, nil, "test", &out, &errOut)
+	code := Dispatch([]string{"bogus"}, nil, "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit code = %d, want %d", code, ExitErr)
 	}
@@ -26,7 +26,7 @@ func TestDispatchUnknownSubcommand(t *testing.T) {
 
 func TestDispatchEmptyArgs(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Dispatch(nil, nil, "test", &out, &errOut)
+	code := Dispatch(nil, nil, "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit code = %d, want %d", code, ExitErr)
 	}
@@ -49,7 +49,7 @@ func TestDispatchRoutesToRegisteredSubcommand(t *testing.T) {
 		gotArgs    []string
 		gotVersion string
 	)
-	subcommands["__test_echo"] = func(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+	subcommands["__test_echo"] = func(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 		gotArgs = args
 		gotVersion = version
 		return 42
@@ -57,7 +57,7 @@ func TestDispatchRoutesToRegisteredSubcommand(t *testing.T) {
 	defer delete(subcommands, "__test_echo")
 
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"__test_echo", "a", "b"}, nil, "v1", &out, &errOut)
+	code := Dispatch([]string{"__test_echo", "a", "b"}, nil, "v1", &out, &errOut, nil)
 	if code != 42 {
 		t.Errorf("exit code = %d, want 42 (handler's return value should propagate)", code)
 	}

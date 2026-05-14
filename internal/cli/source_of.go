@@ -14,7 +14,7 @@ func init() {
 	subcommands["source-of"] = runSourceOf
 }
 
-func runSourceOf(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+func runSourceOf(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 	fs := flag.NewFlagSet("source-of", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (

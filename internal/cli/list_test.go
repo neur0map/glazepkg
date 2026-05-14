@@ -38,7 +38,7 @@ func mgrSet() []manager.Manager {
 func TestListJSON(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"list", "--json", "--no-cache"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"list", "--json", "--no-cache"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -60,7 +60,7 @@ func TestListJSON(t *testing.T) {
 func TestListJSONFilterByManager(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"list", "--json", "--no-cache", "--manager", "brew"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"list", "--json", "--no-cache", "--manager", "brew"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -78,7 +78,7 @@ func TestListJSONFilterByManager(t *testing.T) {
 func TestListJSONUnknownManagerErrors(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"list", "--manager", "yum"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"list", "--manager", "yum"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit %d, want %d", code, ExitErr)
 	}
@@ -93,7 +93,7 @@ func TestListJSONUnknownManagerErrors(t *testing.T) {
 func TestListHumanOutput(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"list", "--no-cache"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"list", "--no-cache"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -111,7 +111,7 @@ func TestListHumanOutput(t *testing.T) {
 func TestListHelpExitsZero(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"list", "--help"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"list", "--help"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
 	}
@@ -123,7 +123,7 @@ func TestListWithManagerFilterDoesNotOverwriteFullScanCache(t *testing.T) {
 
 	// First call: full scan, populates cache with pacman+brew.
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"list", "--no-cache", "--quiet"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"list", "--no-cache", "--quiet"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("first call exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -131,7 +131,7 @@ func TestListWithManagerFilterDoesNotOverwriteFullScanCache(t *testing.T) {
 	// Second call: --manager pacman --no-cache. MUST NOT overwrite the cache.
 	out.Reset()
 	errOut.Reset()
-	code = Dispatch([]string{"list", "--no-cache", "--quiet", "--manager", "pacman"}, mgrSet(), "test", &out, &errOut)
+	code = Dispatch([]string{"list", "--no-cache", "--quiet", "--manager", "pacman"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("filtered call exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -139,7 +139,7 @@ func TestListWithManagerFilterDoesNotOverwriteFullScanCache(t *testing.T) {
 	// Third call: no flags, must hit cache and still see brew packages.
 	out.Reset()
 	errOut.Reset()
-	code = Dispatch([]string{"list", "--quiet"}, mgrSet(), "test", &out, &errOut)
+	code = Dispatch([]string{"list", "--quiet"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("third call exit %d (stderr=%q)", code, errOut.String())
 	}

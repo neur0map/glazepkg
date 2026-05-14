@@ -16,7 +16,7 @@ func init() {
 	subcommands["list"] = runList
 }
 
-func runList(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+func runList(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (

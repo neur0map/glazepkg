@@ -21,7 +21,7 @@ type outdatedEntry struct {
 	Source  string `json:"source"`
 }
 
-func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 	fs := flag.NewFlagSet("outdated", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (

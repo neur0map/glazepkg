@@ -10,7 +10,7 @@ import (
 func TestInfoFound(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -23,7 +23,7 @@ func TestInfoFound(t *testing.T) {
 func TestInfoNotFound(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info", "--no-cache", "nonexistent"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info", "--no-cache", "nonexistent"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitNegative {
 		t.Errorf("exit %d, want %d", code, ExitNegative)
 	}
@@ -35,7 +35,7 @@ func TestInfoNotFound(t *testing.T) {
 func TestInfoMissingArg(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit %d, want %d", code, ExitErr)
 	}
@@ -44,7 +44,7 @@ func TestInfoMissingArg(t *testing.T) {
 func TestInfoTooManyArgs(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info", "vim", "git"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info", "vim", "git"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit %d, want %d", code, ExitErr)
 	}
@@ -53,7 +53,7 @@ func TestInfoTooManyArgs(t *testing.T) {
 func TestInfoJSONFound(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info", "--json", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info", "--json", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -72,7 +72,7 @@ func TestInfoManagerFilterMiss(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	// vim is pacman; restricting to brew should yield exit 2.
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info", "--manager", "brew", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info", "--manager", "brew", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitNegative {
 		t.Errorf("exit %d, want %d", code, ExitNegative)
 	}
@@ -81,7 +81,7 @@ func TestInfoManagerFilterMiss(t *testing.T) {
 func TestInfoHelpExitsZero(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"info", "--help"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"info", "--help"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
 	}

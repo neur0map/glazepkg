@@ -10,7 +10,7 @@ import (
 func TestSourceOfFound(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d (stderr=%q)", code, errOut.String())
 	}
@@ -22,7 +22,7 @@ func TestSourceOfFound(t *testing.T) {
 func TestSourceOfNotFound(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of", "--no-cache", "nonexistent"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of", "--no-cache", "nonexistent"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitNegative {
 		t.Errorf("exit %d, want %d", code, ExitNegative)
 	}
@@ -34,7 +34,7 @@ func TestSourceOfNotFound(t *testing.T) {
 func TestSourceOfMissingArg(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit %d, want %d", code, ExitErr)
 	}
@@ -43,7 +43,7 @@ func TestSourceOfMissingArg(t *testing.T) {
 func TestSourceOfTooManyArgs(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of", "vim", "git"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of", "vim", "git"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit %d, want %d", code, ExitErr)
 	}
@@ -52,7 +52,7 @@ func TestSourceOfTooManyArgs(t *testing.T) {
 func TestSourceOfJSONFound(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of", "--json", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of", "--json", "--no-cache", "vim"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -73,7 +73,7 @@ func TestSourceOfJSONFound(t *testing.T) {
 func TestSourceOfJSONNotFoundEmitsNothing(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of", "--json", "--no-cache", "nonexistent"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of", "--json", "--no-cache", "nonexistent"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitNegative {
 		t.Fatalf("exit %d", code)
 	}
@@ -85,7 +85,7 @@ func TestSourceOfJSONNotFoundEmitsNothing(t *testing.T) {
 func TestSourceOfHelpExitsZero(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"source-of", "--help"}, mgrSet(), "test", &out, &errOut)
+	code := Dispatch([]string{"source-of", "--help"}, mgrSet(), "test", &out, &errOut, nil)
 	if code != ExitOK {
 		t.Errorf("exit %d, want %d (stderr=%q)", code, ExitOK, errOut.String())
 	}

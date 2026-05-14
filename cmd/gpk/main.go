@@ -32,7 +32,7 @@ func main() {
 		// cli.Dispatch handles unknown names with a clean error + ExitErr,
 		// so users typing `gpk install foo` get a real message instead of
 		// the TUI failing with a TTY error.
-		os.Exit(cli.Dispatch(os.Args[1:], manager.All(), version, os.Stdout, os.Stderr))
+		os.Exit(cli.Dispatch(os.Args[1:], manager.All(), version, os.Stdout, os.Stderr, os.Stdin))
 	}
 
 	p := tea.NewProgram(ui.NewModel(version), tea.WithAltScreen())

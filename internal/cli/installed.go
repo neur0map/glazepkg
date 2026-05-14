@@ -15,7 +15,7 @@ func init() {
 	subcommands["installed"] = runInstalled
 }
 
-func runInstalled(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
+func runInstalled(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 	fs := flag.NewFlagSet("installed", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (

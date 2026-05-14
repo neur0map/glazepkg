@@ -18,7 +18,7 @@ func TestCLI_ListJSON(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"list", "--json", "--no-cache", "--quiet"},
-		manager.All(), "integration-test", &out, &errOut,
+		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr=%q", code, errOut.String())
@@ -42,7 +42,7 @@ func TestCLI_InstalledMissing(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"installed", "definitely-not-a-real-package-xyz-zzz", "--no-cache", "--quiet"},
-		manager.All(), "integration-test", &out, &errOut,
+		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 2 {
 		t.Fatalf("exit %d, want 2 (stderr=%q)", code, errOut.String())
@@ -55,7 +55,7 @@ func TestCLI_OutdatedCountFormat(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"outdated", "--count", "--quiet"},
-		manager.All(), "integration-test", &out, &errOut,
+		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr=%q", code, errOut.String())
@@ -71,7 +71,7 @@ func TestCLI_SourceOfMissing(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"source-of", "--no-cache", "definitely-not-a-real-package-xyz-zzz"},
-		manager.All(), "integration-test", &out, &errOut,
+		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 2 {
 		t.Fatalf("exit %d, want 2", code)
@@ -87,7 +87,7 @@ func TestCLI_UnknownSubcommand(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"definitely-not-a-real-subcommand"},
-		manager.All(), "integration-test", &out, &errOut,
+		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)
