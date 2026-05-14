@@ -205,6 +205,22 @@ func (p *Pacman) InstallCmd(name string) *exec.Cmd {
 	return privilegedCmd("pacman", "-S", name)
 }
 
+func (p *Pacman) InstallCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-S", "--noconfirm", name)
+}
+
+func (p *Pacman) UpgradeCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-S", "--noconfirm", name)
+}
+
+func (p *Pacman) RemoveCmdYes(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-R", "--noconfirm", name)
+}
+
+func (p *Pacman) RemoveCmdWithDepsYes(name string) *exec.Cmd {
+	return privilegedCmd("pacman", "-Rns", "--noconfirm", name)
+}
+
 func parseField(line string) (key, val string, ok bool) {
 	idx := strings.Index(line, ":")
 	if idx < 0 {

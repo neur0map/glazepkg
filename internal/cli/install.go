@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os/exec"
 	"strings"
 
 	"github.com/neur0map/glazepkg/internal/manager"
@@ -65,7 +66,16 @@ func runInstall(args []string, mgrs []manager.Manager, version string, stdout, s
 			fmt.Fprintf(stderr, "error: %s does not support install\n", chosen.Name())
 			return ExitErr
 		}
-		cmd := installer.InstallCmd(name)
+
+		var cmd *exec.Cmd
+		if *yesFlag {
+			if ni, ok := chosen.(manager.NonInteractiveInstaller); ok {
+				cmd = ni.InstallCmdYes(name)
+			}
+		}
+		if cmd == nil {
+			cmd = installer.InstallCmd(name)
+		}
 		if cmd == nil {
 			fmt.Fprintf(stderr, "error: %s returned no install command for %q\n", chosen.Name(), name)
 			return ExitErr
@@ -98,8 +108,16 @@ func runInstall(args []string, mgrs []manager.Manager, version string, stdout, s
 		if !*quietFlag {
 			fmt.Fprintf(stderr, "installing %s via %s...\n", p.pkg, p.mgr.Name())
 		}
-		installer := p.mgr.(manager.Installer)
-		cmd := installer.InstallCmd(p.pkg)
+		var cmd *exec.Cmd
+		if *yesFlag {
+			if ni, ok := p.mgr.(manager.NonInteractiveInstaller); ok {
+				cmd = ni.InstallCmdYes(p.pkg)
+			}
+		}
+		if cmd == nil {
+			installer := p.mgr.(manager.Installer)
+			cmd = installer.InstallCmd(p.pkg)
+		}
 		if err := headlessExec(cmd); err != nil {
 			fmt.Fprintf(stderr, "error: install %s failed: %v\n", p.pkg, err)
 			return ExitErr

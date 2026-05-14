@@ -135,3 +135,34 @@ func TestUpgradeHelpExitsZero(t *testing.T) {
 		t.Errorf("exit %d, want %d", code, ExitOK)
 	}
 }
+
+func TestUpgradeYesUsesNonInteractive(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var capturedNI string
+	var capturedInteractive string
+	pacman := &fakeManager{
+		name: model.SourcePacman, available: true,
+		scanFn: func() ([]model.Package, error) {
+			return []model.Package{fakePackage("vim", "9.0", model.SourcePacman)}, nil
+		},
+		upgradeCmdFn: func(name string) *exec.Cmd {
+			capturedInteractive = name
+			return exec.Command("/bin/true", "interactive", name)
+		},
+		upgradeCmdYesFn: func(name string) *exec.Cmd {
+			capturedNI = name
+			return exec.Command("/bin/true", "noninteractive", name)
+		},
+	}
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"upgrade", "vim", "--yes", "--quiet"}, []manager.Manager{pacman}, "test", &out, &errOut, nil)
+	if code != ExitOK {
+		t.Fatalf("exit %d, stderr=%q", code, errOut.String())
+	}
+	if capturedNI != "vim" {
+		t.Errorf("expected non-interactive variant to be called with vim, got %q", capturedNI)
+	}
+	if capturedInteractive != "" {
+		t.Errorf("expected interactive variant NOT to be called, but got %q", capturedInteractive)
+	}
+}

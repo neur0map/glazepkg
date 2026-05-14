@@ -202,3 +202,15 @@ func (c *Chocolatey) Describe(pkgs []model.Package) map[string]string {
 func (c *Chocolatey) InstallCmd(name string) *exec.Cmd {
 	return exec.Command("choco", "install", name, "--yes")
 }
+
+func (c *Chocolatey) InstallCmdYes(name string) *exec.Cmd {
+	return exec.Command("choco", "install", name, "--yes")
+}
+
+func (c *Chocolatey) UpgradeCmdYes(name string) *exec.Cmd {
+	return exec.Command("choco", "upgrade", name, "--yes")
+}
+
+func (c *Chocolatey) RemoveCmdYes(name string) *exec.Cmd {
+	return exec.Command("choco", "uninstall", name, "--yes")
+}

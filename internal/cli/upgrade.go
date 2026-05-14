@@ -94,7 +94,15 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			fmt.Fprintf(stderr, "error: %s does not support upgrade\n", mgr.Name())
 			return ExitErr
 		}
-		cmd := upgrader.UpgradeCmd(name)
+		var cmd *exec.Cmd
+		if *yesFlag {
+			if ni, ok := mgr.(manager.NonInteractiveUpgrader); ok {
+				cmd = ni.UpgradeCmdYes(name)
+			}
+		}
+		if cmd == nil {
+			cmd = upgrader.UpgradeCmd(name)
+		}
 		if cmd == nil {
 			fmt.Fprintf(stderr, "error: %s returned no upgrade command for %q\n", mgr.Name(), name)
 			return ExitErr
@@ -124,7 +132,15 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		if !*quietFlag {
 			fmt.Fprintf(stderr, "upgrading %s via %s...\n", p.pkg.Name, p.mgr.Name())
 		}
-		cmd := p.upgrader.UpgradeCmd(p.pkg.Name)
+		var cmd *exec.Cmd
+		if *yesFlag {
+			if ni, ok := p.mgr.(manager.NonInteractiveUpgrader); ok {
+				cmd = ni.UpgradeCmdYes(p.pkg.Name)
+			}
+		}
+		if cmd == nil {
+			cmd = p.upgrader.UpgradeCmd(p.pkg.Name)
+		}
 		if err := headlessExec(cmd); err != nil {
 			fmt.Fprintf(stderr, "error: upgrade %s failed: %v\n", p.pkg.Name, err)
 			return ExitErr

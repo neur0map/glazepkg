@@ -16,14 +16,19 @@ type fakeManager struct {
 	name      model.Source
 	available bool
 
-	scanFn         func() ([]model.Package, error)
-	checkUpdatesFn func(pkgs []model.Package) map[string]string
-	describeFn     func(pkgs []model.Package) map[string]string
-	depsFn         func(pkgs []model.Package) map[string][]string
-	upgradeCmdFn   func(name string) *exec.Cmd
-	removeCmdFn    func(name string) *exec.Cmd
-	searchFn       func(query string) ([]model.Package, error)
-	installCmdFn   func(name string) *exec.Cmd
+	scanFn            func() ([]model.Package, error)
+	checkUpdatesFn    func(pkgs []model.Package) map[string]string
+	describeFn        func(pkgs []model.Package) map[string]string
+	depsFn            func(pkgs []model.Package) map[string][]string
+	upgradeCmdFn         func(name string) *exec.Cmd
+	upgradeCmdYesFn      func(name string) *exec.Cmd
+	removeCmdFn          func(name string) *exec.Cmd
+	removeCmdYesFn       func(name string) *exec.Cmd
+	removeCmdWithDepsFn  func(name string) *exec.Cmd
+	removeCmdWithDepsYesFn func(name string) *exec.Cmd
+	searchFn             func(query string) ([]model.Package, error)
+	installCmdFn         func(name string) *exec.Cmd
+	installCmdYesFn      func(name string) *exec.Cmd
 }
 
 func (f *fakeManager) Name() model.Source { return f.name }
@@ -83,6 +88,41 @@ func (f *fakeManager) InstallCmd(name string) *exec.Cmd {
 		return nil
 	}
 	return f.installCmdFn(name)
+}
+
+func (f *fakeManager) InstallCmdYes(name string) *exec.Cmd {
+	if f.installCmdYesFn == nil {
+		return nil
+	}
+	return f.installCmdYesFn(name)
+}
+
+func (f *fakeManager) UpgradeCmdYes(name string) *exec.Cmd {
+	if f.upgradeCmdYesFn == nil {
+		return nil
+	}
+	return f.upgradeCmdYesFn(name)
+}
+
+func (f *fakeManager) RemoveCmdYes(name string) *exec.Cmd {
+	if f.removeCmdYesFn == nil {
+		return nil
+	}
+	return f.removeCmdYesFn(name)
+}
+
+func (f *fakeManager) RemoveCmdWithDeps(name string) *exec.Cmd {
+	if f.removeCmdWithDepsFn == nil {
+		return nil
+	}
+	return f.removeCmdWithDepsFn(name)
+}
+
+func (f *fakeManager) RemoveCmdWithDepsYes(name string) *exec.Cmd {
+	if f.removeCmdWithDepsYesFn == nil {
+		return nil
+	}
+	return f.removeCmdWithDepsYesFn(name)
 }
 
 // fakePackage is a one-liner constructor for tests that only care about the

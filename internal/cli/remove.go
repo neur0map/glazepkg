@@ -104,9 +104,32 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 				fmt.Fprintf(stderr, "error: %s does not support --with-deps\n", mgr.Name())
 				return ExitErr
 			}
-			cmd = deep.RemoveCmdWithDeps(name)
+			if *yesFlag {
+				if ni, ok := mgr.(manager.NonInteractiveDeepRemover); ok {
+					cmd = ni.RemoveCmdWithDepsYes(name)
+				}
+			}
+			if cmd == nil {
+				cmd = deep.RemoveCmdWithDeps(name)
+			}
 		} else {
-			cmd = remover.RemoveCmd(name)
+			if *yesFlag {
+				if ni, ok := mgr.(manager.NonInteractiveRemover); ok {
+					cmd = ni.RemoveCmdYes(name)
+				}
+			}
+			if cmd == nil {
+				cmd = remover.RemoveCmd(name)
+			}
+		}
+
+		if cmd == nil {
+			if *withDepsFlag {
+				fmt.Fprintf(stderr, "error: %s does not support --with-deps for %q\n", mgr.Name(), name)
+			} else {
+				fmt.Fprintf(stderr, "error: %s returned no remove command for %q\n", mgr.Name(), name)
+			}
+			return ExitErr
 		}
 
 		cmdDisplay := strings.Join(stripSudoStdinFlag(cmd).Args, " ")
@@ -151,9 +174,23 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 		}
 		var c *exec.Cmd
 		if *withDepsFlag {
-			c = p.mgr.(manager.DeepRemover).RemoveCmdWithDeps(p.pkg.Name)
+			if *yesFlag {
+				if ni, ok := p.mgr.(manager.NonInteractiveDeepRemover); ok {
+					c = ni.RemoveCmdWithDepsYes(p.pkg.Name)
+				}
+			}
+			if c == nil {
+				c = p.mgr.(manager.DeepRemover).RemoveCmdWithDeps(p.pkg.Name)
+			}
 		} else {
-			c = p.remover.RemoveCmd(p.pkg.Name)
+			if *yesFlag {
+				if ni, ok := p.mgr.(manager.NonInteractiveRemover); ok {
+					c = ni.RemoveCmdYes(p.pkg.Name)
+				}
+			}
+			if c == nil {
+				c = p.remover.RemoveCmd(p.pkg.Name)
+			}
 		}
 		if err := headlessExec(c); err != nil {
 			fmt.Fprintf(stderr, "error: remove %s failed: %v\n", p.pkg.Name, err)
