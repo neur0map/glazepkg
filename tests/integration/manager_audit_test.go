@@ -10,14 +10,21 @@ import (
 )
 
 // TestManagerCapabilityMatrix prints a matrix of which managers implement
-// which write-capability interfaces. Doesn't fail the test on missing caps —
+// which read and write interfaces. Doesn't fail the test on missing caps —
 // the output IS the assertion artifact.
 //
 // Run with: go test ./tests/integration/... -run TestManagerCapabilityMatrix -v
 func TestManagerCapabilityMatrix(t *testing.T) {
-	headers := []string{"manager", "avail", "Inst", "Inst+y", "Up", "Up+y", "Rm", "Rm+y", "Deep", "Deep+y"}
+	headers := []string{"manager", "avail", "Scan", "Desc", "Deps", "Updates", "Search", "Inst", "Inst+y", "Up", "Up+y", "Rm", "Rm+y", "Deep", "Deep+y"}
 	t.Log(formatRow(headers, headerWidths))
-	t.Log(formatRow([]string{strings.Repeat("-", 18), "-----", "----", "------", "--", "----", "--", "----", "----", "------"}, headerWidths))
+	t.Log(formatRow([]string{
+		strings.Repeat("-", 18), strings.Repeat("-", 5),
+		strings.Repeat("-", 4), strings.Repeat("-", 4), strings.Repeat("-", 5),
+		strings.Repeat("-", 7), strings.Repeat("-", 6),
+		strings.Repeat("-", 4), strings.Repeat("-", 6), strings.Repeat("-", 2),
+		strings.Repeat("-", 4), strings.Repeat("-", 2), strings.Repeat("-", 4),
+		strings.Repeat("-", 4), strings.Repeat("-", 6),
+	}, headerWidths))
 	for _, m := range manager.All() {
 		name := string(m.Name())
 		avail := "no"
@@ -27,6 +34,11 @@ func TestManagerCapabilityMatrix(t *testing.T) {
 		row := []string{
 			name,
 			avail,
+			"✓", // Scan: every Manager has it
+			hasIface(m, "Describer"),
+			hasIface(m, "DependencyLister"),
+			hasIface(m, "UpdateChecker"),
+			hasIface(m, "Searcher"),
 			hasIface(m, "Installer"),
 			hasIface(m, "NonInteractiveInstaller"),
 			hasIface(m, "Upgrader"),
@@ -40,7 +52,7 @@ func TestManagerCapabilityMatrix(t *testing.T) {
 	}
 }
 
-var headerWidths = []int{18, 5, 4, 6, 2, 4, 2, 4, 4, 6}
+var headerWidths = []int{18, 5, 4, 4, 5, 7, 6, 4, 6, 2, 4, 2, 4, 4, 6}
 
 func formatRow(cells []string, widths []int) string {
 	var b strings.Builder
@@ -59,6 +71,22 @@ func formatRow(cells []string, widths []int) string {
 func hasIface(m manager.Manager, name string) string {
 	yes, no := "✓", "-"
 	switch name {
+	case "Describer":
+		if _, ok := m.(manager.Describer); ok {
+			return yes
+		}
+	case "DependencyLister":
+		if _, ok := m.(manager.DependencyLister); ok {
+			return yes
+		}
+	case "UpdateChecker":
+		if _, ok := m.(manager.UpdateChecker); ok {
+			return yes
+		}
+	case "Searcher":
+		if _, ok := m.(manager.Searcher); ok {
+			return yes
+		}
 	case "Installer":
 		if _, ok := m.(manager.Installer); ok {
 			return yes
