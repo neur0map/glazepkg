@@ -192,6 +192,8 @@ type Model struct {
 	tabs         []tabItem
 	activeTab    int
 	cursor       int
+	scroll       int
+	tableHeight  int // number of list elements displayed
 	view         view
 	scanning     bool
 	statusMsg    string
@@ -646,6 +648,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Note for @neur0map : this used to be height - 14 which got passed to a function which just subtracted 4 more
+		// The initial 'height - 14' had this comment right above it, so I'll leave it here for you to update accordingly, since I don't understand the additional '- 4'
+
+		// Package table. Height budget accounts for: header(2) + summary(1) +
+		// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2)
+		m.tableHeight = m.height - 18
+		if m.tableHeight < 1 {
+			m.tableHeight = 1
+		}
+
+		// Clamp scroll and cursor on resize so cursor stays on screen
+		totalRows := len(m.filteredPkgs)
+		maxScroll := totalRows - m.tableHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.scroll > maxScroll {
+			m.scroll = maxScroll
+		}
+		if totalRows > 0 && m.cursor >= totalRows {
+			m.cursor = totalRows - 1
+		}
+		if m.cursor < m.scroll {
+			m.cursor = m.scroll
+		}
+		if m.cursor >= m.scroll+m.tableHeight {
+			m.cursor = m.scroll + m.tableHeight - 1
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -1092,7 +1122,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		default:
 			var cmd tea.Cmd
+			prev := m.filterInput.Value()
 			m.filterInput, cmd = m.filterInput.Update(msg)
+			if m.filterInput.Value() != prev {
+				m.scroll = 0
+				m.cursor = 0
+			}
 			m.applyFilter()
 			return m, cmd
 		}
@@ -1141,6 +1176,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 		m.activeTab = (m.activeTab + 1) % len(m.tabs)
 		m.cursor = 0
+		m.scroll = 0
 		m.applyFilter()
 	case "shift+tab":
 		if len(m.tabs) == 0 {
@@ -1151,30 +1187,76 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.activeTab = len(m.tabs) - 1
 		}
 		m.cursor = 0
+		m.scroll = 0
 		m.applyFilter()
 	case "j", "down":
 		if m.cursor < len(m.filteredPkgs)-1 {
 			m.cursor++
 		}
+		if m.cursor >= m.scroll+m.tableHeight {
+			m.scroll = m.cursor - m.tableHeight + 1
+		}
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		if m.cursor < m.scroll {
+			m.scroll = m.cursor
+		}
+	case "ctrl+e":
+		m.scroll += 1
+		maxScroll := len(m.filteredPkgs) - m.tableHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.scroll > maxScroll {
+			m.scroll = maxScroll
+		}
+		if m.scroll > m.cursor {
+			m.cursor = m.scroll
+		}
+	case "ctrl+y":
+		m.scroll -= 1
+		if m.scroll < 0 {
+			m.scroll = 0
+		}
+		if m.scroll+m.tableHeight <= m.cursor {
+			m.cursor = m.scroll + m.tableHeight - 1
+		}
 	case "g", "home":
 		m.cursor = 0
+		m.scroll = 0
 	case "G", "end":
 		if len(m.filteredPkgs) > 0 {
 			m.cursor = len(m.filteredPkgs) - 1
+			m.scroll = len(m.filteredPkgs) - m.tableHeight
+			if m.scroll < 0 {
+				m.scroll = 0
+			}
 		}
 	case "ctrl+d", "pgdown":
-		m.cursor += m.height / 2
+		m.cursor += max(m.tableHeight/2, 1)
 		if m.cursor >= len(m.filteredPkgs) {
 			m.cursor = len(m.filteredPkgs) - 1
 		}
+		if m.cursor >= m.scroll+m.tableHeight {
+			m.scroll = m.cursor - m.tableHeight + 1
+		}
 	case "ctrl+u", "pgup":
-		m.cursor -= m.height / 2
+		m.cursor -= max(m.tableHeight/2, 1)
 		if m.cursor < 0 {
 			m.cursor = 0
+		}
+		if m.cursor < m.scroll {
+			m.scroll = m.cursor
+		}
+	case "z":
+		m.scroll = m.cursor - m.tableHeight/2
+		if m.scroll > len(m.filteredPkgs)-m.tableHeight {
+			m.scroll = len(m.filteredPkgs) - m.tableHeight
+		}
+		if m.scroll < 0 {
+			m.scroll = 0
 		}
 	case "enter":
 		if len(m.filteredPkgs) > 0 && m.cursor < len(m.filteredPkgs) {
@@ -1358,8 +1440,20 @@ func (m *Model) applyFilter() {
 	// Then apply ranked search (name prefix > name contains > description, with fuzzy fallback)
 	m.filteredPkgs = rankPackages(tabFiltered, query)
 
-	if m.cursor >= len(m.filteredPkgs) {
-		m.cursor = max(0, len(m.filteredPkgs)-1)
+	// if m.cursor >= len(m.filteredPkgs) {
+	// 	m.cursor = max(0, len(m.filteredPkgs)-1)
+	// }
+	if m.scroll+m.tableHeight > len(m.filteredPkgs) {
+		m.scroll = len(m.filteredPkgs) - m.tableHeight + 1
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+	if m.cursor < m.scroll {
+		m.cursor = m.scroll
+	}
+	if m.cursor >= m.scroll+m.tableHeight {
+		m.scroll = m.cursor - m.tableHeight + 1
 	}
 }
 
@@ -1517,14 +1611,12 @@ func (m Model) renderListView(b *strings.Builder) {
 		return
 	}
 
-	// Package table. Height budget accounts for: header(2) + summary(1) +
-	// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2).
-	listHeight := m.height - 14
-	if listHeight < 5 {
-		listHeight = 5
-	}
+	// listHeight := m.height - 14
+	// if listHeight < 5 {
+	// 	listHeight = 5
+	// }
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
+	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, m.scroll, m.tableHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
 	// Loading indicators, inside the panel so they don't break the frame.
 	if m.loadingDescs {

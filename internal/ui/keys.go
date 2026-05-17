@@ -29,8 +29,11 @@ type KeyMap struct {
 	Down        key.Binding
 	PageUp      key.Binding
 	PageDown    key.Binding
+	ScrollUp    key.Binding
+	ScrollDown  key.Binding
 	HalfPageUp  key.Binding
 	HalfPageDn  key.Binding
+	Center      key.Binding
 	Home        key.Binding
 	End         key.Binding
 }
@@ -132,7 +135,7 @@ var Keys = KeyMap{
 		key.WithKeys("down", "j"),
 		key.WithHelp("↓/j", "down"),
 	),
-	PageUp: key.NewBinding(
+	PageUp: key.NewBinding( // NOTE: not sure why this is here, the implementation is so that pgup is same as ctrl+u (1/2 page up)
 		key.WithKeys("pgup"),
 		key.WithHelp("pgup", "page up"),
 	),
@@ -140,9 +143,21 @@ var Keys = KeyMap{
 		key.WithKeys("pgdown"),
 		key.WithHelp("pgdn", "page down"),
 	),
+	ScrollUp: key.NewBinding(
+		key.WithKeys("ctrl+y"),
+		key.WithHelp("ctrl+y", "scroll up"),
+	),
+	ScrollDown: key.NewBinding(
+		key.WithKeys("ctrl+e"),
+		key.WithHelp("ctrl+e", "scroll down"),
+	),
 	HalfPageUp: key.NewBinding(
 		key.WithKeys("ctrl+u"),
 		key.WithHelp("ctrl+u", "½ page up"),
+	),
+	Center: key.NewBinding(
+		key.WithKeys("z"),
+		key.WithHelp("z", "center cursor"),
 	),
 	HalfPageDn: key.NewBinding(
 		key.WithKeys("ctrl+d"),
