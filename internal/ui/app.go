@@ -193,6 +193,7 @@ type Model struct {
 	activeTab    int
 	cursor       int
 	scroll       int
+	tableHeight  int // number of list elements displayed
 	view         view
 	scanning     bool
 	statusMsg    string
@@ -647,6 +648,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Note for @neur0map : this used to be height - 14 which got passed to a function which just subtracted 4 more
+		// The initial 'height - 14' had this comment right above it, so I'll leave it here for you to update accordingly, since I don't understand the additional '- 4'
+
+		// Package table. Height budget accounts for: header(2) + summary(1) +
+		// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2)
+		m.tableHeight = m.height - 18
+		if m.tableHeight < 1 {
+			m.tableHeight = 1
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -1164,10 +1174,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.filteredPkgs)-1 {
 			m.cursor++
 		}
-		listHeight := m.height - 14 // WARNING: copied over from renderListView
-		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
-		if m.cursor >= m.scroll + visibleHeight {
-			m.scroll = m.cursor - visibleHeight + 1
+		if m.cursor >= m.scroll+m.tableHeight {
+			m.scroll = m.cursor - m.tableHeight + 1
 		}
 	case "k", "up":
 		if m.cursor > 0 {
@@ -1178,9 +1186,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "ctrl+e":
 		m.scroll += 1
-		listHeight := m.height - 14 // WARNING: copied over from renderListView
-		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
-		maxScroll := len(m.filteredPkgs) - visibleHeight
+		maxScroll := len(m.filteredPkgs) - m.tableHeight
 		if maxScroll < 0 {
 			maxScroll = 0
 		}
@@ -1195,10 +1201,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if m.scroll < 0 {
 			m.scroll = 0
 		}
-		listHeight := m.height - 14 // WARNING: copied over from render list view
-		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
-		if m.scroll + visibleHeight <= m.cursor {
-			m.cursor = m.scroll + visibleHeight - 1
+		if m.scroll+m.tableHeight <= m.cursor {
+			m.cursor = m.scroll + m.tableHeight - 1
 		}
 	case "g", "home":
 		m.cursor = 0
@@ -1206,9 +1210,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "G", "end":
 		if len(m.filteredPkgs) > 0 {
 			m.cursor = len(m.filteredPkgs) - 1
-			listHeight := m.height - 14 // WARNING: copied over from render list view
-			visibleHeight := listHeight - 4 // WARNING: copied over from table.go
-			m.scroll = len(m.filteredPkgs) - visibleHeight
+			m.scroll = len(m.filteredPkgs) - m.tableHeight
 			if m.scroll < 0 {
 				m.scroll = 0
 			}
@@ -1218,10 +1220,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.filteredPkgs) {
 			m.cursor = len(m.filteredPkgs) - 1
 		}
-		listHeight := m.height - 14 // WARNING: copied over from renderListView
-		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
-		if m.cursor >= m.scroll + visibleHeight {
-			m.scroll = m.cursor - visibleHeight + 1
+		if m.cursor >= m.scroll+m.tableHeight {
+			m.scroll = m.cursor - m.tableHeight + 1
 		}
 	case "ctrl+u", "pgup":
 		m.cursor -= m.height / 2
@@ -1416,10 +1416,8 @@ func (m *Model) applyFilter() {
 	// if m.cursor >= len(m.filteredPkgs) {
 	// 	m.cursor = max(0, len(m.filteredPkgs)-1)
 	// }
-	listHeight := m.height - 14 // WARNING: copied over from renderListView
-	visibleHeight := listHeight - 4 // WARNING: copied over from table.go
-	if m.scroll + visibleHeight > len(m.filteredPkgs) {
-		m.scroll = len(m.filteredPkgs) - listHeight + 1
+	if m.scroll+m.tableHeight > len(m.filteredPkgs) {
+		m.scroll = len(m.filteredPkgs) - m.tableHeight + 1
 	}
 	if m.scroll < 0 {
 		m.scroll = 0
@@ -1427,8 +1425,8 @@ func (m *Model) applyFilter() {
 	if m.cursor < m.scroll {
 		m.cursor = m.scroll
 	}
-	if m.cursor >= m.scroll + visibleHeight {
-		m.scroll = m.cursor - visibleHeight + 1
+	if m.cursor >= m.scroll+m.tableHeight {
+		m.scroll = m.cursor - m.tableHeight + 1
 	}
 }
 
@@ -1586,14 +1584,12 @@ func (m Model) renderListView(b *strings.Builder) {
 		return
 	}
 
-	// Package table. Height budget accounts for: header(2) + summary(1) +
-	// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2).
-	listHeight := m.height - 14
-	if listHeight < 5 {
-		listHeight = 5
-	}
+	// listHeight := m.height - 14
+	// if listHeight < 5 {
+	// 	listHeight = 5
+	// }
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, m.scroll, listHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
+	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, m.scroll, m.tableHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
 	// Loading indicators, inside the panel so they don't break the frame.
 	if m.loadingDescs {
