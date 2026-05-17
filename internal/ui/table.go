@@ -12,7 +12,7 @@ import (
 
 const badgeWidth = 8 // fixed visual width for all manager badges
 
-func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSize bool, upgradingPkg, removingPkg string, selections map[string]bool) string {
+func renderPackageTable(pkgs []model.Package, cursor, scroll, height, width int, showSize bool, upgradingPkg, removingPkg string, selections map[string]bool) string {
 	if len(pkgs) == 0 {
 		return StyleDim.Render("\n  No packages found.")
 	}
@@ -56,10 +56,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 		visibleHeight = 1
 	}
 
-	start := 0
-	if cursor >= visibleHeight {
-		start = cursor - visibleHeight + 1
-	}
+	start := scroll
 	end := start + visibleHeight
 	if end > len(pkgs) {
 		end = len(pkgs)
@@ -194,7 +191,7 @@ func renderPackageTable(pkgs []model.Package, cursor, height, width int, showSiz
 	// Scroll indicator
 	total := len(pkgs)
 	if total > visibleHeight {
-		pct := (cursor + 1) * 100 / total
+		pct := (scroll + 1) * 100 / total
 		indicator := fmt.Sprintf("  %d/%d (%d%%)", cursor+1, total, pct)
 		lines = append(lines, StyleDim.Render(indicator))
 	}

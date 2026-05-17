@@ -192,6 +192,7 @@ type Model struct {
 	tabs         []tabItem
 	activeTab    int
 	cursor       int
+	scroll       int
 	view         view
 	scanning     bool
 	statusMsg    string
@@ -1092,7 +1093,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		default:
 			var cmd tea.Cmd
+			prev := m.filterInput.Value()
 			m.filterInput, cmd = m.filterInput.Update(msg)
+			if m.filterInput.Value() != prev {
+				m.scroll = 0
+				m.cursor = 0
+			}
 			m.applyFilter()
 			return m, cmd
 		}
@@ -1141,6 +1147,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 		m.activeTab = (m.activeTab + 1) % len(m.tabs)
 		m.cursor = 0
+		m.scroll = 0
 		m.applyFilter()
 	case "shift+tab":
 		if len(m.tabs) == 0 {
@@ -1151,30 +1158,78 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.activeTab = len(m.tabs) - 1
 		}
 		m.cursor = 0
+		m.scroll = 0
 		m.applyFilter()
 	case "j", "down":
 		if m.cursor < len(m.filteredPkgs)-1 {
 			m.cursor++
 		}
+		listHeight := m.height - 14 // WARNING: copied over from renderListView
+		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
+		if m.cursor >= m.scroll + visibleHeight {
+			m.scroll = m.cursor - visibleHeight + 1
+		}
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
 		}
+		if m.cursor < m.scroll {
+			m.scroll = m.cursor
+		}
+	case "ctrl+e":
+		m.scroll += 1
+		listHeight := m.height - 14 // WARNING: copied over from renderListView
+		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
+		maxScroll := len(m.filteredPkgs) - visibleHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.scroll > maxScroll {
+			m.scroll = maxScroll
+		}
+		if m.scroll > m.cursor {
+			m.cursor = m.scroll
+		}
+	case "ctrl+y":
+		m.scroll -= 1
+		if m.scroll < 0 {
+			m.scroll = 0
+		}
+		listHeight := m.height - 14 // WARNING: copied over from render list view
+		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
+		if m.scroll + visibleHeight <= m.cursor {
+			m.cursor = m.scroll + visibleHeight - 1
+		}
 	case "g", "home":
 		m.cursor = 0
+		m.scroll = 0
 	case "G", "end":
 		if len(m.filteredPkgs) > 0 {
 			m.cursor = len(m.filteredPkgs) - 1
+			listHeight := m.height - 14 // WARNING: copied over from render list view
+			visibleHeight := listHeight - 4 // WARNING: copied over from table.go
+			m.scroll = len(m.filteredPkgs) - visibleHeight
+			if m.scroll < 0 {
+				m.scroll = 0
+			}
 		}
 	case "ctrl+d", "pgdown":
 		m.cursor += m.height / 2
 		if m.cursor >= len(m.filteredPkgs) {
 			m.cursor = len(m.filteredPkgs) - 1
 		}
+		listHeight := m.height - 14 // WARNING: copied over from renderListView
+		visibleHeight := listHeight - 4 // WARNING: copied over from table.go
+		if m.cursor >= m.scroll + visibleHeight {
+			m.scroll = m.cursor - visibleHeight + 1
+		}
 	case "ctrl+u", "pgup":
 		m.cursor -= m.height / 2
 		if m.cursor < 0 {
 			m.cursor = 0
+		}
+		if m.cursor < m.scroll {
+			m.scroll = m.cursor
 		}
 	case "enter":
 		if len(m.filteredPkgs) > 0 && m.cursor < len(m.filteredPkgs) {
@@ -1358,8 +1413,22 @@ func (m *Model) applyFilter() {
 	// Then apply ranked search (name prefix > name contains > description, with fuzzy fallback)
 	m.filteredPkgs = rankPackages(tabFiltered, query)
 
-	if m.cursor >= len(m.filteredPkgs) {
-		m.cursor = max(0, len(m.filteredPkgs)-1)
+	// if m.cursor >= len(m.filteredPkgs) {
+	// 	m.cursor = max(0, len(m.filteredPkgs)-1)
+	// }
+	listHeight := m.height - 14 // WARNING: copied over from renderListView
+	visibleHeight := listHeight - 4 // WARNING: copied over from table.go
+	if m.scroll + visibleHeight > len(m.filteredPkgs) {
+		m.scroll = len(m.filteredPkgs) - listHeight + 1
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+	if m.cursor < m.scroll {
+		m.cursor = m.scroll
+	}
+	if m.cursor >= m.scroll + visibleHeight {
+		m.scroll = m.cursor - visibleHeight + 1
 	}
 }
 
@@ -1524,7 +1593,7 @@ func (m Model) renderListView(b *strings.Builder) {
 		listHeight = 5
 	}
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
-	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, listHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
+	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, m.scroll, listHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
 	// Loading indicators, inside the panel so they don't break the frame.
 	if m.loadingDescs {
