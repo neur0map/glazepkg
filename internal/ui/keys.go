@@ -33,6 +33,7 @@ type KeyMap struct {
 	ScrollDown  key.Binding
 	HalfPageUp  key.Binding
 	HalfPageDn  key.Binding
+	Center      key.Binding
 	Home        key.Binding
 	End         key.Binding
 }
@@ -153,6 +154,10 @@ var Keys = KeyMap{
 	HalfPageUp: key.NewBinding(
 		key.WithKeys("ctrl+u"),
 		key.WithHelp("ctrl+u", "½ page up"),
+	),
+	Center: key.NewBinding(
+		key.WithKeys("z"),
+		key.WithHelp("z", "center cursor"),
 	),
 	HalfPageDn: key.NewBinding(
 		key.WithKeys("ctrl+d"),

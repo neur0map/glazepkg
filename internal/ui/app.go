@@ -657,6 +657,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.tableHeight < 1 {
 			m.tableHeight = 1
 		}
+
+		// Clamp scroll and cursor on resize so cursor stays on screen
+		totalRows := len(m.filteredPkgs)
+		maxScroll := totalRows - m.tableHeight
+		if maxScroll < 0 {
+			maxScroll = 0
+		}
+		if m.scroll > maxScroll {
+			m.scroll = maxScroll
+		}
+		if totalRows > 0 && m.cursor >= totalRows {
+			m.cursor = totalRows - 1
+		}
+		if m.cursor < m.scroll {
+			m.cursor = m.scroll
+		}
+		if m.cursor >= m.scroll+m.tableHeight {
+			m.cursor = m.scroll + m.tableHeight - 1
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -1216,7 +1235,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "ctrl+d", "pgdown":
-		m.cursor += m.height / 2
+		m.cursor += max(m.tableHeight/2, 1)
 		if m.cursor >= len(m.filteredPkgs) {
 			m.cursor = len(m.filteredPkgs) - 1
 		}
@@ -1224,12 +1243,20 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.scroll = m.cursor - m.tableHeight + 1
 		}
 	case "ctrl+u", "pgup":
-		m.cursor -= m.height / 2
+		m.cursor -= max(m.tableHeight/2, 1)
 		if m.cursor < 0 {
 			m.cursor = 0
 		}
 		if m.cursor < m.scroll {
 			m.scroll = m.cursor
+		}
+	case "z":
+		m.scroll = m.cursor - m.tableHeight/2
+		if m.scroll > len(m.filteredPkgs)-m.tableHeight {
+			m.scroll = len(m.filteredPkgs) - m.tableHeight
+		}
+		if m.scroll < 0 {
+			m.scroll = 0
 		}
 	case "enter":
 		if len(m.filteredPkgs) > 0 && m.cursor < len(m.filteredPkgs) {
