@@ -193,6 +193,8 @@ type Model struct {
 	activeTab    int
 	cursor       int
 	scroll       int
+	topScrollOff int
+	botScrollOff int
 	tableHeight  int // number of list elements displayed
 	view         view
 	scanning     bool
@@ -643,39 +645,45 @@ func doExport(pkgs []model.Package, format int) tea.Cmd {
 	}
 }
 
+func (m Model) calculateScroll() int {
+	new_scroll := m.scroll
+
+	if m.cursor-m.scroll >= m.botScrollOff {
+		new_scroll = min(m.cursor - m.botScrollOff + 1, len(m.filteredPkgs) - m.tableHeight)
+	} else if m.cursor-m.scroll <= m.topScrollOff {
+		new_scroll = max(0, m.cursor-m.topScrollOff)
+	}
+
+	new_scroll = min(new_scroll, len(m.filteredPkgs) - m.tableHeight)
+	new_scroll = max(0, new_scroll)
+
+	return new_scroll
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Note for @neur0map : this used to be height - 14 which got passed to a function which just subtracted 4 more
-		// The initial 'height - 14' had this comment right above it, so I'll leave it here for you to update accordingly, since I don't understand the additional '- 4'
-
 		// Package table. Height budget accounts for: header(2) + summary(1) +
-		// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2)
+		// blank(1) + tabs(2) + panel chrome(4) + separator(1) + status(2) - 4?
 		m.tableHeight = m.height - 18
-		if m.tableHeight < 1 {
-			m.tableHeight = 1
+		if m.tableHeight < 5 {
+			m.tableHeight = 5
 		}
 
-		// Clamp scroll and cursor on resize so cursor stays on screen
-		totalRows := len(m.filteredPkgs)
-		maxScroll := totalRows - m.tableHeight
-		if maxScroll < 0 {
-			maxScroll = 0
+		tableCenter := m.tableHeight / 2
+		m.topScrollOff = tableCenter - 4
+		m.botScrollOff = tableCenter + 5
+		if m.tableHeight % 2 == 0 {
+			m.botScrollOff -= 1
 		}
-		if m.scroll > maxScroll {
-			m.scroll = maxScroll
-		}
-		if totalRows > 0 && m.cursor >= totalRows {
-			m.cursor = totalRows - 1
-		}
-		if m.cursor < m.scroll {
-			m.cursor = m.scroll
-		}
-		if m.cursor >= m.scroll+m.tableHeight {
-			m.cursor = m.scroll + m.tableHeight - 1
-		}
+
+		m.topScrollOff = max(m.topScrollOff, 0)
+		m.botScrollOff = min(m.botScrollOff, m.tableHeight)
+
+		m.scroll = m.calculateScroll()
+
 		return m, nil
 
 	case tea.KeyMsg:
@@ -1193,36 +1201,12 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.filteredPkgs)-1 {
 			m.cursor++
 		}
-		if m.cursor >= m.scroll+m.tableHeight {
-			m.scroll = m.cursor - m.tableHeight + 1
-		}
+		m.scroll = m.calculateScroll()
 	case "k", "up":
 		if m.cursor > 0 {
 			m.cursor--
 		}
-		if m.cursor < m.scroll {
-			m.scroll = m.cursor
-		}
-	case "ctrl+e":
-		m.scroll += 1
-		maxScroll := len(m.filteredPkgs) - m.tableHeight
-		if maxScroll < 0 {
-			maxScroll = 0
-		}
-		if m.scroll > maxScroll {
-			m.scroll = maxScroll
-		}
-		if m.scroll > m.cursor {
-			m.cursor = m.scroll
-		}
-	case "ctrl+y":
-		m.scroll -= 1
-		if m.scroll < 0 {
-			m.scroll = 0
-		}
-		if m.scroll+m.tableHeight <= m.cursor {
-			m.cursor = m.scroll + m.tableHeight - 1
-		}
+		m.scroll = m.calculateScroll()
 	case "g", "home":
 		m.cursor = 0
 		m.scroll = 0
@@ -1239,17 +1223,13 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.filteredPkgs) {
 			m.cursor = len(m.filteredPkgs) - 1
 		}
-		if m.cursor >= m.scroll+m.tableHeight {
-			m.scroll = m.cursor - m.tableHeight + 1
-		}
+		m.scroll = m.calculateScroll()
 	case "ctrl+u", "pgup":
 		m.cursor -= max(m.tableHeight/2, 1)
 		if m.cursor < 0 {
 			m.cursor = 0
 		}
-		if m.cursor < m.scroll {
-			m.scroll = m.cursor
-		}
+		m.scroll = m.calculateScroll()
 	case "z":
 		m.scroll = m.cursor - m.tableHeight/2
 		if m.scroll > len(m.filteredPkgs)-m.tableHeight {
@@ -1611,10 +1591,6 @@ func (m Model) renderListView(b *strings.Builder) {
 		return
 	}
 
-	// listHeight := m.height - 14
-	// if listHeight < 5 {
-	// 	listHeight = 5
-	// }
 	showSize := m.sizeFilter > 0 && sizeFilters[m.sizeFilter].MinBytes != -1
 	panelContent.WriteString(renderPackageTable(m.filteredPkgs, m.cursor, m.scroll, m.tableHeight, innerW+2, showSize, m.upgradingPkgName, m.removingPkgName, m.selections))
 
