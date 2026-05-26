@@ -1221,7 +1221,7 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "ctrl+d", "pgdown":
 		m.cursor += max(m.tableHeight/2, 1)
 		if m.cursor >= len(m.filteredPkgs) {
-			m.cursor = len(m.filteredPkgs) - 1
+			m.cursor = max(0, len(m.filteredPkgs)-1)
 		}
 		m.scroll = m.calculateScroll()
 	case "ctrl+u", "pgup":
@@ -1230,14 +1230,6 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.cursor = 0
 		}
 		m.scroll = m.calculateScroll()
-	case "z":
-		m.scroll = m.cursor - m.tableHeight/2
-		if m.scroll > len(m.filteredPkgs)-m.tableHeight {
-			m.scroll = len(m.filteredPkgs) - m.tableHeight
-		}
-		if m.scroll < 0 {
-			m.scroll = 0
-		}
 	case "enter":
 		if len(m.filteredPkgs) > 0 && m.cursor < len(m.filteredPkgs) {
 			pkg := m.filteredPkgs[m.cursor]
