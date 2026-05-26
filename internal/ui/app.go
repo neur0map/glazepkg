@@ -1412,9 +1412,9 @@ func (m *Model) applyFilter() {
 	// Then apply ranked search (name prefix > name contains > description, with fuzzy fallback)
 	m.filteredPkgs = rankPackages(tabFiltered, query)
 
-	// if m.cursor >= len(m.filteredPkgs) {
-	// 	m.cursor = max(0, len(m.filteredPkgs)-1)
-	// }
+	if m.cursor >= len(m.filteredPkgs) {
+		m.cursor = max(0, len(m.filteredPkgs)-1)
+	}
 	if m.scroll+m.tableHeight > len(m.filteredPkgs) {
 		m.scroll = len(m.filteredPkgs) - m.tableHeight + 1
 	}

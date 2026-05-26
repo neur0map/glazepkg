@@ -320,3 +320,42 @@ func TestWindowResize_EmptyListNoPanic(t *testing.T) {
 		t.Errorf("empty list: scroll=%d cursor=%d, want 0/0", m2.scroll, m2.cursor)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// applyFilter
+// ---------------------------------------------------------------------------
+
+func TestApplyFilter_CursorClampedWhenListShrinks(t *testing.T) {
+	// cursor beyond the new filteredPkgs length must be pulled to the last item,
+	// not left out of range where renderPackageTable would crash.
+	pkgs := makePkgs(10)
+	m := &Model{
+		allPkgs:      pkgs,
+		filteredPkgs: pkgs,
+		tableHeight:  20,
+		cursor:       8,
+		scroll:       0,
+	}
+	m.tabs = buildTabs(pkgs)
+	// Swap in a shorter slice directly (simulates a filter narrowing results).
+	m.filteredPkgs = pkgs[:3]
+	m.applyFilter()
+	if m.cursor >= len(m.filteredPkgs) {
+		t.Errorf("cursor %d out of range, filteredPkgs len = %d", m.cursor, len(m.filteredPkgs))
+	}
+}
+
+func TestApplyFilter_CursorAndScrollBothValidOnEmptyResult(t *testing.T) {
+	// No packages at all — filteredPkgs will be empty after applyFilter.
+	m := &Model{
+		allPkgs:     nil,
+		tableHeight: 20,
+		cursor:      4,
+		scroll:      0,
+	}
+	m.tabs = buildTabs(nil)
+	m.applyFilter()
+	if m.cursor != 0 || m.scroll != 0 {
+		t.Errorf("empty result: cursor=%d scroll=%d, want 0/0", m.cursor, m.scroll)
+	}
+}
