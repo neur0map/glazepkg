@@ -18,7 +18,7 @@ func makePkgs(n int) []model.Package {
 }
 
 // scrollModel builds a Model with the scroll offsets that WindowSizeMsg would
-// compute for the given tableHeight, mimicing produciton
+// compute for the given tableHeight, mimicing production
 func scrollModel(tableHeight, scroll, cursor, numPkgs int) *Model {
 	m := &Model{
 		filteredPkgs: makePkgs(numPkgs),
