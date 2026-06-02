@@ -132,7 +132,7 @@ var Keys = KeyMap{
 		key.WithKeys("down", "j"),
 		key.WithHelp("↓/j", "down"),
 	),
-	PageUp: key.NewBinding( // NOTE: not sure why this is here, the implementation is so that pgup is same as ctrl+u (1/2 page up)
+	PageUp: key.NewBinding(
 		key.WithKeys("pgup"),
 		key.WithHelp("pgup", "page up"),
 	),

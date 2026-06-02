@@ -649,12 +649,12 @@ func (m Model) calculateScroll() int {
 	new_scroll := m.scroll
 
 	if m.cursor-m.scroll >= m.botScrollOff {
-		new_scroll = min(m.cursor - m.botScrollOff + 1, len(m.filteredPkgs) - m.tableHeight)
+		new_scroll = min(m.cursor-m.botScrollOff+1, len(m.filteredPkgs)-m.tableHeight)
 	} else if m.cursor-m.scroll <= m.topScrollOff {
 		new_scroll = max(0, m.cursor-m.topScrollOff)
 	}
 
-	new_scroll = min(new_scroll, len(m.filteredPkgs) - m.tableHeight)
+	new_scroll = min(new_scroll, len(m.filteredPkgs)-m.tableHeight)
 	new_scroll = max(0, new_scroll)
 
 	return new_scroll
@@ -675,7 +675,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tableCenter := m.tableHeight / 2
 		m.topScrollOff = tableCenter - 4
 		m.botScrollOff = tableCenter + 5
-		if m.tableHeight % 2 == 0 {
+		if m.tableHeight%2 == 0 {
 			m.botScrollOff -= 1
 		}
 
@@ -1218,14 +1218,26 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 				m.scroll = 0
 			}
 		}
-	case "ctrl+d", "pgdown":
+	case "ctrl+d":
 		m.cursor += max(m.tableHeight/2, 1)
 		if m.cursor >= len(m.filteredPkgs) {
 			m.cursor = max(0, len(m.filteredPkgs)-1)
 		}
 		m.scroll = m.calculateScroll()
-	case "ctrl+u", "pgup":
+	case "ctrl+u":
 		m.cursor -= max(m.tableHeight/2, 1)
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
+		m.scroll = m.calculateScroll()
+	case "pgdown":
+		m.cursor += max(m.tableHeight, 1)
+		if m.cursor >= len(m.filteredPkgs) {
+			m.cursor = max(0, len(m.filteredPkgs)-1)
+		}
+		m.scroll = m.calculateScroll()
+	case "pgup":
+		m.cursor -= max(m.tableHeight, 1)
 		if m.cursor < 0 {
 			m.cursor = 0
 		}
@@ -1412,20 +1424,19 @@ func (m *Model) applyFilter() {
 	// Then apply ranked search (name prefix > name contains > description, with fuzzy fallback)
 	m.filteredPkgs = rankPackages(tabFiltered, query)
 
+	// Keep cursor and scroll in range after the result set changes size. Floor
+	// the viewport height so state can't escape range before the first resize.
+	visible := max(m.tableHeight, 1)
+	maxScroll := max(0, len(m.filteredPkgs)-visible)
 	if m.cursor >= len(m.filteredPkgs) {
 		m.cursor = max(0, len(m.filteredPkgs)-1)
 	}
-	if m.scroll+m.tableHeight > len(m.filteredPkgs) {
-		m.scroll = len(m.filteredPkgs) - m.tableHeight + 1
-	}
-	if m.scroll < 0 {
-		m.scroll = 0
-	}
+	m.scroll = max(0, min(m.scroll, maxScroll))
 	if m.cursor < m.scroll {
 		m.cursor = m.scroll
 	}
-	if m.cursor >= m.scroll+m.tableHeight {
-		m.scroll = m.cursor - m.tableHeight + 1
+	if m.cursor >= m.scroll+visible {
+		m.scroll = min(m.cursor-visible+1, maxScroll)
 	}
 }
 

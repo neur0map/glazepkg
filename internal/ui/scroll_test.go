@@ -18,7 +18,7 @@ func makePkgs(n int) []model.Package {
 }
 
 // scrollModel builds a Model with the scroll offsets that WindowSizeMsg would
-// compute for the given tableHeight, mimicing production
+// compute for the given tableHeight, mimicking production.
 func scrollModel(tableHeight, scroll, cursor, numPkgs int) *Model {
 	m := &Model{
 		filteredPkgs: makePkgs(numPkgs),
@@ -262,6 +262,61 @@ func TestCtrlU_ScrollStaysInBounds(t *testing.T) {
 func TestCtrlU_EmptyListNoPanic(t *testing.T) {
 	m := scrollModel(20, 0, 0, 0)
 	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if m.scroll != 0 || m.cursor != 0 {
+		t.Errorf("empty list: scroll=%d cursor=%d, want 0/0", m.scroll, m.cursor)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// pgup / pgdown - full-page cursor jump
+// ---------------------------------------------------------------------------
+
+func TestPgDown_CursorAdvancesByFullTableHeight(t *testing.T) {
+	m := scrollModel(20, 0, 0, 60)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	if m.cursor != m.tableHeight {
+		t.Errorf("cursor = %d, want %d (full page)", m.cursor, m.tableHeight)
+	}
+}
+
+func TestPgUp_CursorRetreatsByFullTableHeight(t *testing.T) {
+	m := scrollModel(20, 0, 50, 60)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyPgUp})
+	want := 50 - m.tableHeight
+	if m.cursor != want {
+		t.Errorf("cursor = %d, want %d (full page)", m.cursor, want)
+	}
+}
+
+func TestPgDown_StepsFurtherThanCtrlD(t *testing.T) {
+	full := scrollModel(20, 0, 0, 60)
+	_, _ = full.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	half := scrollModel(20, 0, 0, 60)
+	_, _ = half.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if full.cursor <= half.cursor {
+		t.Errorf("pgdown cursor %d should exceed ctrl+d cursor %d", full.cursor, half.cursor)
+	}
+}
+
+func TestPgDown_CursorClampsAtLastItem(t *testing.T) {
+	m := scrollModel(20, 0, 55, 60)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	if m.cursor != 59 {
+		t.Errorf("cursor = %d, want 59 (last item)", m.cursor)
+	}
+}
+
+func TestPgDown_EmptyListNoPanic(t *testing.T) {
+	m := scrollModel(20, 0, 0, 0)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyPgDown})
+	if m.scroll != 0 || m.cursor != 0 {
+		t.Errorf("empty list: scroll=%d cursor=%d, want 0/0", m.scroll, m.cursor)
+	}
+}
+
+func TestPgUp_EmptyListNoPanic(t *testing.T) {
+	m := scrollModel(20, 0, 0, 0)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyPgUp})
 	if m.scroll != 0 || m.cursor != 0 {
 		t.Errorf("empty list: scroll=%d cursor=%d, want 0/0", m.scroll, m.cursor)
 	}
