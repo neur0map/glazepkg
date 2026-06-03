@@ -1,9 +1,26 @@
 !include "WinMessages.nsh"
 
+Unicode true
+SetCompressor /SOLID lzma
+ManifestSupportedOS all
+
 Name "gpk ${TAG}"
 OutFile "gpk-${TAG}-${ARCH}-setup.exe"
 InstallDir "$PROGRAMFILES64\gpk"
 RequestExecutionLevel admin
+Icon "assets/gpk.ico"
+UninstallIcon "assets/gpk.ico"
+BrandingText "gpk ${TAG} — neur0map"
+
+; Fill in the installer's file details so it looks like real software, not a
+; blank stub. Blank installers get flagged by antivirus more often.
+VIProductVersion "${VERNUM}"
+VIAddVersionKey "ProductName"     "gpk (GlazePKG)"
+VIAddVersionKey "CompanyName"     "neur0map"
+VIAddVersionKey "FileDescription" "gpk installer"
+VIAddVersionKey "FileVersion"     "${TAG}"
+VIAddVersionKey "ProductVersion"  "${TAG}"
+VIAddVersionKey "LegalCopyright"  "© neur0map · GPL-3.0"
 
 Page directory
 Page instfiles

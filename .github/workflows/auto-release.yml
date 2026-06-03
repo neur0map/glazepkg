@@ -104,14 +104,39 @@ jobs:
           curl -fsSL https://github.com/GsNSIS/EnVar/releases/download/v0.3.1/EnVar-Plugin.zip -o /tmp/envar.zip
           sudo unzip -o /tmp/envar.zip "Plugins/*" -d /usr/share/nsis/
 
+      # Give the Windows .exe a real name, version and icon. A blank Go binary
+      # looks suspicious to antivirus; filling these in cuts false-positive flags.
+      - name: Embed Windows resources
+        if: matrix.goos == 'windows'
+        env:
+          VER: ${{ needs.version.outputs.ver }}
+          ARCH: ${{ matrix.goarch }}
+        run: |
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+          IFS='.' read -r major minor patch <<< "$VER"
+          armflag=""
+          [ "$ARCH" = "arm64" ] && armflag="-arm"
+          jq \
+            --argjson M "$major" --argjson m "$minor" --argjson p "$patch" --arg ver "$VER" \
+            '.FixedFileInfo.FileVersion = {Major:$M,Minor:$m,Patch:$p,Build:0}
+             | .FixedFileInfo.ProductVersion = {Major:$M,Minor:$m,Patch:$p,Build:0}
+             | .StringFileInfo.FileVersion = $ver
+             | .StringFileInfo.ProductVersion = $ver' \
+            cmd/gpk/versioninfo.json > /tmp/versioninfo.json
+          "$(go env GOPATH)/bin/goversioninfo" -64 $armflag \
+            -o cmd/gpk/resource_windows.syso /tmp/versioninfo.json
+
       - name: Build binary
         run: |
           ext=""
           [ "${{ matrix.goos }}" = "windows" ] && ext=".exe"
           out="./bin/${{ matrix.goos }}-${{ matrix.goarch }}/gpk${ext}"
           mkdir -p "$(dirname "$out")"
+          ldflags="-X main.version=${{ needs.version.outputs.tag }}"
+          # Windows antivirus flags stripped Go .exe files more often, so only strip elsewhere.
+          [ "${{ matrix.goos }}" != "windows" ] && ldflags="-s -w $ldflags"
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build \
-            -ldflags "-s -w -X main.version=${{ needs.version.outputs.tag }}" \
+            -ldflags "$ldflags" \
             -o "$out" \
             ./cmd/gpk
 
@@ -119,9 +144,11 @@ jobs:
         if: matrix.goos == 'windows'
         env:
           TAG: ${{ needs.version.outputs.tag }}
+          VER: ${{ needs.version.outputs.ver }}
           ARCH: ${{ matrix.goarch }}
         run: |
-          envsubst '$TAG $ARCH' < .github/templates/gpk.nsi > gpk.nsi
+          export VERNUM="${VER}.0"
+          envsubst '$TAG $ARCH $VERNUM' < .github/templates/gpk.nsi > gpk.nsi
           makensis gpk.nsi
 
       - name: Upload artifacts

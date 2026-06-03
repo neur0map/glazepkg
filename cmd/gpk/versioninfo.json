@@ -1,0 +1,28 @@
+{
+	"FixedFileInfo": {
+		"FileVersion": {"Major": 0, "Minor": 0, "Patch": 0, "Build": 0},
+		"ProductVersion": {"Major": 0, "Minor": 0, "Patch": 0, "Build": 0},
+		"FileFlagsMask": "3f",
+		"FileOS": "040004",
+		"FileType": "01",
+		"FileSubType": "00"
+	},
+	"StringFileInfo": {
+		"CompanyName": "neur0map",
+		"FileDescription": "GlazePKG — one dashboard for every package manager",
+		"FileVersion": "0.0.0",
+		"InternalName": "gpk",
+		"LegalCopyright": "© neur0map · GPL-3.0",
+		"OriginalFilename": "gpk.exe",
+		"ProductName": "gpk (GlazePKG)",
+		"ProductVersion": "0.0.0"
+	},
+	"VarFileInfo": {
+		"Translation": {
+			"LangID": "0409",
+			"CharsetID": "04B0"
+		}
+	},
+	"IconPath": "assets/gpk.ico",
+	"ManifestPath": "cmd/gpk/gpk.manifest"
+}

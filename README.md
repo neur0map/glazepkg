@@ -63,6 +63,33 @@ go install github.com/neur0map/glazepkg/cmd/gpk@latest
 Grab a binary from [releases](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel), Linux (x64/ARM), or Windows (x64/ARM).
 
 <details>
+<summary><strong>Windows: seeing a "virus detected" or "Windows protected your PC" warning?</strong></summary>
+
+It's a false alarm. The Windows build isn't signed yet, and antivirus tools often flag fresh, unsigned programs made with Go — the exact same code on macOS and Linux is fine. There's nothing harmful in it ([why this happens](https://go.dev/doc/faq#virus)).
+
+Ways around it:
+
+- **Skip the download and warning entirely** — install with Go:
+
+  ```
+  go install github.com/neur0map/glazepkg/cmd/gpk@latest
+  ```
+
+- **Confirm the file is the real one.** Every release ships a `checksums.txt`. In PowerShell:
+
+  ```
+  Get-FileHash .\gpk-windows-amd64.exe -Algorithm SHA256
+  ```
+
+  Check the result matches the line for that file in `checksums.txt`.
+
+- **Let it run.** After checking the file: right-click it → Properties → tick **Unblock** → OK (or run `Unblock-File .\gpk-windows-amd64.exe`). If you get a blue "Windows protected your PC" box, click **More info → Run anyway**.
+
+- **On a work computer?** You might not see a "Run anyway" button — that's your IT department blocking unsigned apps, and we can't change that from our side. Ask them to allow it, or use the Go install above.
+
+</details>
+
+<details>
 <summary>Build from source</summary>
 
 ```bash

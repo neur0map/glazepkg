@@ -1,5 +1,6 @@
 /gpk
 *.exe
+*.syso
 demo.tape
 .DS_Store
 PLAN.md
