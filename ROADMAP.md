@@ -10,6 +10,10 @@ gpk is a helper that sits on top of the package tools you already have: brew, pa
 
 The closest comparison is yay. yay gives Arch users one way to handle both the official packages and the community ones (the AUR). gpk takes that idea wider: one front end for every package tool on your system, whatever the platform.
 
+## Two ways to use it
+
+There is the full-screen view (the TUI) and there are typed commands (the CLI). The full-screen view is how most people use gpk today, and it is the more finished side. The typed commands are the part I'm building up now, so you can drive gpk straight from the terminal the way you would use yay, without opening the view at all. Both reach the same features. Stay in the view you like, or live in the command line. Neither one is going away.
+
 ## What gpk is not
 
 - It is not a replacement for brew, pacman, apt, nix, or anything else. It drives those tools, it does not stand in for them. Remove gpk tomorrow and your software and your tools are exactly where you left them.
