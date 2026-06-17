@@ -1,94 +1,107 @@
 # GlazePKG Roadmap
 
-gpk shows you everything installed on your system. The next step is letting you do something about it: update, remove, install, bulk-select, and pick a color scheme that doesn't hurt your eyes and doesn't look like a 2010 TUI.
+gpk began as a way to see everything installed on your machine in one place. The next step is to let you act on it: install, update, remove, and tidy up, with one tool, across every package manager you use.
 
-This roadmap is an idea of what I want to do with gpk. It is not set in stone and is subject to change in the small details or the order in which things are shown here. I'm open to suggestions and ideas.
+This is the direction I want to take gpk. It is not fixed. Details and order will shift as I go, and I'm happy to hear suggestions.
 
-## Package Operations
+## What gpk is
 
-### ~~Update (`u`)~~ — DONE
+gpk is a helper that sits on top of the package tools you already have: brew, pacman, apt, nix, npm, and the rest. It gives them one shared set of commands, so you don't have to remember how each one spells "install" or asks "what's out of date."
 
-Press `u` in the package detail view. A confirmation modal shows the exact command that will run, with Yes/No buttons. Privileged managers show a sudo password field on Linux or an elevated terminal warning on Windows. Runs in the background with a notification while the TUI stays interactive. 19 managers support single-package upgrades via the `Upgrader` interface.
+The closest comparison is yay. yay gives Arch users one way to handle both the official packages and the community ones (the AUR). gpk takes that idea wider: one front end for every package tool on your system, whatever the platform.
 
-### ~~Remove (`x`)~~ — DONE
+## What gpk is not
 
-Press `x` in the package detail view. Managers that support deep remove (apt, pacman, dnf, xbps) offer a choice between removing the package only or removing it with orphaned dependencies. The modal warns when a package is required by others and flags dependency conflicts when deep remove is selected. 19 managers support removal via the `Remover` interface, 4 support deep remove via `DeepRemover`.
+- It is not a replacement for brew, pacman, apt, nix, or anything else. It drives those tools, it does not stand in for them. Remove gpk tomorrow and your software and your tools are exactly where you left them.
+- It is not a new place to get software. It uses the sources you already trust.
+- It is not trying to own your system. It is the one place you reach for that knows how to talk to all the others.
 
-### ~~Search + Install (`i`)~~ — DONE
+## Where it runs
 
-Press `i` from list view to open a full-screen search view. Searches run in parallel across all installed managers that implement `Searcher` (11 managers). Results are deduplicated by name with the highest version shown. Expand a row to see all sources. Install with confirmation modal. Descriptions carry over from search results after install.
+Arch and other Linux, macOS, and Windows. The same commands work everywhere. gpk checks which tools you actually have and talks to those.
 
-### ~~Multi Select (`m`)~~ — DONE
+## What works today
 
-Press `m` to toggle selection mode. `Space` selects packages. Selections persist across scrolling, tab switching, and fuzzy search. `u` batch upgrades all selected, `x` batch removes them. Operations run one at a time with per-package progress — failures don't stop the remaining packages. Smart sudo batching groups privileged and unprivileged operations, one password covers all privileged commands.
+- See everything installed across every tool, as a table or plain text (`gpk list`).
+- Look up a single package: version, source, size, description (`gpk info`).
+- Search for and install software across the tools you have (`gpk install`).
+- Upgrade a package, or several at once.
+- Remove a package, with an option on some tools to take its unused dependencies with it.
+- Select many packages at once and act on them together (in the full-screen view).
+- Save a snapshot of what is installed and compare it later to see what changed.
+- Export your package list for backup or moving to a new machine.
+- Several built-in color themes, with the option to add your own.
+- Update gpk itself (`gpk update`).
 
-## Future
+## What needs work first
 
-### Operation queue
+These are the gaps I most want to close, roughly in order.
 
-Currently only one operation can run at a time. If a batch upgrade is running, you can't queue another operation until it finishes. A queue would let the user start new operations that wait for the current one to complete, with the ability to view and cancel queued items.
+1. **One command to update everything.** Today you upgrade packages one at a time. There is no single "bring it all up to date" yet. This is the biggest missing piece for everyday use.
 
-### API-based search for managers without CLI search
+2. **A smarter install.**
+   - When a name exists in more than one tool, show a numbered list and let you pick, instead of stopping and asking you to add a flag.
+   - When you mistype, suggest the closest match, the way yay does ("did you mean ...").
+   - Before anything runs, show what will actually change: what gets added, what comes along as a dependency, and how much it downloads.
 
-Managers like cargo (crates.io API), gem (rubygems.org API), opam, conda, and luarocks don't have built-in CLI search or have limited search. Add HTTP-based searchers that query their public registries directly. All free, no auth needed.
+3. **Cleaning up.** A command to remove leftover dependencies nothing needs anymore, and one to clear out old download caches.
 
-### Version selection on install
+4. **Going back.** Downgrade a package to an earlier version, hold a package so it stays put during updates, and undo the last thing gpk did.
 
-When installing a package, allow the user to pick a specific version instead of always getting the latest. Useful when the latest version has breaking changes and the user needs an older stable release. The expanded search result row would show available versions as a scrollable list.
+5. **Being dependable.**
+   - Read each tool's output the same way no matter the system language.
+   - Make search quick by keeping a local index, instead of waiting on each tool every time.
+   - Keep a short history of what gpk changed, so you can look back and reverse it.
 
-### Downgrade
+6. **Proper nix support.** On NixOS, installing should add the package to your configuration and rebuild, which is how NixOS is meant to work, with a quick way to just try something without keeping it. The current method uses an older command that does not fit flake-based systems. The compatibility table is also out of date for nix and needs to match the code.
 
-Press a key in detail view to downgrade a package to a previous version. Shows available versions for the installed package and lets the user pick. Not all managers support this (brew does via `brew install pkg@version`, apt via `apt install pkg=version`, pip via `pip install pkg==version`). Managers that don't support it would show the standard "not supported" message.
+## Familiar commands
+
+Most people who use pacman or yay know the short flags by heart. `-S` to install, `-R` to remove, `-Syu` to update everything. Those flags are not owned by anyone. yay took them from pacman, paru took them too. gpk can offer the same shortcuts for people who want them, next to the plain words anyone can read at a glance.
+
+So you will be able to write it either way:
+
+| What you want | Plain words | Short flags |
+|---|---|---|
+| Install a package | `gpk install foo` | `gpk -S foo` |
+| Remove a package | `gpk remove foo` | `gpk -R foo` |
+| Update everything | `gpk upgrade` | `gpk -Syu` |
+| Search | `gpk search foo` | `gpk -Ss foo` |
+| List installed | `gpk list` | `gpk -Q` |
+
+brew users keep the word style they already use. Arch users keep their muscle memory. Same tool either way.
+
+## Where this is heading
+
+Further out, once the basics above are solid:
+
+- A first run that looks at your system, finds the tools you have, and shows you what it found so you can fix anything it got wrong.
+- The "did you mean" suggestions and quick search from the list above, made the normal experience rather than extras.
+- A queue, so you can line up several actions instead of waiting for each one to finish.
+- Choosing a specific version at install time, not always the newest.
+- A way for other people to add support for their own package tools, once the internal layout settles enough to keep it stable.
+- Maybe, much later, building AUR packages directly instead of going through yay or paru. That is a large job on its own, so for now gpk uses whichever AUR helper you already have.
+- Tracking whether something was installed for the whole system or just your user, which changes how it should be removed.
+
+## How the vision has changed
+
+gpk started as something you look at: one screen showing everything every tool had installed. People liked that, then asked to actually do things from the same screen. So it is turning into something you use, not just read. The aim stays the same. Not to become the one tool that owns your packages, but to be the one place you go that knows how to work with all of them.
 
 ## Themes
 
-Only Tokyo Night right now. Shipping these built in:
+Several color themes ship with gpk, and `t` cycles through them live. Your choice is saved to `~/.local/share/glazepkg/theme.json`. Custom themes go in `~/.local/share/glazepkg/themes/` as a small file with the same color values.
 
-| Theme | Vibe |
-|-------|------|
-| Tokyo Night | Current default |
-| Catppuccin Mocha | Warm pastels, dark bg |
-| Gruvbox Dark | Earthy, retro |
-| Dracula | High contrast |
-| Nord | Muted arctic |
-| Solarized Dark | Classic |
-| One Dark | Atom style |
-| Rose Pine | Soft pinks |
+## What gpk will not do
 
-A theme is just 12 color values matching the slots in `theme.go` (Base, Surface, Text, Subtext, Blue, Purple, Green, Red, Yellow, Cyan, Orange, White).
+- Replace your package managers. It works with them.
+- Turn into a server or enterprise management tool. It is a personal tool.
+- Host its own software repository.
 
-`t` cycles through themes live. Selection persists to `~/.local/share/glazepkg/theme.json`. Custom themes go in `~/.local/share/glazepkg/themes/` as JSON files with the same 12 values.
+## Still open
 
-## Resolved Problems
-
-### Terminal Ownership
-
-Solved by running commands in a background goroutine with `CombinedOutput()`. The TUI stays alive and interactive during all operations. Sudo passwords are collected in the confirmation modal and piped to `sudo -S` via stdin. Commands use `exec.CommandContext` so they can be cancelled if the user force-quits with ctrl+c.
-
-### Privilege Escalation
-
-Handled via build-tag-split helpers: `privilegedCmd()` wraps with `sudo -S` on Unix (non-root), pass-through on Windows. Each manager declares its own elevation needs. The confirmation modal shows a password field when sudo is needed, or an "elevated terminal" warning on Windows.
-
-### Cache Invalidation After Write Operations
-
-`UpdateCache.Invalidate(keys)` removes the affected manager's entries, then `rescanManager()` rescans just that one manager and merges the results back, preserving cached metadata. Descriptions from search results are seeded into the cache so newly installed packages show their descriptions immediately.
-
-## Open Problems
-
-### Version Comparison Across Managers
-
-Version strings aren't comparable across managers (brew `1.14.1`, pacman `1.14.1-1`, apt `1.14.1-2ubuntu1`, pip `1.14.1.post1`). Currently using rough semver parsing with string fallback.
-
-### Flatpak and Snap Scope
-
-Both have system vs user scope. A system installed Flatpak needs sudo to remove, a user installed one doesn't. gpk currently scans both but doesn't track scope.
-
-## Not On This Roadmap
-
-- **Config file for enabling/disabling managers.** gpk already skips managers that aren't installed.
-- **Plugin system for community managers.** The Manager interface needs to stabilize first.
-- **Systemd services, D-Bus, LDAP, enterprise features.** gpk is a user tool.
+- Every tool writes versions differently (brew `1.14.1`, pacman `1.14.1-1`, apt `1.14.1-2ubuntu1`, pip `1.14.1.post1`). Comparing them across tools is hard. gpk does its best and falls back to a plain text compare.
+- Some tools can install software for the whole system or just for your user. gpk does not track that split yet, and it matters when removing.
 
 ## Contributing
 
-Check [CONTRIBUTING.md](CONTRIBUTING.md) for how the code is organized. Each feature above can be worked on independently. Open an issue or start a discussion if you want to grab something.
+Each piece above can be picked up on its own. See [CONTRIBUTING.md](CONTRIBUTING.md) for how the code is laid out. Open an issue or start a discussion if you want to take something on.
