@@ -57,6 +57,11 @@ func All() []Manager {
 		&Scoop{},
 		&Maven{},
 		&Uv{},
+		&AM{},
+		&Gvm{},
+		&Mise{},
+		&Quicklisp{},
+		&SoftwareUpdate{},
 	}
 }
 

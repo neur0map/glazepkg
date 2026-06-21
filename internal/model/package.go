@@ -42,6 +42,11 @@ const (
 	SourceScoop          Source = "scoop"
 	SourceMaven          Source = "maven"
 	SourceUv             Source = "uv"
+	SourceAM             Source = "am"
+	SourceGvm            Source = "gvm"
+	SourceMise           Source = "mise"
+	SourceQuicklisp      Source = "quicklisp"
+	SourceSoftwareUpdate Source = "softwareupdate"
 )
 
 type Package struct {

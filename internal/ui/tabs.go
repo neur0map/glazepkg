@@ -76,6 +76,11 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourceWindowsUpdates, "winupd"},
 		{model.SourceScoop, "scoop"},
 		{model.SourceMaven, "maven"},
+		{model.SourceMise, "mise"},
+		{model.SourceGvm, "gvm"},
+		{model.SourceAM, "am"},
+		{model.SourceQuicklisp, "quicklisp"},
+		{model.SourceSoftwareUpdate, "swupd"},
 	}
 
 	for _, s := range sources {
