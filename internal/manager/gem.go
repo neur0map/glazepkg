@@ -3,6 +3,7 @@ package manager
 import (
 	"bufio"
 	"os/exec"
+	"runtime"
 	"strings"
 	"time"
 
@@ -13,7 +14,21 @@ type Gem struct{}
 
 func (g *Gem) Name() model.Source { return model.SourceGem }
 
-func (g *Gem) Available() bool { return commandExists("gem") }
+func (g *Gem) Available() bool {
+	path, err := exec.LookPath("gem")
+	if err != nil {
+		return false
+	}
+	// macOS system Ruby gems live under SIP-protected paths and cannot be
+	// updated or removed, so skip the manager when Apple's gem is active.
+	return !isSystemGemPath(runtime.GOOS, path)
+}
+
+// isSystemGemPath reports whether gemPath is the macOS bundled system Ruby
+// (issue #50), whose gems are unmanageable.
+func isSystemGemPath(goos, gemPath string) bool {
+	return goos == "darwin" && gemPath == "/usr/bin/gem"
+}
 
 func (g *Gem) Scan() ([]model.Package, error) {
 	out, err := exec.Command("gem", "list", "--local").Output()
