@@ -161,11 +161,11 @@ func (l *Luarocks) Search(query string) ([]model.Package, error) {
 }
 
 func (l *Luarocks) InstallCmd(name string) *exec.Cmd {
-	return exec.Command("luarocks", "install", name)
+	return exec.Command("luarocks", "install", "--local", name)
 }
 
 func (l *Luarocks) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("luarocks", "upgrade", name)
+	return exec.Command("luarocks", "upgrade", "--local", name)
 }
 
 func (l *Luarocks) RemoveCmd(name string) *exec.Cmd {

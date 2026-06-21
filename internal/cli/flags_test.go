@@ -23,7 +23,7 @@ func TestReorderFlagsFirst(t *testing.T) {
 		{"string flag with value", []string{"pkg", "--manager", "pacman"}, []string{"--manager", "pacman", "pkg"}},
 		{"short string flag with value", []string{"pkg", "-m", "pacman"}, []string{"-m", "pacman", "pkg"}},
 		{"equals form does not consume next", []string{"pkg", "--manager=pacman", "--json"}, []string{"--manager=pacman", "--json", "pkg"}},
-		{"double-dash separator", []string{"--json", "--", "-weird-name"}, []string{"--json", "-weird-name"}},
+		{"double-dash separator", []string{"--json", "--", "-weird-name"}, []string{"--json", "--", "-weird-name"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

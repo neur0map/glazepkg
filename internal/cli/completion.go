@@ -91,7 +91,7 @@ var completionScripts = map[string]string{
             return ;;
     esac
     case "$cmd" in
-        remove|upgrade|info|source-of|downgrade|hold)
+        remove|upgrade|info|source-of|why|versions|downgrade|hold)
             COMPREPLY=( $(compgen -W "$(gpk completions installed)" -- "$cur") ) ;;
         unhold)
             COMPREPLY=( $(compgen -W "$(gpk completions held)" -- "$cur") ) ;;
@@ -110,7 +110,7 @@ _gpk() {
         -m|--manager) compadd -- ${(f)"$(gpk completions managers)"}; return ;;
     esac
     case "$cmd" in
-        remove|upgrade|info|source-of|downgrade|hold) compadd -- ${(f)"$(gpk completions installed)"} ;;
+        remove|upgrade|info|source-of|why|versions|downgrade|hold) compadd -- ${(f)"$(gpk completions installed)"} ;;
         unhold) compadd -- ${(f)"$(gpk completions held)"} ;;
     esac
 }
@@ -118,7 +118,7 @@ compdef _gpk gpk
 `,
 	"fish": `complete -c gpk -f
 complete -c gpk -n "__fish_use_subcommand" -a "(gpk completions commands)"
-complete -c gpk -n "__fish_seen_subcommand_from remove upgrade info source-of downgrade hold" -a "(gpk completions installed)"
+complete -c gpk -n "__fish_seen_subcommand_from remove upgrade info source-of why versions downgrade hold" -a "(gpk completions installed)"
 complete -c gpk -n "__fish_seen_subcommand_from unhold" -a "(gpk completions held)"
 complete -c gpk -l manager -x -a "(gpk completions managers)"
 complete -c gpk -s m -x -a "(gpk completions managers)"

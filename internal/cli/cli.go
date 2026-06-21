@@ -41,7 +41,7 @@ func Dispatch(args []string, mgrs []manager.Manager, version string, stdout, std
 		fmt.Fprintf(stderr, "error: unknown option %q\n", name)
 		return ExitErr
 	}
-	if best, d := closest(name, SubcommandNames()); d > 0 && d <= 2 {
+	if best, d := closest(name, SubcommandNames()); d == 1 || (d == 2 && len(name) >= 6) {
 		fmt.Fprintf(stderr, "error: unknown command %q — did you mean %q?\n", name, best)
 		return ExitErr
 	}

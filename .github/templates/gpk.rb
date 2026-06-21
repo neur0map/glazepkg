@@ -1,5 +1,5 @@
 class Gpk < Formula
-  desc "TUI dashboard that unifies 34 package managers into one searchable view"
+  desc "TUI dashboard that unifies 42 package managers into one searchable view"
   homepage "https://github.com/neur0map/glazepkg"
   version "${VER}"
   license "GPL-3.0-or-later"

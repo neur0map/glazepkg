@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -10,37 +10,6 @@ import (
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 )
-
-func TestConfirmAction_YesVariants(t *testing.T) {
-	for _, input := range []string{"y\n", "yes\n", "Y\n", "YES\n", " y \n"} {
-		t.Run(input, func(t *testing.T) {
-			var out bytes.Buffer
-			got := confirmAction("Proceed? [y/N] ", strings.NewReader(input), &out)
-			if !got {
-				t.Errorf("input %q expected true, got false", input)
-			}
-		})
-	}
-}
-
-func TestConfirmAction_NoVariants(t *testing.T) {
-	for _, input := range []string{"n\n", "no\n", "\n", "anything else\n", ""} {
-		t.Run(input, func(t *testing.T) {
-			var out bytes.Buffer
-			got := confirmAction("Proceed? [y/N] ", strings.NewReader(input), &out)
-			if got {
-				t.Errorf("input %q expected false, got true", input)
-			}
-		})
-	}
-}
-
-func TestConfirmAction_NilStdinReturnsFalse(t *testing.T) {
-	var out bytes.Buffer
-	if confirmAction("Proceed? [y/N] ", nil, &out) {
-		t.Error("expected false on nil stdin")
-	}
-}
 
 func TestStripSudoStdinFlag_RemovesS(t *testing.T) {
 	cmd := exec.Command("sudo", "-S", "pacman", "-S", "git")
@@ -85,7 +54,7 @@ func TestFindCandidates_SingleMatch(t *testing.T) {
 		name: model.SourceBrew, available: true,
 		searchFn: func(q string) ([]model.Package, error) { return nil, nil },
 	}
-	cands := findInstallCandidates("git", []manager.Manager{pacman, brew})
+	cands, _ := findInstallCandidates("git", []manager.Manager{pacman, brew})
 	if len(cands) != 1 || cands[0].mgr.Name() != model.SourcePacman {
 		t.Fatalf("got %d candidates, want 1 (pacman)", len(cands))
 	}
@@ -104,7 +73,7 @@ func TestFindCandidates_Ambiguous(t *testing.T) {
 			return []model.Package{{Name: "ripgrep"}}, nil
 		},
 	}
-	cands := findInstallCandidates("ripgrep", []manager.Manager{pacman, brew})
+	cands, _ := findInstallCandidates("ripgrep", []manager.Manager{pacman, brew})
 	if len(cands) != 2 {
 		t.Fatalf("got %d candidates, want 2", len(cands))
 	}
@@ -115,7 +84,7 @@ func TestFindCandidates_NotFound(t *testing.T) {
 		name: model.SourcePacman, available: true,
 		searchFn: func(q string) ([]model.Package, error) { return nil, nil },
 	}
-	if cands := findInstallCandidates("nope", []manager.Manager{pacman}); len(cands) != 0 {
+	if cands, _ := findInstallCandidates("nope", []manager.Manager{pacman}); len(cands) != 0 {
 		t.Fatalf("got %d candidates, want 0", len(cands))
 	}
 }
@@ -136,9 +105,27 @@ func TestFindCandidates_DedupesToCanonicalManager(t *testing.T) {
 			return []model.Package{{Name: "yay", Source: model.SourceAUR}}, nil
 		},
 	}
-	cands := findInstallCandidates("yay", []manager.Manager{pacman, aur})
+	cands, _ := findInstallCandidates("yay", []manager.Manager{pacman, aur})
 	if len(cands) != 1 || cands[0].mgr.Name() != model.SourceAUR {
 		t.Fatalf("got %d candidates, want 1 (aur)", len(cands))
+	}
+}
+
+// A searcher that errors (e.g. AUR RPC unreachable) with no results surfaces
+// the error so callers can say "couldn't reach X" instead of "not found".
+func TestFindCandidates_SearchErrorSurfaces(t *testing.T) {
+	down := &fakeManager{
+		name: model.SourceAUR, available: true,
+		searchFn: func(q string) ([]model.Package, error) {
+			return nil, errors.New("dial tcp: timeout")
+		},
+	}
+	cands, err := findInstallCandidates("anything", []manager.Manager{down})
+	if len(cands) != 0 {
+		t.Fatalf("got %d candidates, want 0", len(cands))
+	}
+	if err == nil {
+		t.Error("search error should surface, got nil")
 	}
 }
 

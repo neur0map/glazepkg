@@ -2,10 +2,9 @@
 
 # GlazePKG (`gpk`)
 
-**See every package on your system — one gorgeous terminal dashboard.**
+**One command for every package manager you have.**
 
-A beautiful TUI that unifies **42 package managers** into a single searchable, snapshotable, diffable view.
-Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
+`gpk` is `yay` for your whole machine — install, search, upgrade, and roll back across **42 package managers** with one familiar syntax. Plus a gorgeous TUI to see it all. Zero config, one binary, macOS · Linux · Windows.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg?style=for-the-badge&color=00ADD8)](https://go.dev/)
@@ -20,24 +19,35 @@ Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config
 
 ---
 
-## Why?
+## One syntax, every manager
 
-You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installing software independently. Knowing what's actually on your machine means running 6+ commands across different CLIs with different flags and output formats.
+You already juggle `brew`, `pip`, `cargo`, `npm`, `apt`, `pacman`, the AUR — each with its own flags, its own search, its own "what's even installed?". Move to a new machine and you relearn all of it.
 
-**GlazePKG fixes this.** One command, one view, every package. Track what changed over time with snapshots and diffs. Export everything to JSON for backup or migration.
+`gpk` gives you one. The pacman/yay muscle memory you already have, pointed at all 42:
 
-## Features
+```bash
+gpk ffmpeg          # search every manager, pick a source, install — like yay
+gpk -S ripgrep      # install (gpk finds whether it's in pacman, brew, cargo…)
+gpk -Syu            # update everything, everywhere, in one go
+gpk -R nodejs       # remove
+```
 
-- **42 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, uv, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update, AM/AppMan, gvm, mise, Quicklisp, softwareupdate
-- **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
-- **Fuzzy search** — find any package across all managers instantly with `/`
-- **Package operations** — upgrade, remove, search, and install packages without leaving the TUI
-- **Full command line** — every action as a typed command, plus the pacman/yay short flags (`-S`, `-Ss`, `-Syu`, `-R`, `-Q`) so it feels familiar from the first keystroke
-- **Multi-select** — batch upgrade or remove with smart sudo batching
-- **Snapshots & diffs** — save system state, diff to see what changed
-- **Update detection** — `↑` indicator for packages with available updates
-- **Export** — dump to JSON or text for backup, migration, or dotfile tracking
-- **Zero dependencies** — single static Go binary, cross-platform
+Not sure which manager has it? gpk searches them all and shows you — name, version, description. Typo it? It suggests the fix. Want the dashboard instead? Just run `gpk`.
+
+## What you get
+
+| | |
+|---|---|
+| **`yay` for all 42** | pacman/yay short flags (`-S -Ss -Si -Syu -R -Q`) and plain words, across every manager |
+| **Find it anywhere** | one search across all managers in parallel — versions, descriptions, "did you mean" on typos |
+| **Eye candy** | themed `::`/`✓`/`✗` runs and a true-color TUI worth screenshotting |
+| **Versions, handled** | pin `pkg@1.2.3`, pick interactively, `downgrade` to roll back, compared across formats |
+| **AUR without a helper** | searches the AUR and builds with `makepkg` — showing you the PKGBUILD first |
+| **Stay in control** | `hold` packages, `history` + `undo`, `autoremove` orphans, `clean` caches |
+| **Backup & migrate** | `export` your whole setup to JSON, `import` it on the next machine |
+| **The dashboard** | run bare `gpk` for a searchable, snapshotable, diffable TUI |
+| **Scriptable** | `--json` everywhere + stable exit codes — drop it behind a GUI or CI |
+| **Instant** | scans once, caches for 10 days, opens in milliseconds |
 
 ## Install
 
@@ -128,6 +138,7 @@ gpk firefox               # search and pick something to install (like yay)
 gpk -S ffmpeg             # install
 gpk -S ffmpeg --aur       # install, scoped to one manager
 gpk install black@24.1.0  # install a specific version (or --pick-version to choose)
+gpk versions black        # list installable versions, newest first
 gpk -Ss ripgrep           # search every manager at once
 gpk -Syu                  # update everything
 gpk -R foo                # remove  (-Rns to take orphaned deps too)
@@ -141,6 +152,7 @@ gpk theme dracula         # switch the color theme (shared with the TUI)
 gpk export -o pkgs.json   # back up everything installed
 gpk import pkgs.json      # restore it on another machine (skips installed)
 gpk -Qi foo               # info    ·  gpk -Q lists everything installed
+gpk why openssl           # what depends on it (is it safe to remove?)
 ```
 
 When a package exists in more than one manager, gpk lists them with versions and

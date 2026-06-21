@@ -3,11 +3,8 @@ package cli
 import (
 	"encoding/json"
 	"io"
-	"os"
-	"regexp"
 	"time"
 
-	"github.com/mattn/go-isatty"
 	"github.com/neur0map/glazepkg/internal/model"
 )
 
@@ -73,18 +70,4 @@ func toCLIPackages(ps []model.Package) []cliPackage {
 		out[i] = toCLIPackage(p)
 	}
 	return out
-}
-
-// ansiRegex matches ANSI CSI escape sequences (color codes, cursor moves).
-// Used by stripANSI for non-TTY human output.
-var ansiRegex = regexp.MustCompile("\x1b\\[[0-9;]*[a-zA-Z]")
-
-func stripANSI(s string) string {
-	return ansiRegex.ReplaceAllString(s, "")
-}
-
-// isStdoutTTY reports whether os.Stdout is connected to a real terminal.
-// Tests use a bytes.Buffer (not a TTY), so this always returns false in tests.
-func isStdoutTTY() bool {
-	return isatty.IsTerminal(os.Stdout.Fd())
 }

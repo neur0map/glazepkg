@@ -47,14 +47,14 @@ func TranslateOps(args []string) (out []string, ok bool) {
 			if has('y') && !hasPositional(rest) {
 				return append([]string{"refresh"}, rest...), true
 			}
-			return append([]string{"install"}, rest...), true
+			return append([]string{"install"}, dropVerb(rest, "install")...), true
 		}
 	case 'R':
 		head := []string{"remove"}
 		if has('s') || has('n') {
 			head = append(head, "--with-deps")
 		}
-		return append(head, rest...), true
+		return append(head, dropVerb(rest, "remove")...), true
 	case 'Q':
 		switch {
 		case has('u'):
@@ -68,6 +68,16 @@ func TranslateOps(args []string) (out []string, ok bool) {
 		}
 	}
 	return nil, false
+}
+
+// dropVerb removes a redundant leading verb so `gpk -S install foo` (the flag
+// and the word) behaves like `gpk -S foo`. Only used for the package-name ops,
+// where a package literally named "install"/"remove" is implausible.
+func dropVerb(rest []string, verb string) []string {
+	if len(rest) > 0 && rest[0] == verb {
+		return rest[1:]
+	}
+	return rest
 }
 
 // rewritePacmanFlags maps pacman-only flags onto gpk equivalents and drops

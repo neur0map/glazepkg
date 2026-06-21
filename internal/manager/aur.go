@@ -2,6 +2,11 @@ package manager
 
 import (
 	"bufio"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"time"
@@ -120,37 +125,96 @@ func aurHelper() string {
 	return ""
 }
 
+// aurBuildCmd builds and installs an AUR package with makepkg when no helper
+// (yay/paru) is present. The name is passed as a positional arg so it can't be
+// interpolated into the shell script.
+func aurBuildCmd(name string, noconfirm bool) *exec.Cmd {
+	mk := "makepkg -si"
+	if noconfirm {
+		mk += " --noconfirm"
+	}
+	preflight := `command -v makepkg >/dev/null 2>&1 || { echo "gpk: building from the AUR needs makepkg (pacman -S base-devel) or an AUR helper (yay/paru)" >&2; exit 1; }; `
+	script := preflight + `set -e; d=$(mktemp -d); git clone --depth 1 "https://aur.archlinux.org/$1.git" "$d/$1"; cd "$d/$1"; ` + mk
+	return exec.Command("sh", "-c", script, "sh", name)
+}
+
+// AURWillBuild reports whether gpk would build AUR packages itself with makepkg
+// (no yay/paru helper installed), in which case the caller should show the
+// PKGBUILD for review first.
+func AURWillBuild() bool {
+	return commandExists("pacman") && aurHelper() == ""
+}
+
+// FetchPKGBUILD returns an AUR package's PKGBUILD so it can be reviewed before
+// building. Capped to 64 KiB; an unknown name or split-package base returns an
+// error the caller can degrade on.
+func FetchPKGBUILD(name string) (string, error) {
+	u := "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=" + url.QueryEscape(name)
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(u)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New("pkgbuild not found")
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func (a *AUR) UpgradeCmd(name string) *exec.Cmd {
 	if h := aurHelper(); h != "" {
 		return exec.Command(h, "-S", name)
 	}
-	return privilegedCmd("pacman", "-S", name)
+	return aurBuildCmd(name, false)
 }
 
+// Search queries the AUR RPC directly so it works without an AUR helper
+// installed, returning name, version, and description for matching packages.
 func (a *AUR) Search(query string) ([]model.Package, error) {
-	h := aurHelper()
-	if h == "" {
+	q := strings.TrimSpace(query)
+	if q == "" {
 		return nil, nil
 	}
-	out, err := exec.Command(h, "-Ss", query).Output()
-	if err != nil || len(out) == 0 {
-		return nil, nil
+	u := "https://aur.archlinux.org/rpc/v5/search/" + url.PathEscape(q) + "?by=name-desc"
+	client := &http.Client{Timeout: 5 * time.Second}
+	var resp *http.Response
+	var err error
+	for attempt := 0; attempt < 2; attempt++ {
+		resp, err = client.Get(u)
+		if err == nil {
+			break
+		}
 	}
-	var pkgs []model.Package
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, " ") || line == "" {
-			continue
-		}
-		// Format: "repo/name version (group) [installed]"
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		nameParts := strings.SplitN(fields[0], "/", 2)
-		name := nameParts[len(nameParts)-1]
-		pkgs = append(pkgs, model.Package{Name: name, Version: fields[1], Source: model.SourceAUR})
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.New("aur rpc: " + resp.Status)
+	}
+	var body struct {
+		Results []struct {
+			Name        string `json:"Name"`
+			Version     string `json:"Version"`
+			Description string `json:"Description"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, err
+	}
+	pkgs := make([]model.Package, 0, len(body.Results))
+	for _, r := range body.Results {
+		pkgs = append(pkgs, model.Package{
+			Name:        r.Name,
+			Version:     r.Version,
+			Description: r.Description,
+			Source:      model.SourceAUR,
+		})
 	}
 	return pkgs, nil
 }
@@ -159,21 +223,21 @@ func (a *AUR) InstallCmd(name string) *exec.Cmd {
 	if h := aurHelper(); h != "" {
 		return exec.Command(h, "-S", name)
 	}
-	return privilegedCmd("pacman", "-S", name)
+	return aurBuildCmd(name, false)
 }
 
 func (a *AUR) InstallCmdYes(name string) *exec.Cmd {
 	if h := aurHelper(); h != "" {
 		return exec.Command(h, "-S", "--noconfirm", name)
 	}
-	return privilegedCmd("pacman", "-S", "--noconfirm", name)
+	return aurBuildCmd(name, true)
 }
 
 func (a *AUR) UpgradeCmdYes(name string) *exec.Cmd {
 	if h := aurHelper(); h != "" {
 		return exec.Command(h, "-S", "--noconfirm", name)
 	}
-	return privilegedCmd("pacman", "-S", "--noconfirm", name)
+	return aurBuildCmd(name, true)
 }
 
 func (a *AUR) RemoveCmdYes(name string) *exec.Cmd {

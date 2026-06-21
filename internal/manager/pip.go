@@ -158,7 +158,8 @@ func (p *Pip) Describe(pkgs []model.Package) map[string]string {
 }
 
 func (p *Pip) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("pip", "install", "--upgrade", name)
+	args := append([]string{"install", "--upgrade"}, pipUserArgs()...)
+	return exec.Command("pip", append(args, name)...)
 }
 
 func (p *Pip) RemoveCmd(name string) *exec.Cmd {
@@ -195,6 +196,17 @@ func (p *Pip) Search(query string) ([]model.Package, error) {
 	}}, nil
 }
 
+// pipUserArgs returns --user for a system Python so installs land in the user
+// site and skip PEP 668's externally-managed error; nothing inside a venv or
+// conda env, where --user is rejected.
+func pipUserArgs() []string {
+	if os.Getenv("VIRTUAL_ENV") != "" || os.Getenv("CONDA_PREFIX") != "" {
+		return nil
+	}
+	return []string{"--user"}
+}
+
 func (p *Pip) InstallCmd(name string) *exec.Cmd {
-	return exec.Command("pip", "install", name)
+	args := append([]string{"install"}, pipUserArgs()...)
+	return exec.Command("pip", append(args, name)...)
 }

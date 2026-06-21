@@ -35,6 +35,22 @@ func TestDispatchBarewordSearches(t *testing.T) {
 	}
 }
 
+// Real packages a couple edits from a short subcommand (less≈list, yay≈why,
+// helm≈hold) must reach the search/install path, not a did-you-mean error.
+func TestDispatchShortPackageNotHijacked(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for _, name := range []string{"less", "yay", "helm"} {
+		var out, errOut bytes.Buffer
+		code := Dispatch([]string{name}, nil, "test", &out, &errOut, nil)
+		if strings.Contains(errOut.String(), "did you mean") {
+			t.Errorf("%q hijacked as a typo: %q", name, errOut.String())
+		}
+		if code != ExitNegative {
+			t.Errorf("%q: exit %d, want %d (search miss)", name, code, ExitNegative)
+		}
+	}
+}
+
 func TestDispatchEmptyArgs(t *testing.T) {
 	var out, errOut bytes.Buffer
 	code := Dispatch(nil, nil, "test", &out, &errOut, nil)

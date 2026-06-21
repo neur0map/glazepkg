@@ -10,7 +10,8 @@ type VersionedInstaller interface {
 }
 
 func (p *Pip) InstallVersionCmd(name, version string) *exec.Cmd {
-	return exec.Command("pip", "install", name+"=="+version)
+	args := append([]string{"install"}, pipUserArgs()...)
+	return exec.Command("pip", append(args, name+"=="+version)...)
 }
 
 func (p *Pipx) InstallVersionCmd(name, version string) *exec.Cmd {
@@ -38,7 +39,7 @@ func (g *Go) InstallVersionCmd(name, version string) *exec.Cmd {
 }
 
 func (g *Gem) InstallVersionCmd(name, version string) *exec.Cmd {
-	return exec.Command("gem", "install", name, "-v", version)
+	return exec.Command("gem", "install", "--user-install", name, "-v", version)
 }
 
 func (c *Composer) InstallVersionCmd(name, version string) *exec.Cmd {

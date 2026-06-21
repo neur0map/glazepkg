@@ -113,6 +113,8 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("list [filter]", 24), "List installed packages")
 	fmt.Printf("  %s %s\n", cmd("info <pkg>", 24), "Show details for one package")
 	fmt.Printf("  %s %s\n", cmd("source-of <pkg>", 24), "Print which manager has a package")
+	fmt.Printf("  %s %s\n", cmd("why <pkg>", 24), "Show what depends on a package (reverse deps)")
+	fmt.Printf("  %s %s\n", cmd("versions <pkg>", 24), "List installable versions, newest first")
 	fmt.Printf("  %s %s\n", cmd("outdated", 24), "List packages with available updates")
 	fmt.Printf("  %s %s\n", cmd("installed <pkg>...", 24), "Check if packages are installed (exit 0/2)")
 	fmt.Printf("  %s %s\n", cmd("managers", 24), "Show which managers are detected, with counts")

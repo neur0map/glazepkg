@@ -1,38 +1,14 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 )
-
-// confirmAction prints prompt to out, reads one line from in, and returns
-// true iff the user typed y/yes (case-insensitive). A line that's just a
-// newline, EOF, or anything else returns false (default-no).
-//
-// If in is nil, returns false — defensive against handlers that forget to
-// thread stdin through. Callers should always check the --yes flag first
-// and skip confirmAction entirely when set.
-func confirmAction(prompt string, in io.Reader, out io.Writer) bool {
-	if in == nil {
-		return false
-	}
-	fmt.Fprint(out, prompt)
-	r := bufio.NewReader(in)
-	line, err := r.ReadString('\n')
-	if err != nil && line == "" {
-		return false
-	}
-	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
-}
 
 // userEnv is the environment as gpk started, captured before UseStableLocale
 // forces a C locale for parsing. Interactive commands run with it so prompts

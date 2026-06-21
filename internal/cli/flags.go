@@ -117,11 +117,13 @@ func reorderFlagsFirst(args []string, stringFlags []string) []string {
 	}
 
 	var flags, positional []string
+	sawSep := false
 	i := 0
 	for ; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {
 			// Everything after `--` is positional, including dash-prefixed args.
+			sawSep = true
 			positional = append(positional, args[i+1:]...)
 			break
 		}
@@ -140,6 +142,9 @@ func reorderFlagsFirst(args []string, stringFlags []string) []string {
 			i++
 			flags = append(flags, args[i])
 		}
+	}
+	if sawSep {
+		return append(append(flags, "--"), positional...)
 	}
 	return append(flags, positional...)
 }

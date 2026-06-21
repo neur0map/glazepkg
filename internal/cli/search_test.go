@@ -38,7 +38,7 @@ func TestSearchManagersDedupesToCanonical(t *testing.T) {
 			return []model.Package{{Name: "yay", Source: model.SourceAUR}}, nil
 		},
 	}
-	rows := searchManagers([]manager.Manager{pacman, aur}, "x")
+	rows, _ := searchManagers([]manager.Manager{pacman, aur}, "x")
 	if len(rows) != 2 {
 		t.Fatalf("got %d rows, want 2", len(rows))
 	}

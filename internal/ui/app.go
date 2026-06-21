@@ -84,6 +84,13 @@ func titleTick() tea.Cmd {
 	})
 }
 
+func newScanProgress() progress.Model {
+	return progress.New(
+		progress.WithGradient(string(ColorBlue), string(ColorCyan)),
+		progress.WithoutPercentage(),
+	)
+}
+
 type snapshotSavedMsg struct {
 	path string
 	err  error
@@ -377,10 +384,7 @@ func NewModel(version string) Model {
 	si.PromptStyle = lipgloss.NewStyle().Foreground(ColorCyan)
 	si.TextStyle = StyleNormal
 
-	pr := progress.New(
-		progress.WithGradient(string(ColorBlue), string(ColorCyan)),
-		progress.WithoutPercentage(),
-	)
+	pr := newScanProgress()
 
 	hp := help.New()
 	hp.ShortSeparator = "  "
@@ -972,6 +976,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scanAccum = m.scanAccum[:0]
 		m.scanFailed = m.scanFailed[:0]
 		m.scanCurrentMgr = ""
+		m.progress = newScanProgress()
 		return m, tea.Batch(cmds...)
 
 	case scanManagerDoneMsg:
@@ -997,7 +1002,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return scanDoneMsg{pkgs: pkgs, failedManagers: failed}
 			}
 		}
-		return m, nil
+		return m, m.progress.SetPercent(float64(m.scanCompleted) / float64(m.scanTotal))
 
 	case titleTickMsg:
 		const titleText = "GlazePKG"
@@ -1006,6 +1011,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, titleTick()
 		}
 		return m, nil
+
+	case progress.FrameMsg:
+		pm, cmd := m.progress.Update(msg)
+		m.progress = pm.(progress.Model)
+		return m, cmd
 
 	case scanDoneMsg:
 		m.scanning = false
@@ -1738,14 +1748,13 @@ func (m Model) renderListView(b *strings.Builder) {
 			}
 			pr := m.progress
 			pr.Width = barW
-			percent := float64(m.scanCompleted) / float64(m.scanTotal)
 			label := fmt.Sprintf("Scanning %d/%d managers", m.scanCompleted, m.scanTotal)
 			if m.scanCurrentMgr != "" && m.scanCompleted < m.scanTotal {
 				label += " — last: " + m.scanCurrentMgr
 			}
 			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, label))
 			panelContent.WriteString("\n")
-			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, pr.ViewAs(percent)))
+			panelContent.WriteString(lipgloss.PlaceHorizontal(innerW, lipgloss.Center, pr.View()))
 			panelContent.WriteString("\n")
 		} else {
 			spinLine := m.spinner.View() + " Scanning package managers..."

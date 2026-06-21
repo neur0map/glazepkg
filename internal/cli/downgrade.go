@@ -104,10 +104,10 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 	}
 
 	if !*quietFlag {
-		fmt.Fprintf(stderr, "downgrading %s to %s via %s...\n", name, ver, mgr.Name())
+		fmt.Fprintln(stderr, st.accent(":: ")+"downgrading "+st.paint(name, st.pal.White, true)+st.dim(" to "+ver+" via "+string(mgr.Name())))
 	}
 	if err := headlessExec(cmd); err != nil {
-		fmt.Fprintf(stderr, "error: downgrade failed: %v\n", err)
+		fmt.Fprintln(stderr, st.bad("✗")+" "+name+st.dim(" — "+string(mgr.Name())+" reported an error (details above)"))
 		return ExitErr
 	}
 	invalidateAfterWrite(mgr, []model.Package{{Name: name, Source: mgr.Name()}})
@@ -115,6 +115,9 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 		Group: nextGroup(), Time: time.Now(), Op: snapshot.OpDowngrade,
 		Source: mgr.Name(), Name: name, Version: ver, PrevVersion: curVer,
 	})
+	if !*quietFlag {
+		fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(name, st.pal.White, true)+st.dim(" downgraded to "+ver))
+	}
 	return ExitOK
 }
 

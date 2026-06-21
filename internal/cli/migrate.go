@@ -32,6 +32,7 @@ func runExport(args []string, mgrs []manager.Manager, version string, stdout, st
 		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache")
 		quietFlag   = fs.Bool("quiet", false, "suppress progress on stderr")
 	)
+	fs.Bool("json", false, "emit a JSON envelope (export always does)")
 	fs.StringVar(outFlag, "o", "", "alias for --out")
 	fs.StringVar(mgrFlag, "m", "", "alias for --manager")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -170,7 +171,7 @@ func resolveImport(e importPkg, filtered []manager.Manager) manager.Manager {
 		}
 		return nil
 	}
-	cands := findInstallCandidates(e.Name, filtered)
+	cands, _ := findInstallCandidates(e.Name, filtered)
 	if len(cands) == 1 {
 		return cands[0].mgr
 	}

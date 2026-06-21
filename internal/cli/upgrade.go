@@ -141,11 +141,11 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 	grp := nextGroup()
 	for _, p := range plans {
 		if !*quietFlag {
-			fmt.Fprintf(stderr, "upgrading %s via %s...\n", p.pkg.Name, p.mgr.Name())
+			fmt.Fprintln(stderr, st.accent(":: ")+"upgrading "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
 		}
 		cmd := upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag)
 		if err := headlessExec(cmd); err != nil {
-			fmt.Fprintf(stderr, "error: upgrade %s failed: %v\n", p.pkg.Name, err)
+			fmt.Fprintln(stderr, st.bad("✗")+" "+p.pkg.Name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{p.pkg})
@@ -153,6 +153,9 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			Group: grp, Time: time.Now(), Op: snapshot.OpUpgrade,
 			Source: p.mgr.Name(), Name: p.pkg.Name,
 		})
+		if !*quietFlag {
+			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" upgraded"))
+		}
 	}
 	return ExitOK
 }
@@ -185,19 +188,22 @@ func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool
 		if !ok {
 			continue
 		}
-		var cmd *exec.Cmd
 		held := snapshot.HeldNames(holds, m.Name())
+		var cmd *exec.Cmd
+		var detail []string
 		if ig, ok := m.(manager.IgnoringBulkUpgrader); ok && len(held) > 0 {
 			cmd = ig.UpgradeAllCmdIgnoring(yes, held)
+			detail = []string{st.dim("holding: " + strings.Join(held, " "))}
+		} else if len(held) > 0 {
+			// This manager's bulk upgrade can't exclude held packages, so skip
+			// it rather than upgrade one; the rest upgrade individually.
+			fmt.Fprintln(stderr, st.warn("skipping "+string(m.Name())+": can't hold "+strings.Join(held, " ")+" in a bulk upgrade (use `gpk upgrade <pkg>` for the others)"))
+			continue
 		} else {
 			cmd = b.UpgradeAllCmd(yes)
 		}
 		if cmd == nil {
 			continue
-		}
-		var detail []string
-		if len(held) > 0 {
-			detail = []string{st.dim("holding: " + strings.Join(held, " "))}
 		}
 		rows = append(rows, groupedCmd{mgr: m, cmd: cmd, detail: detail})
 	}

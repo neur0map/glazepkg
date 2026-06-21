@@ -32,6 +32,9 @@ type fakeManager struct {
 	upgradeAllCmdFn        func(yes bool) *exec.Cmd
 	versionsFn             func(name string) ([]string, error)
 	installVersionFn       func(name, version string) *exec.Cmd
+	cleanCacheFn           func(all, yes bool) *exec.Cmd
+	orphansFn              func() ([]string, error)
+	removeOrphansFn        func(orphans []string, yes bool) *exec.Cmd
 }
 
 func (f *fakeManager) Name() model.Source { return f.name }
@@ -119,6 +122,27 @@ func (f *fakeManager) InstallVersionCmd(name, version string) *exec.Cmd {
 		return nil
 	}
 	return f.installVersionFn(name, version)
+}
+
+func (f *fakeManager) CleanCacheCmd(all, yes bool) *exec.Cmd {
+	if f.cleanCacheFn == nil {
+		return nil
+	}
+	return f.cleanCacheFn(all, yes)
+}
+
+func (f *fakeManager) Orphans() ([]string, error) {
+	if f.orphansFn == nil {
+		return nil, nil
+	}
+	return f.orphansFn()
+}
+
+func (f *fakeManager) RemoveOrphansCmd(orphans []string, yes bool) *exec.Cmd {
+	if f.removeOrphansFn == nil {
+		return nil
+	}
+	return f.removeOrphansFn(orphans, yes)
 }
 
 func (f *fakeManager) UpgradeCmdYes(name string) *exec.Cmd {

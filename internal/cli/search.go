@@ -59,7 +59,7 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 		return ExitErr
 	}
 
-	rows := searchManagers(filtered, query)
+	rows, searchErr := searchManagers(filtered, query)
 	rankSearchRows(rows, query)
 	markInstalledRows(rows)
 	if *limitFlag > 0 && len(rows) > *limitFlag {
@@ -67,6 +67,10 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 	}
 
 	if len(rows) == 0 {
+		if searchErr != nil {
+			fmt.Fprintf(stderr, "error: couldn't reach %s (check your connection)\n", searchErr)
+			return ExitErr
+		}
 		fmt.Fprintf(stderr, "no packages found for %q\n", query)
 		if sug := suggestPackages(query, filtered); len(sug) > 0 {
 			fmt.Fprintf(stderr, "did you mean: %s\n", strings.Join(sug, ", "))
@@ -119,10 +123,11 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 
 // searchManagers queries every available Searcher in parallel and returns one
 // row per source/name match, mapped to the canonical installing manager.
-func searchManagers(filtered []manager.Manager, query string) []searchRow {
+func searchManagers(filtered []manager.Manager, query string) ([]searchRow, error) {
 	type res struct {
 		pkgs []model.Package
 		from model.Source
+		err  error
 	}
 	var wg sync.WaitGroup
 	ch := make(chan res, len(filtered))
@@ -135,17 +140,18 @@ func searchManagers(filtered []manager.Manager, query string) []searchRow {
 		go func(s manager.Searcher, from model.Source) {
 			defer wg.Done()
 			pkgs, err := s.Search(query)
-			if err != nil {
-				pkgs = nil
-			}
-			ch <- res{pkgs: pkgs, from: from}
+			ch <- res{pkgs: pkgs, from: from, err: err}
 		}(s, m.Name())
 	}
 	go func() { wg.Wait(); close(ch) }()
 
 	seen := make(map[string]bool)
 	var rows []searchRow
+	var searchErr error
 	for r := range ch {
+		if r.err != nil && searchErr == nil {
+			searchErr = fmt.Errorf("%s: %w", r.from, r.err)
+		}
 		for _, p := range r.pkgs {
 			src := p.Source
 			if src == "" {
@@ -164,11 +170,11 @@ func searchManagers(filtered []manager.Manager, query string) []searchRow {
 			rows = append(rows, searchRow{pkg: p, mgr: canonical})
 		}
 	}
-	return rows
+	return rows, searchErr
 }
 
 // rankSearchRows orders rows by relevance to query: exact name, then prefix,
-// then substring, then alphabetical; ties broken by source for stability.
+// then substring, then name; same-name ties lead with the system manager.
 func rankSearchRows(rows []searchRow, query string) {
 	q := strings.ToLower(query)
 	score := func(name string) int {
@@ -192,7 +198,7 @@ func rankSearchRows(rows []searchRow, query string) {
 		if rows[i].pkg.Name != rows[j].pkg.Name {
 			return rows[i].pkg.Name < rows[j].pkg.Name
 		}
-		return rows[i].pkg.Source < rows[j].pkg.Source
+		return preferRank(rows[i].pkg.Source, defaultPreference) < preferRank(rows[j].pkg.Source, defaultPreference)
 	})
 }
 

@@ -20,6 +20,8 @@ func TestTranslateOps(t *testing.T) {
 		{[]string{"-Syy"}, []string{"refresh"}, true},
 		{[]string{"-Sy", "--manager", "pacman"}, []string{"refresh", "--manager", "pacman"}, true},
 		{[]string{"-Sy", "htop"}, []string{"install", "htop"}, true},
+		{[]string{"-S", "install", "ffmpeg"}, []string{"install", "ffmpeg"}, true},
+		{[]string{"-R", "remove", "foo"}, []string{"remove", "foo"}, true},
 		{[]string{"-Sc"}, []string{"clean"}, true},
 		{[]string{"-Scc"}, []string{"clean", "--all"}, true},
 		{[]string{"-R", "foo"}, []string{"remove", "foo"}, true},

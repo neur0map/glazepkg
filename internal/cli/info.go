@@ -68,6 +68,7 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 	st := newStyler()
 
 	if found != nil {
+		enrichInfo(found, filtered)
 		if *jsonFlag {
 			if err := writeEnvelope(stdout, version, toCLIPackage(*found)); err != nil {
 				fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
@@ -82,8 +83,12 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 	// Not installed: fall back to what's available across managers, so
 	// `gpk info <pkg>` / `-Si <pkg>` answers "where can I get it, which
 	// version, what is it" the way pacman -Si does.
-	cands := findInstallCandidates(name, filtered)
+	cands, searchErr := findInstallCandidates(name, filtered)
 	if len(cands) == 0 {
+		if searchErr != nil {
+			fmt.Fprintf(stderr, "error: couldn't reach %s (check your connection)\n", searchErr)
+			return ExitErr
+		}
 		if sug := suggestPackages(name, filtered); len(sug) > 0 {
 			fmt.Fprintf(stderr, "%q not found. did you mean: %s\n", name, strings.Join(sug, ", "))
 		}
@@ -131,4 +136,23 @@ func writeInfoHuman(w io.Writer, p model.Package, installed bool, st *styler) {
 		field("Required by", strings.Join(p.RequiredBy, ", "))
 	}
 	fmt.Fprintln(w, st.box(p.Name, lines))
+}
+
+// enrichInfo fills the description and dependencies a bare scan omits, so
+// `gpk info` on an installed package reads like `pacman -Qi`.
+func enrichInfo(p *model.Package, mgrs []manager.Manager) {
+	if p.Description == "" {
+		if descs := manager.FetchDescriptions(mgrs, []model.Package{*p}, manager.NewDescriptionCache()); descs != nil {
+			if d, ok := descs[p.Key()]; ok {
+				p.Description = d
+			}
+		}
+	}
+	if len(p.DependsOn) == 0 {
+		if deps := manager.FetchDependencies(mgrs, []model.Package{*p}, manager.NewDepsCache()); deps != nil {
+			if d, ok := deps[p.Key()]; ok {
+				p.DependsOn = d
+			}
+		}
+	}
 }

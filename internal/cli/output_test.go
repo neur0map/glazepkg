@@ -87,19 +87,3 @@ func TestCLIPackageJSONOmitsEmptyLatestVersion(t *testing.T) {
 		t.Errorf("JSON should omit empty latest_version: %s", data)
 	}
 }
-
-func TestStripANSI(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"plain", "plain"},
-		{"\x1b[31mred\x1b[0m", "red"},
-		{"a\x1b[1;32mb\x1b[0mc", "abc"},
-	}
-	for _, c := range cases {
-		got := stripANSI(c.in)
-		if got != c.want {
-			t.Errorf("stripANSI(%q) = %q, want %q", c.in, got, c.want)
-		}
-	}
-}

@@ -137,9 +137,13 @@ func resolvePlan(name, ver string, filtered []manager.Manager, prefer []string, 
 			return buildPlan(candidate{mgr: m, pkg: model.Package{Name: name, Source: m.Name()}}, ver, stderr)
 		}
 	}
-	cands := findInstallCandidates(name, filtered)
+	cands, searchErr := findInstallCandidates(name, filtered)
 	switch len(cands) {
 	case 0:
+		if searchErr != nil {
+			fmt.Fprintf(stderr, "error: couldn't reach %s (check your connection)\n", searchErr)
+			return installPlan{}, ExitErr, false
+		}
 		fmt.Fprintf(stderr, "error: %q not found in any manager\n", name)
 		if sug := suggestPackages(name, filtered); len(sug) > 0 {
 			fmt.Fprintf(stderr, "did you mean: %s\n", strings.Join(sug, ", "))
@@ -214,10 +218,11 @@ func buildPlan(c candidate, ver string, stderr io.Writer) (installPlan, int, boo
 // findInstallCandidates returns one candidate per source that has an exact
 // name match, deduplicated and mapped to the canonical installing manager
 // (so an AUR result from pacman's search installs via the AUR helper).
-func findInstallCandidates(name string, filtered []manager.Manager) []candidate {
+func findInstallCandidates(name string, filtered []manager.Manager) ([]candidate, error) {
 	type res struct {
 		from model.Source
 		pkgs []model.Package
+		err  error
 	}
 	var wg sync.WaitGroup
 	ch := make(chan res, len(filtered))
@@ -230,17 +235,18 @@ func findInstallCandidates(name string, filtered []manager.Manager) []candidate 
 		go func(s manager.Searcher, from model.Source) {
 			defer wg.Done()
 			pkgs, err := s.Search(name)
-			if err != nil {
-				pkgs = nil
-			}
-			ch <- res{from: from, pkgs: pkgs}
+			ch <- res{from: from, pkgs: pkgs, err: err}
 		}(s, m.Name())
 	}
 	go func() { wg.Wait(); close(ch) }()
 
 	bySource := make(map[model.Source]candidate)
 	native := make(map[model.Source]bool)
+	var searchErr error
 	for r := range ch {
+		if r.err != nil && searchErr == nil {
+			searchErr = fmt.Errorf("%s: %w", r.from, r.err)
+		}
 		for _, p := range r.pkgs {
 			if p.Name != name {
 				continue
@@ -270,7 +276,7 @@ func findInstallCandidates(name string, filtered []manager.Manager) []candidate 
 			out = append(out, c)
 		}
 	}
-	return out
+	return out, searchErr
 }
 
 // suggestPackages searches a prefix of name and ranks the returned names by
@@ -364,6 +370,9 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 				}
 			}
 		}
+		if p.mgr.Name() == model.SourceAUR && manager.AURWillBuild() {
+			showPKGBUILD(p.name, st, stdout)
+		}
 	}
 
 	if dryRun {
@@ -379,11 +388,11 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 	grp := nextGroup()
 	for _, p := range plans {
 		if !quiet {
-			fmt.Fprintf(stderr, "installing %s via %s...\n", p.name, p.mgr.Name())
+			fmt.Fprintln(stderr, st.accent(":: ")+"installing "+st.paint(p.name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
 		}
 		cmd := installCmdFor(p, yes)
 		if err := headlessExec(cmd); err != nil {
-			fmt.Fprintf(stderr, "error: install %s failed: %v\n", p.name, err)
+			fmt.Fprintln(stderr, st.bad("✗")+" "+p.name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{{Name: p.name, Source: p.mgr.Name()}})
@@ -395,6 +404,9 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 			Group: grp, Time: time.Now(), Op: snapshot.OpInstall,
 			Source: p.mgr.Name(), Name: p.name, Version: ver,
 		})
+		if !quiet {
+			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(p.name, st.pal.White, true)+st.dim(" installed"))
+		}
 	}
 	return ExitOK
 }
@@ -420,7 +432,37 @@ func installCmdFor(p installPlan, yes bool) *exec.Cmd {
 }
 
 func displayCmd(cmd *exec.Cmd) string {
-	return strings.Join(stripSudoStdinFlag(cmd).Args, " ")
+	args := stripSudoStdinFlag(cmd).Args
+	// AUR makepkg builds are wrapped in `sh -c <script> sh <name>`; show the
+	// meaningful build line rather than the bootstrap shell script.
+	if len(args) >= 2 && args[0] == "sh" {
+		for _, a := range args {
+			if strings.Contains(a, "makepkg") {
+				return "makepkg -si " + args[len(args)-1] + "  (build from AUR)"
+			}
+		}
+	}
+	return strings.Join(args, " ")
+}
+
+// showPKGBUILD prints an AUR package's PKGBUILD for review before gpk builds it
+// with makepkg, mirroring yay/paru's "see what you're about to run".
+func showPKGBUILD(name string, st *styler, w io.Writer) {
+	pb, err := manager.FetchPKGBUILD(name)
+	if err != nil {
+		fmt.Fprintln(w, "      "+st.warn("could not fetch PKGBUILD for review: "+err.Error()))
+		return
+	}
+	lines := strings.Split(strings.TrimRight(pb, "\n"), "\n")
+	fmt.Fprintln(w, "      "+st.dim("PKGBUILD (review before building):"))
+	const maxLines = 40
+	for i, ln := range lines {
+		if i >= maxLines {
+			fmt.Fprintln(w, "      "+st.dim(fmt.Sprintf("… +%d more lines", len(lines)-maxLines)))
+			break
+		}
+		fmt.Fprintln(w, "      "+st.dim(ln))
+	}
 }
 
 // splitVersionPin splits "name@version" into its parts. A leading '@' (scoped

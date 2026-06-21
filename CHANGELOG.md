@@ -3,9 +3,22 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
-## Unreleased
+## v0.6.0 — 2026-06-21
 
 ### Added
+- Installing an AUR package without a helper shows its PKGBUILD for review
+  before `makepkg` builds it, so you see exactly what runs (yay/paru style).
+- `gpk versions <pkg>` — lists a package's installable versions per manager,
+  newest-first via the version comparator (`--json` too), so a backend can build
+  its own picker without driving the interactive `--pick-version` prompt.
+- `gpk why <pkg>` — lists the installed packages that depend on one, answering
+  "what needs this, is it safe to remove" (`brew uses` / `pacman -Qi` Required
+  By). Reverse deps are derived generically by inverting dependency lists.
+- `gpk -S install <pkg>` / `-R remove <pkg>` tolerate the redundant verb after
+  the flag, so mixing the two forms does the obvious thing.
+- `gpk info` on an installed package now fills in its description and
+  dependencies (fetched and cached on demand), reading like `pacman -Qi` /
+  `brew info` instead of just name/version/source.
 - When a name lives in several managers, the source picker (and the scripted
   "available in" message) now lists OS/system managers first, and pressing Enter
   installs the top one — so `gpk install ffmpeg` defaults to the system package,
@@ -69,8 +82,14 @@ follows Keep a Changelog.
   preserved for pipes, `NO_COLOR`, and non-terminals.
 - Five more managers: AM/AppMan (AppImage), gvm, mise, Quicklisp, and macOS
   `softwareupdate` — bringing the total to 42.
+- Every write command's run is themed end to end — a `::` progress line and a
+  colored `✓`/`✗` per package (install/remove/upgrade/downgrade/clean/
+  autoremove) — so a failed step reads clearly instead of trailing off after
+  the tool's raw output.
 
 ### Changed
+- The scan progress bar fills smoothly at 60fps (spring-animated) instead of
+  jumping between per-manager completions.
 - Downgrade lists cached versions newest-first with a cross-format version
   comparator (epochs, pacman pkgrel, apt revisions, pip post-releases, tilde
   pre-releases, leading-v tags), following Debian's ordering.
@@ -85,9 +104,32 @@ follows Keep a Changelog.
   without `--manager` returns in a fraction of the time on multi-manager hits.
 
 ### Fixed
+- pip/gem/luarocks install to the user (`pip install --user` outside a venv,
+  `gem install --user-install`, `luarocks install --local`) so they work on a
+  stock system without sudo and without tripping pip's PEP 668 guard.
+- `gpk upgrade` (bulk) no longer silently upgrades a held package on managers
+  whose bulk command can't exclude it — it skips that manager with a warning
+  instead of upgrading what you held (only pacman could honor it before).
+- A bareword close to a short subcommand (`gpk less`, `gpk yay`, `gpk helm`) is
+  now installed, not rejected as a "did you mean" typo; suggestions stay for
+  real near-misses like `gpk instal`.
+- `gpk install -- -dashpkg` keeps the `--` separator so dash-prefixed package
+  names parse instead of erroring as unknown flags.
+- `why --json` / `versions --json` return exit 2 when not installed / no
+  versions, matching their human-mode exit codes.
+- AUR works without yay/paru installed: search queries the AUR RPC directly,
+  and install/upgrade build from source with `makepkg` — so `gpk search`,
+  `gpk install <pkg> --aur`, and bare `gpk <aur-pkg>` find and install packages
+  like `gpk-bin` on any box with base-devel, no helper required.
+- A transient network failure while querying a manager (e.g. the AUR RPC
+  timing out) now reports "couldn't reach <manager>" with exit 1 across the
+  read commands (`search`, `install`, `info`, `versions`), instead of the
+  misleading "not found"/"no versions" (exit 2). The AUR search retries once.
 - `install --manager <m>` works for managers that can install but not search
   (go, pipx, bun, …): an explicitly named manager is trusted instead of failing
   with "not found".
+- `gpk export --json` is accepted (export always emits the envelope), so the
+  advertised `--json` flag now works uniformly on every read command.
 - `gpk` with no subcommand falls back to help when stdout isn't a terminal
   (pipes, scripts, CI) instead of failing with an opaque "could not open a new
   TTY" error.

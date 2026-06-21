@@ -186,7 +186,7 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 	grp := nextGroup()
 	for _, p := range plans {
 		if !*quietFlag {
-			fmt.Fprintf(stderr, "removing %s via %s...\n", p.pkg.Name, p.mgr.Name())
+			fmt.Fprintln(stderr, st.accent(":: ")+"removing "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
 		}
 		var c *exec.Cmd
 		if *withDepsFlag {
@@ -209,7 +209,7 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			}
 		}
 		if err := headlessExec(c); err != nil {
-			fmt.Fprintf(stderr, "error: remove %s failed: %v\n", p.pkg.Name, err)
+			fmt.Fprintln(stderr, st.bad("✗")+" "+p.pkg.Name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{p.pkg})
@@ -217,6 +217,9 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			Group: grp, Time: time.Now(), Op: snapshot.OpRemove,
 			Source: p.mgr.Name(), Name: p.pkg.Name, Version: p.pkg.Version,
 		})
+		if !*quietFlag {
+			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" removed"))
+		}
 	}
 	return ExitOK
 }

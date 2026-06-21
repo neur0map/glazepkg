@@ -167,11 +167,11 @@ func (g *Gem) Search(query string) ([]model.Package, error) {
 }
 
 func (g *Gem) InstallCmd(name string) *exec.Cmd {
-	return exec.Command("gem", "install", name)
+	return exec.Command("gem", "install", "--user-install", name)
 }
 
 func (g *Gem) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("gem", "update", name)
+	return exec.Command("gem", "update", "--user-install", name)
 }
 
 func (g *Gem) RemoveCmd(name string) *exec.Cmd {

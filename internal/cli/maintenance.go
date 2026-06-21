@@ -42,14 +42,17 @@ func executeGrouped(title string, rows []groupedCmd, dryRun, yes, quiet bool, st
 	failed := 0
 	for _, row := range rows {
 		if !quiet {
-			fmt.Fprintf(stderr, "%s...\n", row.mgr.Name())
+			fmt.Fprintln(stderr, st.accent(":: ")+st.paint(string(row.mgr.Name()), st.pal.White, true))
 		}
 		if err := headlessExec(row.cmd); err != nil {
-			fmt.Fprintf(stderr, "error: %s failed: %v\n", row.mgr.Name(), err)
+			fmt.Fprintln(stderr, st.bad("✗")+" "+string(row.mgr.Name())+st.dim(" reported an error (details above)"))
 			failed++
 			continue
 		}
 		invalidateAfterWrite(row.mgr, nil)
+		if !quiet {
+			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(string(row.mgr.Name()), st.pal.White, true))
+		}
 	}
 	if failed > 0 {
 		return ExitErr
