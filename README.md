@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **36 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **41 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
@@ -28,10 +28,11 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **36 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, uv, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update
+- **41 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, uv, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update, AM/AppMan, gvm, mise, Quicklisp, softwareupdate
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Package operations** — upgrade, remove, search, and install packages without leaving the TUI
+- **Full command line** — every action as a typed command, plus the pacman/yay short flags (`-S`, `-Ss`, `-Syu`, `-R`, `-Q`) so it feels familiar from the first keystroke
 - **Multi-select** — batch upgrade or remove with smart sudo batching
 - **Snapshots & diffs** — save system state, diff to see what changed
 - **Update detection** — `↑` indicator for packages with available updates
@@ -116,6 +117,42 @@ gpk --help       Show keybind reference
 
 Just run `gpk` — navigate with `j`/`k`, switch managers with `Tab`, search with `/`, press `s` to snapshot, `d` to diff, `e` to export. Press `?` for the full keybind reference.
 
+## Command line
+
+gpk isn't only the dashboard. Every action has a typed command, and the
+pacman/yay short flags work too, so you can drive it from the shell without
+opening the TUI.
+
+```
+gpk firefox               # search and pick something to install (like yay)
+gpk -S ffmpeg             # install
+gpk -S ffmpeg --aur       # install, scoped to one manager
+gpk install black@24.1.0  # install a specific version
+gpk -Ss ripgrep           # search every manager at once
+gpk -Syu                  # update everything
+gpk -R foo                # remove  (-Rns to take orphaned deps too)
+gpk downgrade foo         # roll back to an earlier version
+gpk -Sc                   # clear cached downloads
+gpk autoremove            # remove dependencies nothing needs
+gpk -Qi foo               # info    ·  gpk -Q lists everything installed
+```
+
+When a package exists in more than one manager, gpk lists them with versions and
+lets you choose. Mistype a name and it suggests the closest match. Scope any
+command with `--aur`, `--brew`, `-m pacman,aur`, or leave it off and let gpk
+find it.
+
+| Plain words | Short flags |
+|---|---|
+| `gpk install foo` | `gpk -S foo` |
+| `gpk remove foo` | `gpk -R foo` |
+| `gpk upgrade` | `gpk -Syu` |
+| `gpk search foo` | `gpk -Ss foo` |
+| `gpk list` | `gpk -Q` |
+
+Output is colored to match your theme on a terminal and falls back to plain text
+when piped. Run `gpk --help` for the full command and flag reference.
+
 <details>
 <summary><strong>Keybindings</strong></summary>
 
@@ -132,7 +169,10 @@ Just run `gpk` — navigate with `j`/`k`, switch managers with `Tab`, search wit
 | `u` (detail) | Upgrade package |
 | `x` (detail) | Remove package |
 | `d` (detail) | View dependencies |
+| `Enter` (deps screen) | Open the selected dependency's details |
 | `h` (detail) | Package help/usage |
+| `m` (detail) | Open man page |
+| `o` (detail) | Open package page in browser |
 | `e` (detail) | Edit description |
 | `i` | Search + install packages |
 | `m` | Toggle multi-select mode |
@@ -141,6 +181,8 @@ Just run `gpk` — navigate with `j`/`k`, switch managers with `Tab`, search wit
 | `d` | Diff against last snapshot |
 | `e` | Export (JSON or text) |
 | `r` | Force rescan |
+| `U` | System update for the active manager tab |
+| `Q` | View / cancel the operation queue |
 | `?` | Help overlay |
 | `q` | Quit |
 
@@ -170,7 +212,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 </details>
 
 <details>
-<summary><strong>Supported Package Managers (36)</strong></summary>
+<summary><strong>Supported Package Managers (41)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
@@ -209,6 +251,11 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 | **powershell** | Cross-platform | PowerShell modules | via scan |
 | **maven** | Cross-platform | Local Maven artifacts in `~/.m2/repository` | — |
 | **windows-updates** | Windows | Pending Windows system updates | — |
+| **am** | Linux | AppImage apps via AM/AppMan | inline from scan |
+| **gvm** | Cross-platform | Go toolchains installed via gvm | — |
+| **mise** | Cross-platform | Tools managed by mise | — |
+| **quicklisp** | Cross-platform | Common Lisp libraries via Quicklisp | — |
+| **softwareupdate** | macOS | Pending macOS system updates | inline from scan |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Descriptions are fetched in the background and cached for 24 hours.
