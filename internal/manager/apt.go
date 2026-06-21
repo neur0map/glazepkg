@@ -162,6 +162,10 @@ func (a *Apt) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("apt-get", "install", "--only-upgrade", "-y", name)
 }
 
+func (a *Apt) SystemUpgradeCmd() *exec.Cmd {
+	return privilegedCmd("sh", "-c", "apt-get update && apt-get upgrade -y")
+}
+
 func (a *Apt) RemoveCmd(name string) *exec.Cmd {
 	return privilegedCmd("apt-get", "remove", "-y", name)
 }

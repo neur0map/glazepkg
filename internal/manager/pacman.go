@@ -150,6 +150,10 @@ func (p *Pacman) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("pacman", "-S", name)
 }
 
+func (p *Pacman) SystemUpgradeCmd() *exec.Cmd {
+	return privilegedCmd("pacman", "-Syu", "--noconfirm")
+}
+
 func (p *Pacman) RemoveCmd(name string) *exec.Cmd {
 	return privilegedCmd("pacman", "-R", name)
 }

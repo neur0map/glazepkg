@@ -655,6 +655,57 @@ func (m *Model) upgradeDetailPackage() tea.Cmd {
 	return m.openModal(ModalConfirmUpgrade)
 }
 
+// activeTabSource returns the manager source of the active tab, or "" (ALL).
+func (m *Model) activeTabSource() model.Source {
+	if m.activeTab >= 0 && m.activeTab < len(m.tabs) {
+		return model.Source(m.tabs[m.activeTab].Source)
+	}
+	return ""
+}
+
+// systemUpdate runs the active tab manager's whole-system update through the
+// upgrade confirm flow (issue #20).
+func (m *Model) systemUpdate() tea.Cmd {
+	if m.upgradeInFlight || m.removeInFlight {
+		m.statusMsg = "operation already in progress"
+		return nil
+	}
+	src := m.activeTabSource()
+	if src == "" {
+		m.statusMsg = "switch to a manager tab to run a system update"
+		return nil
+	}
+	mgr := manager.BySource(src)
+	if mgr == nil || !mgr.Available() {
+		m.statusMsg = fmt.Sprintf("%s is not available", src)
+		return nil
+	}
+	su, ok := mgr.(manager.SystemUpgrader)
+	if !ok {
+		m.statusMsg = fmt.Sprintf("%s has no system update", src)
+		return nil
+	}
+
+	cmd := su.SystemUpgradeCmd()
+	req := &upgradeRequest{
+		pkg:        model.Package{Name: "all " + string(src) + " packages", Source: src},
+		cmd:        cmd,
+		cmdStr:     strings.Join(cmd.Args, " "),
+		privileged: isPrivilegedSource(src),
+		opLabel:    "system update",
+	}
+	m.pendingUpgrade = req
+	m.passwordInput.SetValue("")
+	if len(cmd.Args) > 0 && cmd.Args[0] == "sudo" {
+		m.confirmFocus = 0
+		m.passwordInput.Focus()
+		return tea.Batch(m.openModal(ModalConfirmUpgrade), textinput.Blink)
+	}
+	m.confirmFocus = 1
+	m.passwordInput.Blur()
+	return m.openModal(ModalConfirmUpgrade)
+}
+
 func (m *Model) rescanManager(source model.Source) tea.Cmd {
 	cache := m.updateCache
 	var keys []string
@@ -1349,6 +1400,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if m.multiSelect && m.selectionCount() > 0 {
 			return m, m.batchRemoveSelected()
 		}
+	case "U":
+		return m, m.systemUpdate()
 	}
 	return m, nil
 }
