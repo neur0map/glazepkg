@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 
@@ -9,10 +10,18 @@ import (
 
 type Config struct {
 	Appearance AppearanceConfig `toml:"appearance"`
+	Install    InstallConfig    `toml:"install"`
 }
 
 type AppearanceConfig struct {
 	Theme string `toml:"theme"`
+}
+
+// InstallConfig holds install-time preferences. Prefer lists manager names in
+// priority order; when a package is available in several, gpk picks the
+// highest-ranked one instead of asking.
+type InstallConfig struct {
+	Prefer []string `toml:"prefer"`
 }
 
 func configDir() string {
@@ -53,10 +62,28 @@ func Save(cfg Config) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	f, err := os.Create(configPath())
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(cfg); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	return toml.NewEncoder(f).Encode(cfg)
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(buf.Bytes()); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Chmod(0o644); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+	return os.Rename(tmpPath, configPath())
 }

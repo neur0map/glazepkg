@@ -30,7 +30,7 @@ func Save(snap *model.Snapshot) (string, error) {
 		return "", err
 	}
 
-	filename := snap.Timestamp.Format("2006-01-02T15-04-05") + ".json"
+	filename := snap.Timestamp.Format("2006-01-02T15-04-05.000") + ".json"
 	path := filepath.Join(Dir(), filename)
 
 	data, err := json.MarshalIndent(snap, "", "  ")
@@ -38,7 +38,7 @@ func Save(snap *model.Snapshot) (string, error) {
 		return "", err
 	}
 
-	return path, os.WriteFile(path, data, 0o644)
+	return path, writeFileAtomic(path, data, 0o644)
 }
 
 // Load reads a snapshot from a file.

@@ -40,5 +40,5 @@ func SaveNotes(notes map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return writeFileAtomic(path, data, 0o644)
 }
