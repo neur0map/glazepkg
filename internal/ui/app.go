@@ -1360,6 +1360,31 @@ func (m Model) selectedPackage() (model.Package, bool) {
 	return m.filteredPkgs[m.cursor], true
 }
 
+// selectedDepName returns the dependency name under the deps modal cursor.
+// DependsOn entries come first, then RequiredBy, matching depsBody's order.
+func (m *Model) selectedDepName() string {
+	deps := m.detailPkg.DependsOn
+	idx := m.depsCursor
+	if idx >= 0 && idx < len(deps) {
+		return deps[idx]
+	}
+	idx -= len(deps)
+	if idx >= 0 && idx < len(m.detailPkg.RequiredBy) {
+		return m.detailPkg.RequiredBy[idx]
+	}
+	return ""
+}
+
+// findPackageByName returns the first scanned package with the given name.
+func (m *Model) findPackageByName(name string) (model.Package, bool) {
+	for _, p := range m.allPkgs {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return model.Package{}, false
+}
+
 func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc", "q":

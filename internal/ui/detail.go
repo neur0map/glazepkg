@@ -250,7 +250,7 @@ func detailKeybinds(m *Model) string {
 		}
 	case m.modal == ModalDeps:
 		pairs = []struct{ key, desc string }{
-			{"j/k", "navigate"}, {"esc", "close"},
+			{"j/k", "navigate"}, {"enter", "open"}, {"esc", "close"},
 		}
 	default:
 		// Mirror the capability checks the key handler uses, so we don't

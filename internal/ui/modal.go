@@ -395,6 +395,13 @@ func handleDepsModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if total > 0 {
 			m.depsCursor = total - 1
 		}
+	case "enter":
+		if name := m.selectedDepName(); name != "" {
+			if pkg, ok := m.findPackageByName(name); ok {
+				m.detailPkg = pkg
+				return m, m.closeModal()
+			}
+		}
 	}
 	return m, nil
 }
@@ -406,7 +413,7 @@ func renderDepsModalBody(m *Model) ModalFrameOpts {
 	return ModalFrameOpts{
 		Title:  title,
 		Body:   depsBody(m),
-		Footer: "↑↓ navigate · esc close",
+		Footer: "↑↓ navigate · enter open · esc close",
 	}
 }
 
