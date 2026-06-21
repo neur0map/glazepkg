@@ -271,6 +271,9 @@ func detailKeybinds(m *Model) string {
 		if len(m.detailPkg.DependsOn) > 0 || len(m.detailPkg.RequiredBy) > 0 {
 			pairs = append(pairs, struct{ key, desc string }{"d", "deps"})
 		}
+		if packageURL(m.detailPkg) != "" {
+			pairs = append(pairs, struct{ key, desc string }{"o", "open url"})
+		}
 		pairs = append(pairs,
 			struct{ key, desc string }{"h", "help"},
 			struct{ key, desc string }{"esc", "back"},

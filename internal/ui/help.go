@@ -26,6 +26,7 @@ func helpBody() string {
 		{"e (detail)", "Edit description"},
 		{"d (detail)", "View dependencies"},
 		{"h (detail)", "Package help/usage"},
+		{"o (detail)", "Open package page in browser"},
 		{"f", "Cycle filter"},
 		{"r", "Rescan all managers"},
 		{"s", "Save snapshot"},

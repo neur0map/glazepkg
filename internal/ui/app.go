@@ -1028,6 +1028,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = "exported: " + msg.path
 		}
 		return m, nil
+	case openURLMsg:
+		if msg.err != nil {
+			m.statusMsg = "could not open browser: " + msg.err.Error()
+		}
+		return m, nil
 	}
 
 	if m.view == viewSearch && m.searchInput.Focused() {
@@ -1323,6 +1328,11 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		return m, m.upgradeDetailPackage()
 	case "x":
 		return m, m.removeDetailPackage()
+	case "o":
+		if u := packageURL(m.detailPkg); u != "" {
+			return m, openURLCmd(u)
+		}
+		m.statusMsg = "no URL available for this package"
 	}
 	return m, nil
 }
