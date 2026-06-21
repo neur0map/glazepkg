@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -46,7 +47,11 @@ func (g *Go) Scan() ([]model.Package, error) {
 }
 
 func (g *Go) RemoveCmd(name string) *exec.Cmd {
-	return exec.Command("rm", filepath.Join(goBinDir(), name))
+	path := filepath.Join(goBinDir(), name)
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "del", "/q", path)
+	}
+	return exec.Command("rm", "-f", path)
 }
 
 // Describe reads the main module import path embedded in each installed
@@ -86,7 +91,11 @@ func goBinaryModulePath(path string) string {
 }
 
 func (g *Go) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("go", "install", name+"@latest")
+	path := name
+	if mod := goBinaryModulePath(filepath.Join(goBinDir(), name)); mod != "" {
+		path = mod
+	}
+	return exec.Command("go", "install", path+"@latest")
 }
 
 func (g *Go) InstallCmd(name string) *exec.Cmd {

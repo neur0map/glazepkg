@@ -2,7 +2,6 @@ package manager
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -14,6 +13,7 @@ import (
 // Nuget surfaces packages from the local NuGet global package cache (~/.nuget/packages).
 // This is intentionally cross-platform: the cache exists wherever the .NET SDK is installed,
 // including macOS and Linux. Do not add a runtime.GOOS == "windows" guard here.
+// Read-only: cache entries are restored libraries, not manageable dotnet tools.
 type Nuget struct{}
 
 func (n *Nuget) Name() model.Source { return model.SourceNuget }
@@ -82,18 +82,6 @@ func (n *Nuget) Scan() ([]model.Package, error) {
 		})
 	}
 	return pkgs, nil
-}
-
-func (n *Nuget) RemoveCmd(name string) *exec.Cmd {
-	return exec.Command("dotnet", "tool", "uninstall", "-g", name)
-}
-
-func (n *Nuget) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("dotnet", "tool", "update", "-g", name)
-}
-
-func (n *Nuget) InstallCmd(name string) *exec.Cmd {
-	return exec.Command("dotnet", "tool", "install", "-g", name)
 }
 
 // nugetSemverGT returns true if version a is greater than version b.

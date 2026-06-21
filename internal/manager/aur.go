@@ -124,7 +124,7 @@ func (a *AUR) UpgradeCmd(name string) *exec.Cmd {
 	if h := aurHelper(); h != "" {
 		return exec.Command(h, "-S", name)
 	}
-	return exec.Command("pacman", "-S", name)
+	return privilegedCmd("pacman", "-S", name)
 }
 
 func (a *AUR) Search(query string) ([]model.Package, error) {
@@ -159,7 +159,7 @@ func (a *AUR) InstallCmd(name string) *exec.Cmd {
 	if h := aurHelper(); h != "" {
 		return exec.Command(h, "-S", name)
 	}
-	return exec.Command("pacman", "-S", name)
+	return privilegedCmd("pacman", "-S", name)
 }
 
 func (a *AUR) InstallCmdYes(name string) *exec.Cmd {

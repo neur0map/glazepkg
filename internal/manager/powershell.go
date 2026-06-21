@@ -3,6 +3,7 @@ package manager
 import (
 	"encoding/json"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,11 +114,10 @@ else { ConvertTo-Json -InputObject @($m) -Compress }
 }
 
 func (ps *PowerShell) RemoveCmd(name string) *exec.Cmd {
-	return exec.Command(ps.exe(), "-Command", "Uninstall-Module -Name "+name+" -Force")
+	safe := strings.ReplaceAll(name, "'", "''")
+	return exec.Command(ps.exe(), "-NoProfile", "-Command", "Uninstall-Module -Name '"+safe+"' -Force")
 }
 
-// Describe returns module descriptions, reusing cached Scan() data when available
-// to avoid spawning a second PowerShell process.
 func (ps *PowerShell) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command(ps.exe(), "-NoProfile", "-Command", "Update-Module", name)
 }

@@ -234,7 +234,7 @@ func wingetExtract(line string, starts []int) []string {
 
 func (w *Winget) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("winget", "upgrade",
-		"--id", name,
+		"--name", name,
 		"--exact",
 		"--accept-source-agreements",
 		"--accept-package-agreements",
@@ -244,7 +244,7 @@ func (w *Winget) UpgradeCmd(name string) *exec.Cmd {
 
 func (w *Winget) RemoveCmd(name string) *exec.Cmd {
 	return exec.Command("winget", "uninstall",
-		"--id", name,
+		"--name", name,
 		"--exact",
 		"--disable-interactivity",
 	)
@@ -321,7 +321,7 @@ func (w *Winget) Describe(pkgs []model.Package) map[string]string {
 
 func (w *Winget) InstallCmd(name string) *exec.Cmd {
 	return exec.Command("winget", "install",
-		"--id", name,
+		"--name", name,
 		"--exact",
 		"--accept-source-agreements",
 		"--accept-package-agreements",
