@@ -141,4 +141,5 @@ func writeOutdatedHuman(w io.Writer, entries []outdatedEntry, st *styler) {
 		src := st.paint(padRight(e.Source, srcW), st.mgrColorOf(model.Source(e.Source)), true)
 		fmt.Fprintf(w, "  %s  %s  %s %s %s\n", name, src, st.dim(e.Current), st.dim("→"), st.warn(e.Latest))
 	}
+	fmt.Fprintln(w, "\n"+st.dim("run ")+st.accent("gpk upgrade")+st.dim(" to apply (or gpk upgrade <name>)"))
 }

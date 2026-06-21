@@ -6,10 +6,33 @@ follows Keep a Changelog.
 ## Unreleased
 
 ### Added
-- Install plans preview the dependencies an install will pull in (pacman), so
-  you see what comes along before confirming.
-- `gpk managers` — a system overview of every supported manager, which ones are
-  detected, and how many packages each holds (with `--json`).
+- When a name lives in several managers, the source picker (and the scripted
+  "available in" message) now lists OS/system managers first, and pressing Enter
+  installs the top one — so `gpk install ffmpeg` defaults to the system package,
+  not a same-named library on PyPI/npm/crates.io.
+- Manager preference: set `[install] prefer = ["aur", "brew"]` in the config and
+  gpk resolves a package found in several managers to your top choice instead of
+  asking.
+- `gpk install <pkg> --pick-version` — choose the version interactively from a
+  newest-first list, for managers that can install a specific version.
+- `gpk export` / `gpk import` — back up the installed set to a file and restore
+  it on another machine (cross-manager, brew-bundle style); import skips what's
+  already present and previews the rest.
+- `gpk theme [name]` — list the color themes with a live palette swatch, or set
+  the active one; shared with the TUI via the config file.
+- `gpk refresh` (and `-Sy`) rebuilds the scan cache from a fresh scan, gpk's
+  take on syncing databases. A bare `-Sy` no longer errors.
+- `--json` plan output on install/remove/upgrade/downgrade: prints the resolved
+  steps (manager, name, version, exact command) without running anything, so a
+  GUI or script can drive gpk as a backend.
+- Shell completion: `gpk completion bash|zsh|fish` prints a script that
+  tab-completes subcommands, manager names, and — from the scan cache —
+  installed package names for remove/upgrade/info/downgrade/hold.
+- Install plans preview the dependencies an install pulls in and the download /
+  installed size (pacman), so you see exactly what's coming before confirming.
+- `gpk managers` — a system overview of every supported manager: which are
+  detected and how many packages each holds, drawn as a colored bar chart (and
+  `--json`).
 - Holds: `gpk hold <pkg>` pins a package so `gpk upgrade`/`-Syu` leave it alone
   (pacman gets a real `--ignore`); `gpk unhold` and `gpk holds` manage the list,
   and held packages drop out of `gpk outdated`.
@@ -48,6 +71,38 @@ follows Keep a Changelog.
   `softwareupdate` — bringing the total to 42.
 
 ### Changed
+- Downgrade lists cached versions newest-first with a cross-format version
+  comparator (epochs, pacman pkgrel, apt revisions, pip post-releases, tilde
+  pre-releases, leading-v tags), following Debian's ordering.
 
 - An unknown first argument is now treated as a search query rather than a hard
   error, matching yay.
+- CLI commands parse tool output under a C locale, so field names read the same
+  on non-English systems; interactive prompts still appear in your language.
+- `gpk outdated` ends with a hint pointing at `gpk upgrade`, so the list leads
+  straight into the action.
+- Install resolution searches managers concurrently, so `gpk install <name>`
+  without `--manager` returns in a fraction of the time on multi-manager hits.
+
+### Fixed
+- `install --manager <m>` works for managers that can install but not search
+  (go, pipx, bun, …): an explicitly named manager is trusted instead of failing
+  with "not found".
+- `gpk` with no subcommand falls back to help when stdout isn't a terminal
+  (pipes, scripts, CI) instead of failing with an opaque "could not open a new
+  TTY" error.
+- Self-update works on symlinked installs (Homebrew and similar), verifies the
+  download against the release checksums, and reports "already up to date" as a
+  success instead of an error.
+- winget install/upgrade/remove match packages by their display name, fixing
+  "no installed package found" for packages whose Id differs from their name.
+- go upgrade resolves the module path (no more "malformed module path"), and go
+  remove deletes the binary on Windows too.
+- aur install/upgrade elevate with sudo when no AUR helper is installed.
+- nuget is read-only: its global cache holds restored libraries, which can't be
+  managed as `dotnet tool` entries.
+- TUI: the U key updates every manager with a bulk upgrade; queued operations no
+  longer leave a stale notification, a finished batch starts the next queued op,
+  and a background removal no longer pulls you out of an unrelated detail view.
+- State files (snapshots, notes, config) are written atomically, so an
+  interrupted write can't truncate them into silent data loss.

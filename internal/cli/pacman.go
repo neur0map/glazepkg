@@ -44,6 +44,9 @@ func TranslateOps(args []string) (out []string, ok bool) {
 		case has('u'):
 			return append([]string{"upgrade"}, rest...), true
 		default:
+			if has('y') && !hasPositional(rest) {
+				return append([]string{"refresh"}, rest...), true
+			}
 			return append([]string{"install"}, rest...), true
 		}
 	case 'R':
@@ -86,4 +89,25 @@ func rewritePacmanFlags(args []string) []string {
 		}
 	}
 	return out
+}
+
+// hasPositional reports whether args contains a non-flag argument, skipping the
+// values of gpk's value-taking flags. Used to tell a bare `-Sy` (refresh) from
+// `-Sy pkg` (refresh + install).
+func hasPositional(args []string) bool {
+	valueFlags := map[string]bool{"--manager": true, "-m": true, "--limit": true}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			return i+1 < len(args)
+		}
+		if strings.HasPrefix(a, "-") {
+			if valueFlags[a] {
+				i++
+			}
+			continue
+		}
+		return true
+	}
+	return false
 }

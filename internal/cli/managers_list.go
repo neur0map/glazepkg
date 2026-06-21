@@ -7,6 +7,7 @@ import (
 	"io"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
@@ -81,16 +82,36 @@ func runManagers(args []string, mgrs []manager.Manager, version string, stdout, 
 	st := newStyler()
 	fmt.Fprintf(stdout, "%s  %s\n\n", st.title("Package managers"),
 		st.dim(fmt.Sprintf("%d of %d available", available, len(mgrs))))
+
+	maxCount, total, countW := 0, 0, 1
 	for _, s := range stats {
-		mark := st.dim("✗")
-		name := st.dim(padRight(s.Name, 16))
-		count := ""
-		if s.Available {
-			mark = st.ok("✓")
-			name = st.paint(padRight(s.Name, 16), st.mgrColorOf(model.Source(s.Name)), true)
-			count = st.version(strconv.Itoa(s.Count))
+		total += s.Count
+		if s.Count > maxCount {
+			maxCount = s.Count
 		}
-		fmt.Fprintf(stdout, "  %s  %s  %s\n", mark, name, count)
+	}
+	countW = len(strconv.Itoa(maxCount))
+
+	const barW = 24
+	for _, s := range stats {
+		if !s.Available {
+			fmt.Fprintf(stdout, "  %s  %s\n", st.dim("✗"), st.dim(padRight(s.Name, 16)))
+			continue
+		}
+		name := st.paint(padRight(s.Name, 16), st.mgrColorOf(model.Source(s.Name)), true)
+		count := st.version(fmt.Sprintf("%*d", countW, s.Count))
+		bar := ""
+		if st.on && maxCount > 0 {
+			filled := s.Count * barW / maxCount
+			if filled == 0 && s.Count > 0 {
+				filled = 1
+			}
+			bar = "  " + st.paint(strings.Repeat("█", filled), st.mgrColorOf(model.Source(s.Name)), false) + st.dim(strings.Repeat("·", barW-filled))
+		}
+		fmt.Fprintf(stdout, "  %s  %s  %s%s\n", st.ok("✓"), name, count, bar)
+	}
+	if total > 0 {
+		fmt.Fprintf(stdout, "\n  %s %s\n", st.dim("total"), st.version(strconv.Itoa(total)))
 	}
 	return ExitOK
 }

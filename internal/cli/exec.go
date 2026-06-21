@@ -34,6 +34,19 @@ func confirmAction(prompt string, in io.Reader, out io.Writer) bool {
 	return answer == "y" || answer == "yes"
 }
 
+// userEnv is the environment as gpk started, captured before UseStableLocale
+// forces a C locale for parsing. Interactive commands run with it so prompts
+// reach the user in their own language.
+var userEnv = os.Environ()
+
+// UseStableLocale forces a C locale on the process so the tools gpk parses emit
+// stable, English field names regardless of the system language. It's applied
+// only on the CLI path; interactive commands restore userEnv via headlessExec.
+func UseStableLocale() {
+	os.Setenv("LC_ALL", "C")
+	os.Unsetenv("LANGUAGE")
+}
+
 // headlessExec runs cmd with the parent process's stdin/stdout/stderr so
 // interactive prompts (sudo password, pacman confirmations) reach the
 // user's terminal. If cmd is a sudo wrapper using "-S" (read password from
@@ -47,6 +60,9 @@ func headlessExec(cmd *exec.Cmd) error {
 		return fmt.Errorf("nil command")
 	}
 	cmd = stripSudoStdinFlag(cmd)
+	if cmd.Env == nil {
+		cmd.Env = userEnv
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

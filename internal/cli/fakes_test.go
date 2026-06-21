@@ -30,6 +30,8 @@ type fakeManager struct {
 	installCmdFn           func(name string) *exec.Cmd
 	installCmdYesFn        func(name string) *exec.Cmd
 	upgradeAllCmdFn        func(yes bool) *exec.Cmd
+	versionsFn             func(name string) ([]string, error)
+	installVersionFn       func(name, version string) *exec.Cmd
 }
 
 func (f *fakeManager) Name() model.Source { return f.name }
@@ -103,6 +105,20 @@ func (f *fakeManager) UpgradeAllCmd(yes bool) *exec.Cmd {
 		return nil
 	}
 	return f.upgradeAllCmdFn(yes)
+}
+
+func (f *fakeManager) Versions(name string) ([]string, error) {
+	if f.versionsFn == nil {
+		return nil, nil
+	}
+	return f.versionsFn(name)
+}
+
+func (f *fakeManager) InstallVersionCmd(name, version string) *exec.Cmd {
+	if f.installVersionFn == nil {
+		return nil
+	}
+	return f.installVersionFn(name, version)
 }
 
 func (f *fakeManager) UpgradeCmdYes(name string) *exec.Cmd {

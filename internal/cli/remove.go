@@ -29,6 +29,7 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 		dryRunFlag   = fs.Bool("dry-run", false, "print the command(s) without executing")
 		quietFlag    = fs.Bool("quiet", false, "suppress progress on stderr")
 		noCacheFlag  = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
+		jsonFlag     = fs.Bool("json", false, "emit the resolved plan as JSON and exit (no execution)")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -148,6 +149,18 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 		plans = append(plans, plan{pkg: pkg, mgr: mgr, remover: remover, cmdStr: cmdDisplay, warning: warning})
 	}
 
+	if *jsonFlag {
+		steps := make([]planStep, 0, len(plans))
+		for _, p := range plans {
+			steps = append(steps, planStep{Manager: string(p.mgr.Name()), Name: p.pkg.Name, Version: p.pkg.Version, Command: cmdArgs(removeCmdFor(p.mgr, p.pkg.Name, *withDepsFlag, *yesFlag))})
+		}
+		if err := emitPlanJSON(stdout, version, "remove", steps); err != nil {
+			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
+			return ExitErr
+		}
+		return ExitOK
+	}
+
 	st := newStyler()
 	r := newPromptReader(stdin)
 
@@ -214,6 +227,33 @@ func mgrByName(filtered []manager.Manager, src model.Source) manager.Manager {
 		if m.Name() == src {
 			return m
 		}
+	}
+	return nil
+}
+
+func removeCmdFor(mgr manager.Manager, name string, withDeps, yes bool) *exec.Cmd {
+	if withDeps {
+		if yes {
+			if ni, ok := mgr.(manager.NonInteractiveDeepRemover); ok {
+				if c := ni.RemoveCmdWithDepsYes(name); c != nil {
+					return c
+				}
+			}
+		}
+		if d, ok := mgr.(manager.DeepRemover); ok {
+			return d.RemoveCmdWithDeps(name)
+		}
+		return nil
+	}
+	if yes {
+		if ni, ok := mgr.(manager.NonInteractiveRemover); ok {
+			if c := ni.RemoveCmdYes(name); c != nil {
+				return c
+			}
+		}
+	}
+	if rm, ok := mgr.(manager.Remover); ok {
+		return rm.RemoveCmd(name)
 	}
 	return nil
 }

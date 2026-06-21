@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 	"github.com/neur0map/glazepkg/internal/snapshot"
+	vercmp "github.com/neur0map/glazepkg/internal/version"
 )
 
 func init() {
@@ -29,6 +31,7 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 		yesFlag    = fs.Bool("yes", false, "skip the confirmation prompt")
 		dryRunFlag = fs.Bool("dry-run", false, "print the command without executing")
 		quietFlag  = fs.Bool("quiet", false, "suppress progress on stderr")
+		jsonFlag   = fs.Bool("json", false, "emit the resolved plan as JSON and exit (no execution)")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -55,6 +58,9 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 
 	st := newStyler()
 	r := newPromptReader(stdin)
+	if *jsonFlag {
+		r = nil // non-interactive: requires name@version
+	}
 
 	mgr, curVer, code, ok := resolveDowngradeManager(name, filtered, st, r, stdout, stderr)
 	if !ok {
@@ -72,6 +78,15 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 	if cmd == nil {
 		fmt.Fprintf(stderr, "error: %s cannot downgrade %s to %s (version unavailable)\n", mgr.Name(), name, ver)
 		return ExitErr
+	}
+
+	if *jsonFlag {
+		step := planStep{Manager: string(mgr.Name()), Name: name, Version: ver, Command: cmdArgs(cmd)}
+		if err := emitPlanJSON(stdout, version, "downgrade", []planStep{step}); err != nil {
+			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
+			return ExitErr
+		}
+		return ExitOK
 	}
 
 	fmt.Fprintln(stdout, st.title("Downgrade plan"))
@@ -159,6 +174,7 @@ func chooseVersion(name string, mgr manager.Manager, st *styler, r *bufio.Reader
 		fmt.Fprintf(stderr, "error: no other versions of %q available\n", name)
 		return "", ExitNegative, false
 	}
+	sort.Slice(versions, func(i, j int) bool { return vercmp.Compare(versions[i], versions[j]) > 0 })
 	if !canPrompt(r) {
 		fmt.Fprintf(stderr, "error: specify a version: %s@VERSION\n", name)
 		fmt.Fprintf(stderr, "available: %s\n", strings.Join(versions, ", "))

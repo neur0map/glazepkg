@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -144,5 +145,30 @@ func TestFindCandidates_DedupesToCanonicalManager(t *testing.T) {
 func TestExitAmbiguousConstant(t *testing.T) {
 	if ExitAmbiguous != 3 {
 		t.Errorf("ExitAmbiguous = %d, want 3", ExitAmbiguous)
+	}
+}
+
+func TestUseStableLocale(t *testing.T) {
+	orig, had := os.LookupEnv("LC_ALL")
+	defer func() {
+		if had {
+			os.Setenv("LC_ALL", orig)
+		} else {
+			os.Unsetenv("LC_ALL")
+		}
+	}()
+	UseStableLocale()
+	if os.Getenv("LC_ALL") != "C" {
+		t.Errorf("LC_ALL = %q, want C", os.Getenv("LC_ALL"))
+	}
+}
+
+func TestHeadlessExecSetsUserEnv(t *testing.T) {
+	cmd := exec.Command("/bin/true")
+	if err := headlessExec(cmd); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if cmd.Env == nil {
+		t.Error("interactive command should run with the captured user env")
 	}
 }

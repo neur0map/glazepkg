@@ -1,20 +1,38 @@
 package manager
 
-import "os/exec"
+import (
+	"os/exec"
+	"strings"
+)
 
-// Previewer is implemented by managers that can report the extra packages an
-// install would pull in. gpk shows these in the install plan so you see the
-// dependencies before committing.
-type Previewer interface {
-	InstallDeps(name string) ([]string, error)
+// InstallPreview describes what an install would actually do: the extra
+// packages pulled in as dependencies and the transaction's download/installed
+// sizes (0 when the manager can't report them).
+type InstallPreview struct {
+	Deps      []string
+	Download  int64
+	Installed int64
 }
 
-func (p *Pacman) InstallDeps(name string) ([]string, error) {
+// Previewer is implemented by managers that can preview an install before it
+// runs. gpk shows this in the install plan.
+type Previewer interface {
+	PreviewInstall(name string) (InstallPreview, error)
+}
+
+func (p *Pacman) PreviewInstall(name string) (InstallPreview, error) {
 	out, err := exec.Command("pacman", "-S", "--print", "--print-format", "%n", name).Output()
 	if err != nil {
-		return nil, err
+		return InstallPreview{}, err
 	}
-	return pacmanPrintDeps(out, name), nil
+	pv := InstallPreview{Deps: pacmanPrintDeps(out, name)}
+	if targets := splitNonEmptyLines(out); len(targets) > 0 {
+		args := append([]string{"-Si"}, targets...)
+		if si, err := exec.Command("pacman", args...).Output(); err == nil {
+			pv.Download, pv.Installed = sumPacmanSizes(si)
+		}
+	}
+	return pv, nil
 }
 
 // pacmanPrintDeps keeps every printed target except the requested package,
@@ -27,4 +45,22 @@ func pacmanPrintDeps(out []byte, name string) []string {
 		}
 	}
 	return deps
+}
+
+// sumPacmanSizes totals the Download/Installed Size fields across a multi-package
+// `pacman -Si` dump.
+func sumPacmanSizes(out []byte) (download, installed int64) {
+	for _, line := range strings.Split(string(out), "\n") {
+		key, val, ok := parseField(line)
+		if !ok {
+			continue
+		}
+		switch key {
+		case "Download Size":
+			download += ParseSizeString(val)
+		case "Installed Size":
+			installed += ParseSizeString(val)
+		}
+	}
+	return download, installed
 }

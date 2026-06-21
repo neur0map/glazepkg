@@ -29,6 +29,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		dryRunFlag  = fs.Bool("dry-run", false, "print the command(s) without executing")
 		quietFlag   = fs.Bool("quiet", false, "suppress progress on stderr")
 		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
+		jsonFlag    = fs.Bool("json", false, "emit the resolved plan as JSON and exit (no execution)")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -51,7 +52,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 
 	names := fs.Args()
 	if len(names) == 0 {
-		return runUpgradeAll(filtered, *yesFlag, *dryRunFlag, *quietFlag, st, r, stdout, stderr)
+		return runUpgradeAll(filtered, *yesFlag, *dryRunFlag, *quietFlag, *jsonFlag, version, st, r, stdout, stderr)
 	}
 
 	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr, false)
@@ -108,6 +109,18 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		return ExitOK
 	}
 
+	if *jsonFlag {
+		steps := make([]planStep, 0, len(plans))
+		for _, p := range plans {
+			steps = append(steps, planStep{Manager: string(p.mgr.Name()), Name: p.pkg.Name, Command: cmdArgs(upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag))})
+		}
+		if err := emitPlanJSON(stdout, version, "upgrade", steps); err != nil {
+			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
+			return ExitErr
+		}
+		return ExitOK
+	}
+
 	fmt.Fprintln(stdout, st.title("Upgrade plan"))
 	for _, p := range plans {
 		cmd := upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag)
@@ -161,7 +174,7 @@ func upgradeCmdFor(mgr manager.Manager, name string, yes bool) *exec.Cmd {
 // runUpgradeAll runs each available manager's bulk upgrade command — the
 // `gpk upgrade` / `-Syu` "bring everything up to date" path. A failure in one
 // manager doesn't stop the others.
-func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet bool, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
+func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool, version string, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
 	holds := snapshot.LoadHolds()
 	var rows []groupedCmd
 	for _, m := range filtered {
@@ -190,6 +203,17 @@ func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet bool, st *styl
 	}
 	if len(rows) == 0 {
 		fmt.Fprintln(stderr, "no installed managers support bulk upgrade")
+		return ExitOK
+	}
+	if jsonMode {
+		steps := make([]planStep, 0, len(rows))
+		for _, row := range rows {
+			steps = append(steps, planStep{Manager: string(row.mgr.Name()), Command: cmdArgs(row.cmd)})
+		}
+		if err := emitPlanJSON(stdout, version, "upgrade", steps); err != nil {
+			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
+			return ExitErr
+		}
 		return ExitOK
 	}
 	return executeGrouped("Upgrade everything", rows, dryRun, yes, quiet, st, r, stdout, stderr)

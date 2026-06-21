@@ -127,7 +127,7 @@ opening the TUI.
 gpk firefox               # search and pick something to install (like yay)
 gpk -S ffmpeg             # install
 gpk -S ffmpeg --aur       # install, scoped to one manager
-gpk install black@24.1.0  # install a specific version
+gpk install black@24.1.0  # install a specific version (or --pick-version to choose)
 gpk -Ss ripgrep           # search every manager at once
 gpk -Syu                  # update everything
 gpk -R foo                # remove  (-Rns to take orphaned deps too)
@@ -137,13 +137,22 @@ gpk autoremove            # remove dependencies nothing needs
 gpk hold linux            # pin a package so upgrades skip it
 gpk undo                  # reverse the last thing gpk did
 gpk managers              # which managers are detected, with package counts
+gpk theme dracula         # switch the color theme (shared with the TUI)
+gpk export -o pkgs.json   # back up everything installed
+gpk import pkgs.json      # restore it on another machine (skips installed)
 gpk -Qi foo               # info    ·  gpk -Q lists everything installed
 ```
 
 When a package exists in more than one manager, gpk lists them with versions and
 lets you choose. Mistype a name and it suggests the closest match. Scope any
 command with `--aur`, `--brew`, `-m pacman,aur`, or leave it off and let gpk
-find it.
+find it — or set a standing preference in the config so it never has to ask:
+
+```toml
+# ~/.config/glazepkg/config.toml
+[install]
+prefer = ["aur", "brew"]
+```
 
 | Plain words | Short flags |
 |---|---|
@@ -155,6 +164,25 @@ find it.
 
 Output is colored to match your theme on a terminal and falls back to plain text
 when piped. Run `gpk --help` for the full command and flag reference.
+
+### Shell completion
+
+Tab-completes subcommands, manager names, and your installed packages (for
+`remove`, `upgrade`, `info`, `downgrade`, `hold`).
+
+```bash
+gpk completion bash > /etc/bash_completion.d/gpk      # bash
+gpk completion zsh  > ~/.zfunc/_gpk                    # zsh (ensure ~/.zfunc is on $fpath)
+gpk completion fish > ~/.config/fish/completions/gpk.fish
+```
+
+### Scripting & backends
+
+Every read command takes `--json` (a stable `{gpk_version, schema, data}`
+envelope), and `install`/`remove`/`upgrade`/`downgrade` accept `--json` to print
+the resolved plan — manager, version, and the exact command — without running
+anything. Exit codes are stable (`0` ok, `1` error, `2` "no", `3` ambiguous), so
+gpk drops cleanly behind a GUI or script.
 
 <details>
 <summary><strong>Keybindings</strong></summary>

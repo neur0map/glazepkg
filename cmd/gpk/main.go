@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -33,7 +34,15 @@ func main() {
 		if opArgs, ok := cli.TranslateOps(args); ok {
 			args = opArgs
 		}
+		cli.UseStableLocale()
 		os.Exit(cli.Dispatch(args, manager.All(), version, os.Stdout, os.Stderr, os.Stdin))
+	}
+
+	// The TUI needs a terminal; piped or scripted with no subcommand, show help
+	// instead of failing with an opaque tty error.
+	if !isatty.IsTerminal(os.Stdout.Fd()) {
+		printHelp()
+		return
 	}
 
 	p := tea.NewProgram(ui.NewModel(version), tea.WithAltScreen())
@@ -47,6 +56,10 @@ func runUpdate() {
 	fmt.Printf("gpk %s — checking for updates...\n", version)
 
 	newVersion, err := updater.Update(version)
+	if errors.Is(err, updater.ErrUpToDate) {
+		fmt.Printf("gpk is already up to date (%s)\n", version)
+		return
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
@@ -91,6 +104,7 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("gpk <pkg>", 24), "Search and install, the way yay does")
 	fmt.Printf("  %s %s\n", cmd("gpk <subcommand> ...", 24), "Run a headless command")
 	fmt.Printf("  %s %s\n", cmd("gpk update", 24), "Self-update to latest release")
+	fmt.Printf("  %s %s\n", cmd("gpk completion <sh>", 24), "Print a bash/zsh/fish completion script")
 	fmt.Printf("  %s %s\n", cmd("gpk -h, --help", 24), "Show this help")
 	fmt.Println()
 
@@ -102,10 +116,11 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("outdated", 24), "List packages with available updates")
 	fmt.Printf("  %s %s\n", cmd("installed <pkg>...", 24), "Check if packages are installed (exit 0/2)")
 	fmt.Printf("  %s %s\n", cmd("managers", 24), "Show which managers are detected, with counts")
+	fmt.Printf("  %s %s\n", cmd("export [-o file]", 24), "Dump installed packages for backup/migration")
 	fmt.Println()
 
 	fmt.Printf("%s %s\n", section("COMMANDS"), muted("· write"))
-	fmt.Printf("  %s %s\n", cmd("install <pkg>...", 24), "Install packages (name@version to pin)")
+	fmt.Printf("  %s %s\n", cmd("install <pkg>...", 24), "Install (name@version to pin, --pick-version to choose)")
 	fmt.Printf("  %s %s\n", cmd("remove <pkg>...", 24), "Remove a package (--with-deps for orphans)")
 	fmt.Printf("  %s %s\n", cmd("upgrade [pkg...]", 24), "Upgrade packages, or everything if none given")
 	fmt.Printf("  %s %s\n", cmd("downgrade <pkg>", 24), "Install an earlier version (version picker)")
@@ -114,6 +129,8 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("hold/unhold <pkg>", 24), "Pin a package so upgrades skip it")
 	fmt.Printf("  %s %s\n", cmd("history", 24), "Show recent actions gpk performed")
 	fmt.Printf("  %s %s\n", cmd("undo", 24), "Reverse gpk's last action")
+	fmt.Printf("  %s %s\n", cmd("theme [name]", 24), "List or set the color theme")
+	fmt.Printf("  %s %s\n", cmd("import <file>", 24), "Install everything from an export, skipping installed")
 	fmt.Println()
 
 	fmt.Println(section("PACMAN / YAY FLAGS"))
@@ -122,7 +139,7 @@ func printHelp() {
 	fmt.Printf("  %s %-12s  %s %s\n", flagText("-R pkg", 10), "remove", flagText("-Rns pkg", 10), "remove + deps")
 	fmt.Printf("  %s %-12s  %s %s\n", flagText("-Q [term]", 10), "list", flagText("-Qi pkg", 10), "info")
 	fmt.Printf("  %s %-12s  %s %s\n", flagText("-Qu", 10), "outdated", flagText("-Qdt", 10), "list orphans")
-	fmt.Printf("  %s %s\n", flagText("-Sc / -Scc", 10), "clean cached downloads")
+	fmt.Printf("  %s %-12s  %s %s\n", flagText("-Sc/-Scc", 10), "clean cache", flagText("-Sy", 10), "refresh")
 	fmt.Println()
 
 	fmt.Println(section("COMMON FLAGS"))

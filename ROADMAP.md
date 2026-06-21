@@ -42,6 +42,7 @@ Arch and other Linux, macOS, and Windows. The same commands work everywhere. gpk
 - Pin a version at install (`gpk install name@version`) or roll back with a picker (`gpk downgrade name`).
 - Tidy up: remove orphaned dependencies (`gpk autoremove`) and clear caches (`gpk clean`).
 - Hold a package so upgrades skip it (`gpk hold` / `gpk unhold`), and undo the last action (`gpk undo`, with `gpk history`).
+- Preview an install before it runs: the dependencies it pulls in and the download/installed size (`gpk install`, pacman).
 
 ## What needs work first
 
@@ -54,14 +55,11 @@ downgrades with a version picker, choosing a version at install time
 
 Still on the list, roughly in order:
 
-1. **Install preview.** Before anything runs, show what comes along as a
-   dependency and how much it downloads, not just the command that will run.
-
-2. **Being dependable.**
-   - Read each tool's output the same way no matter the system language.
+1. **Being dependable.**
+   - The CLI now reads each tool's output under a C locale, so parsing is the same in any system language; the TUI still has this to gain.
    - Make search quick by keeping a local index, instead of waiting on each tool every time.
 
-3. **Proper nix support.** On NixOS, installing should add the package to your configuration and rebuild, which is how NixOS is meant to work, with a quick way to just try something without keeping it. The current method uses an older command that does not fit flake-based systems. The compatibility table is also out of date for nix and needs to match the code.
+2. **Proper nix support.** On NixOS, installing should add the package to your configuration and rebuild, which is how NixOS is meant to work, with a quick way to just try something without keeping it. The current method uses an older command that does not fit flake-based systems. The compatibility table is also out of date for nix and needs to match the code.
 
 ## Familiar commands
 
@@ -107,7 +105,7 @@ Several color themes ship with gpk, and `t` cycles through them live. Your choic
 
 ## Still open
 
-- Every tool writes versions differently (brew `1.14.1`, pacman `1.14.1-1`, apt `1.14.1-2ubuntu1`, pip `1.14.1.post1`). Comparing them across tools is hard. gpk does its best and falls back to a plain text compare.
+- Every tool writes versions differently (brew `1.14.1`, pacman `1.14.1-1`, apt `1.14.1-2ubuntu1`, pip `1.14.1.post1`). gpk now compares them with a Debian-style algorithm that understands epochs, revisions, pre-releases, and post-releases; the CLI uses it to order versions (e.g. the downgrade picker). Wiring it through update detection everywhere is the next step.
 - Some tools can install software for the whole system or just for your user. gpk does not track that split yet, and it matters when removing.
 
 ## Contributing
