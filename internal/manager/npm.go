@@ -15,26 +15,35 @@ func (n *Npm) Name() model.Source { return model.SourceNpm }
 
 func (n *Npm) Available() bool { return commandExists("npm") }
 
+// nodeBundled ships with the Node.js runtime. These show up in `npm ls -g`
+// but self-upgrading them via npm is discouraged and, when node came from a
+// system manager like Homebrew, harmful, so gpk hides them (issue #49).
+var nodeBundled = map[string]bool{"npm": true, "corepack": true}
+
 func (n *Npm) Scan() ([]model.Package, error) {
 	out, err := exec.Command("npm", "list", "-g", "--json", "--depth=0").Output()
-	if err != nil {
-		// npm returns exit code 1 if there are peer dep issues, but still outputs JSON
-		if out == nil {
-			return nil, err
-		}
+	// npm exits 1 on peer dep issues but still prints JSON; only empty is fatal.
+	if err != nil && out == nil {
+		return nil, err
 	}
+	return parseNpmList(out)
+}
 
+func parseNpmList(data []byte) ([]model.Package, error) {
 	var result struct {
 		Dependencies map[string]struct {
 			Version string `json:"version"`
 		} `json:"dependencies"`
 	}
-	if err := json.Unmarshal(out, &result); err != nil {
+	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
 
 	pkgs := make([]model.Package, 0, len(result.Dependencies))
 	for name, dep := range result.Dependencies {
+		if nodeBundled[name] {
+			continue
+		}
 		pkgs = append(pkgs, model.Package{
 			Name:        name,
 			Version:     dep.Version,
