@@ -56,6 +56,7 @@ type Package struct {
 	Description   string    `json:"description,omitempty"`
 	Size          string    `json:"size,omitempty"`
 	Repository    string    `json:"repository,omitempty"`
+	Scope         string    `json:"scope,omitempty"` // install scope: user, global, system, etc.
 	DependsOn     []string  `json:"depends_on,omitempty"`
 	RequiredBy    []string  `json:"required_by,omitempty"`
 	InstalledAt   time.Time `json:"installed_at"`

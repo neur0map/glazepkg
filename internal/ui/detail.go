@@ -168,6 +168,7 @@ func infoBody(pkg model.Package, accent lipgloss.TerminalColor, bodyW int) strin
 	}{
 		{"Version", pkg.Version},
 		{"Source", formatSource(pkg)},
+		{"Scope", pkg.Scope},
 		{"Installed", formatInstalled(pkg)},
 		{"Location", pkg.Location},
 		{"Size", pkg.Size},

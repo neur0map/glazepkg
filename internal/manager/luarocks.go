@@ -2,6 +2,7 @@ package manager
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ func (l *Luarocks) Scan() ([]model.Package, error) {
 		return nil, err
 	}
 
+	home, _ := os.UserHomeDir()
 	var pkgs []model.Package
 	scanner := bufio.NewScanner(strings.NewReader(string(out)))
 	for scanner.Scan() {
@@ -37,15 +39,31 @@ func (l *Luarocks) Scan() ([]model.Package, error) {
 		if fields[2] != "installed" {
 			continue
 		}
-
+		path := ""
+		if len(fields) >= 4 {
+			path = fields[3]
+		}
 		pkgs = append(pkgs, model.Package{
 			Name:        fields[0],
 			Version:     fields[1],
 			Source:      model.SourceLuarocks,
+			Scope:       luarocksScope(path, home),
 			InstalledAt: time.Now(),
 		})
 	}
 	return pkgs, nil
+}
+
+// luarocksScope labels a rock by its install tree: "user" when under the home
+// directory (the local tree), "system" otherwise. Empty when path is unknown.
+func luarocksScope(path, home string) string {
+	if path == "" {
+		return ""
+	}
+	if home != "" && strings.HasPrefix(path, home) {
+		return "user"
+	}
+	return "system"
 }
 
 func (l *Luarocks) CheckUpdates(pkgs []model.Package) map[string]string {

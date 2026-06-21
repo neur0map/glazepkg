@@ -32,6 +32,7 @@ type psModule struct {
 	Name        string `json:"Name"`
 	Version     string `json:"Version"`
 	Description string `json:"Description"`
+	Scope       string `json:"Scope"`
 }
 
 // Package-level cache so Describe() can reuse data fetched during Scan()
@@ -46,11 +47,20 @@ var (
 // the result for Describe() to consume.
 func (ps *PowerShell) Scan() ([]model.Package, error) {
 	script := `
+$psHome = $PSHOME
+$pf = $env:ProgramFiles
+$docs = [Environment]::GetFolderPath('MyDocuments')
 $m = Get-Module -ListAvailable | ForEach-Object {
+    $base = "$($_.ModuleBase)"
+    $scope = ''
+    if ($psHome -and $base.StartsWith($psHome, [System.StringComparison]::OrdinalIgnoreCase)) { $scope = 'built-in' }
+    elseif ($docs -and $base.StartsWith($docs, [System.StringComparison]::OrdinalIgnoreCase)) { $scope = 'CurrentUser' }
+    elseif ($pf -and $base.StartsWith($pf, [System.StringComparison]::OrdinalIgnoreCase)) { $scope = 'AllUsers' }
     [PSCustomObject]@{
         Name        = $_.Name
         Version     = $(if ($_.Version) { $_.Version.ToString() } else { "" })
         Description = $_.Description
+        Scope       = $scope
     }
 }
 if ($m -is [array]) { ConvertTo-Json -InputObject $m -Compress }
@@ -95,6 +105,7 @@ else { ConvertTo-Json -InputObject @($m) -Compress }
 			Description: m.Description,
 			Version:     v,
 			Source:      model.SourcePowerShell,
+			Scope:       m.Scope,
 			InstalledAt: time.Now(),
 		})
 	}

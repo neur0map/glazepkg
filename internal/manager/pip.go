@@ -3,6 +3,7 @@ package manager
 import (
 	"bufio"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -32,16 +33,57 @@ func (p *Pip) Scan() ([]model.Package, error) {
 		return nil, err
 	}
 
+	// Classify user vs global installs. Skipped inside a virtualenv, where every
+	// package is env-scoped and a user/global label would be misleading (#12).
+	var userSet map[string]bool
+	if os.Getenv("VIRTUAL_ENV") == "" {
+		if uout, uerr := exec.Command("pip", "list", "--user", "--format=json").Output(); uerr == nil {
+			userSet = parsePipNameSet(uout)
+		}
+	}
+
 	pkgs := make([]model.Package, 0, len(entries))
 	for _, e := range entries {
 		pkgs = append(pkgs, model.Package{
 			Name:        e.Name,
 			Version:     e.Version,
 			Source:      model.SourcePip,
+			Scope:       pipScope(e.Name, userSet),
 			InstalledAt: time.Now(),
 		})
 	}
 	return pkgs, nil
+}
+
+// parsePipNameSet parses `pip list --format=json` into a set of normalized names.
+func parsePipNameSet(data []byte) map[string]bool {
+	var entries []struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(data, &entries) != nil {
+		return nil
+	}
+	set := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		set[normalizePipName(e.Name)] = true
+	}
+	return set
+}
+
+// pipScope returns "user" when name is in the user-site set, "global" otherwise.
+// Returns "" when scope was not determined (no set, e.g. inside a venv).
+func pipScope(name string, userSet map[string]bool) string {
+	if userSet == nil {
+		return ""
+	}
+	if userSet[normalizePipName(name)] {
+		return "user"
+	}
+	return "global"
+}
+
+func normalizePipName(s string) string {
+	return strings.ReplaceAll(strings.ToLower(s), "_", "-")
 }
 
 func (p *Pip) CheckUpdates(pkgs []model.Package) map[string]string {
