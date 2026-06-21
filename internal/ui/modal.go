@@ -454,7 +454,11 @@ func handlePkgHelpModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func renderPkgHelpModalBody(m *Model) ModalFrameOpts {
 	title := "PACKAGE HELP"
 	if m.detailPkg.Name != "" {
-		title = strings.ToUpper(m.detailPkg.Name) + " --HELP"
+		if m.pkgHelpIsMan {
+			title = "MAN " + strings.ToUpper(m.detailPkg.Name)
+		} else {
+			title = strings.ToUpper(m.detailPkg.Name) + " --HELP"
+		}
 	}
 	return ModalFrameOpts{
 		Title:  title,

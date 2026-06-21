@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -133,6 +134,10 @@ type pkgHelpMsg struct {
 	lines []string
 }
 
+type manPageMsg struct {
+	lines []string
+}
+
 type upgradeRequest struct {
 	pkg        model.Package
 	cmd        *exec.Cmd
@@ -240,6 +245,7 @@ type Model struct {
 	depsCursor       int
 	pkgHelpLines     []string
 	pkgHelpScroll    int
+	pkgHelpIsMan     bool
 	confirmFocus     int // 0 = password (privileged only), 1 = Yes, 2 = No
 	pendingUpgrade   *upgradeRequest
 	passwordInput    textinput.Model
@@ -519,6 +525,45 @@ func tryPkgHelp(name string) []string {
 		_ = err
 	}
 	return []string{"No help available for " + name}
+}
+
+func fetchManPage(name string) tea.Cmd {
+	return func() tea.Msg {
+		return manPageMsg{lines: tryManPage(name)}
+	}
+}
+
+func tryManPage(name string) []string {
+	cmd := exec.Command("man", name)
+	// GROFF_NO_SGR forces backspace overstrike instead of ANSI color codes,
+	// which stripManOverstrike normalizes to plain text.
+	cmd.Env = append(os.Environ(), "MANPAGER=cat", "PAGER=cat", "MANWIDTH=80", "GROFF_NO_SGR=1")
+	out, err := cmd.Output()
+	if err != nil || len(out) == 0 {
+		return []string{"No man page available for " + name}
+	}
+	return parseHelpOutput(stripManOverstrike(string(out)))
+}
+
+// stripManOverstrike removes the char+backspace+char overstrike sequences man
+// uses for bold and underline, keeping the visible character.
+func stripManOverstrike(s string) string {
+	runes := []rune(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(runes); i++ {
+		if i+1 < len(runes) && runes[i+1] == '\b' {
+			i++
+			continue
+		}
+		b.WriteRune(runes[i])
+	}
+	return b.String()
+}
+
+func manAvailable() bool {
+	_, err := exec.LookPath("man")
+	return err == nil
 }
 
 func parseHelpOutput(raw string) []string {
@@ -977,8 +1022,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pkgHelpMsg:
 		m.pkgHelpLines = msg.lines
+		m.pkgHelpIsMan = false
 		m.pkgHelpScroll = 0
 		m.statusMsg = "" // clear "loading help..." set at trigger
+		return m, m.openModal(ModalPkgHelp)
+
+	case manPageMsg:
+		m.pkgHelpLines = msg.lines
+		m.pkgHelpScroll = 0
+		m.pkgHelpIsMan = true
+		m.statusMsg = ""
 		return m, m.openModal(ModalPkgHelp)
 
 	case snapshotSavedMsg:
@@ -1333,6 +1386,13 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			return m, openURLCmd(u)
 		}
 		m.statusMsg = "no URL available for this package"
+	case "m":
+		if !manAvailable() {
+			m.statusMsg = "man is not available"
+			return m, nil
+		}
+		m.statusMsg = "loading man page..."
+		return m, fetchManPage(m.detailPkg.Name)
 	}
 	return m, nil
 }

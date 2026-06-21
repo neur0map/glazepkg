@@ -274,6 +274,9 @@ func detailKeybinds(m *Model) string {
 		if packageURL(m.detailPkg) != "" {
 			pairs = append(pairs, struct{ key, desc string }{"o", "open url"})
 		}
+		if manAvailable() {
+			pairs = append(pairs, struct{ key, desc string }{"m", "man"})
+		}
 		pairs = append(pairs,
 			struct{ key, desc string }{"h", "help"},
 			struct{ key, desc string }{"esc", "back"},
