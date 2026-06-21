@@ -7,9 +7,11 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
+	"github.com/neur0map/glazepkg/internal/snapshot"
 )
 
 func init() {
@@ -17,7 +19,7 @@ func init() {
 }
 
 func runRemove(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
-	args = reorderFlagsFirst(args, []string{"manager", "m"})
+	args = prepManagerArgs(args, mgrs)
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
@@ -146,28 +148,29 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 		plans = append(plans, plan{pkg: pkg, mgr: mgr, remover: remover, cmdStr: cmdDisplay, warning: warning})
 	}
 
-	// Print plan and prompt.
-	fmt.Fprintln(stdout, "The following commands will run:")
+	st := newStyler()
+	r := newPromptReader(stdin)
+
+	fmt.Fprintln(stdout, st.title("Remove plan"))
 	for _, p := range plans {
-		fmt.Fprintf(stdout, "  %s  →  %s\n", p.mgr.Name(), p.cmdStr)
+		fmt.Fprintf(stdout, "  %s  %s\n", st.mgrName(p.mgr.Name()), p.pkg.Name)
+		fmt.Fprintln(stdout, "      "+st.dim(p.cmdStr))
 		if p.warning != "" {
-			fmt.Fprintln(stdout, p.warning)
+			fmt.Fprintln(stdout, "      "+st.warn(strings.TrimSpace(p.warning)))
 		}
 	}
 
 	if *dryRunFlag {
-		fmt.Fprintln(stdout, "(dry-run; nothing executed)")
+		fmt.Fprintln(stdout, st.dim("(dry-run; nothing executed)"))
 		return ExitOK
 	}
 
-	if !*yesFlag {
-		if !confirmAction("Proceed? [y/N] ", stdin, stdout) {
-			fmt.Fprintln(stderr, "cancelled")
-			return ExitOK
-		}
+	if !*yesFlag && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
+		fmt.Fprintln(stderr, "cancelled")
+		return ExitOK
 	}
 
-	// Execute. Stop on first failure.
+	grp := nextGroup()
 	for _, p := range plans {
 		if !*quietFlag {
 			fmt.Fprintf(stderr, "removing %s via %s...\n", p.pkg.Name, p.mgr.Name())
@@ -197,6 +200,10 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{p.pkg})
+		_ = snapshot.AppendHistory(snapshot.HistoryItem{
+			Group: grp, Time: time.Now(), Op: snapshot.OpRemove,
+			Source: p.mgr.Name(), Name: p.pkg.Name, Version: p.pkg.Version,
+		})
 	}
 	return ExitOK
 }

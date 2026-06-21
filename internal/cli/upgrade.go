@@ -1,15 +1,18 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
+	"github.com/neur0map/glazepkg/internal/snapshot"
 )
 
 func init() {
@@ -17,14 +20,14 @@ func init() {
 }
 
 func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
-	args = reorderFlagsFirst(args, []string{"manager", "m"})
+	args = prepManagerArgs(args, mgrs)
 	fs := flag.NewFlagSet("upgrade", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		mgrFlag    = fs.String("manager", "", "manager to upgrade from; required if package is installed in multiple")
-		yesFlag    = fs.Bool("yes", false, "skip the y/N confirmation prompt")
-		dryRunFlag = fs.Bool("dry-run", false, "print the command(s) without executing")
-		quietFlag  = fs.Bool("quiet", false, "suppress progress on stderr")
+		mgrFlag     = fs.String("manager", "", "manager to upgrade from; required if a name is installed in multiple")
+		yesFlag     = fs.Bool("yes", false, "skip the confirmation prompt")
+		dryRunFlag  = fs.Bool("dry-run", false, "print the command(s) without executing")
+		quietFlag   = fs.Bool("quiet", false, "suppress progress on stderr")
 		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
@@ -37,16 +40,18 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		return ExitErr
 	}
 
-	names := fs.Args()
-	if len(names) == 0 {
-		fmt.Fprintln(stderr, "error: upgrade requires at least one package name")
-		return ExitErr
-	}
-
 	filtered, err := parseManagerFilter(*mgrFlag, mgrs)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %v\n", err)
 		return ExitErr
+	}
+
+	st := newStyler()
+	r := newPromptReader(stdin)
+
+	names := fs.Args()
+	if len(names) == 0 {
+		return runUpgradeAll(filtered, *yesFlag, *dryRunFlag, *quietFlag, st, r, stdout, stderr)
 	}
 
 	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr, false)
@@ -56,13 +61,11 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 	}
 
 	type plan struct {
-		pkg      model.Package
-		mgr      manager.Manager
-		upgrader manager.Upgrader
-		cmd      *exec.Cmd
-		cmdStr   string
+		pkg model.Package
+		mgr manager.Manager
 	}
 	var plans []plan
+	holds := snapshot.LoadHolds()
 	for _, name := range names {
 		var matches []model.Package
 		for _, p := range pkgs {
@@ -75,77 +78,119 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			return ExitNegative
 		}
 		if len(matches) > 1 {
-			var srcs []string
-			for _, m := range matches {
-				srcs = append(srcs, string(m.Source))
+			srcs := make([]string, len(matches))
+			for i, m := range matches {
+				srcs[i] = string(m.Source)
 			}
 			fmt.Fprintf(stderr, "error: %q installed in %d managers (%s); use --manager to pick\n",
 				name, len(matches), strings.Join(srcs, ", "))
 			return ExitAmbiguous
 		}
-		pkg := matches[0]
-		mgr := mgrByName(filtered, pkg.Source)
-		if mgr == nil {
-			fmt.Fprintf(stderr, "error: manager %s not in filtered set\n", pkg.Source)
-			return ExitErr
-		}
-		upgrader, ok := mgr.(manager.Upgrader)
-		if !ok {
-			fmt.Fprintf(stderr, "error: %s does not support upgrade\n", mgr.Name())
-			return ExitErr
-		}
-		var cmd *exec.Cmd
-		if *yesFlag {
-			if ni, ok := mgr.(manager.NonInteractiveUpgrader); ok {
-				cmd = ni.UpgradeCmdYes(name)
+		if snapshot.IsHeld(holds, matches[0].Source, name) {
+			if !*quietFlag {
+				fmt.Fprintf(stderr, "%s is held; skipping (run `gpk unhold %s` to upgrade it)\n", name, name)
 			}
+			continue
 		}
-		if cmd == nil {
-			cmd = upgrader.UpgradeCmd(name)
-		}
-		if cmd == nil {
-			fmt.Fprintf(stderr, "error: %s returned no upgrade command for %q\n", mgr.Name(), name)
+		mgr := mgrByName(filtered, matches[0].Source)
+		if mgr == nil {
+			fmt.Fprintf(stderr, "error: manager %s not in filtered set\n", matches[0].Source)
 			return ExitErr
 		}
-		cmdStr := strings.Join(stripSudoStdinFlag(cmd).Args, " ")
-		plans = append(plans, plan{pkg: pkg, mgr: mgr, upgrader: upgrader, cmd: cmd, cmdStr: cmdStr})
+		if upgradeCmdFor(mgr, name, *yesFlag) == nil {
+			fmt.Fprintf(stderr, "error: %s cannot upgrade %s\n", mgr.Name(), name)
+			return ExitErr
+		}
+		plans = append(plans, plan{pkg: matches[0], mgr: mgr})
 	}
-
-	fmt.Fprintln(stdout, "The following commands will run:")
-	for _, p := range plans {
-		fmt.Fprintf(stdout, "  %s  →  %s\n", p.mgr.Name(), p.cmdStr)
-	}
-
-	if *dryRunFlag {
-		fmt.Fprintln(stdout, "(dry-run; nothing executed)")
+	if len(plans) == 0 {
+		fmt.Fprintln(stderr, "nothing to upgrade")
 		return ExitOK
 	}
 
-	if !*yesFlag {
-		if !confirmAction("Proceed? [y/N] ", stdin, stdout) {
-			fmt.Fprintln(stderr, "cancelled")
-			return ExitOK
-		}
+	fmt.Fprintln(stdout, st.title("Upgrade plan"))
+	for _, p := range plans {
+		cmd := upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag)
+		fmt.Fprintf(stdout, "  %s  %s\n", st.mgrName(p.mgr.Name()), p.pkg.Name)
+		fmt.Fprintln(stdout, "      "+st.dim(displayCmd(cmd)))
 	}
 
+	if *dryRunFlag {
+		fmt.Fprintln(stdout, st.dim("(dry-run; nothing executed)"))
+		return ExitOK
+	}
+
+	if !*yesFlag && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
+		fmt.Fprintln(stderr, "cancelled")
+		return ExitOK
+	}
+
+	grp := nextGroup()
 	for _, p := range plans {
 		if !*quietFlag {
 			fmt.Fprintf(stderr, "upgrading %s via %s...\n", p.pkg.Name, p.mgr.Name())
 		}
-		var cmd *exec.Cmd
-		if *yesFlag {
-			if ni, ok := p.mgr.(manager.NonInteractiveUpgrader); ok {
-				cmd = ni.UpgradeCmdYes(p.pkg.Name)
-			}
-		}
-		if cmd == nil {
-			cmd = p.upgrader.UpgradeCmd(p.pkg.Name)
-		}
+		cmd := upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag)
 		if err := headlessExec(cmd); err != nil {
 			fmt.Fprintf(stderr, "error: upgrade %s failed: %v\n", p.pkg.Name, err)
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{p.pkg})
+		_ = snapshot.AppendHistory(snapshot.HistoryItem{
+			Group: grp, Time: time.Now(), Op: snapshot.OpUpgrade,
+			Source: p.mgr.Name(), Name: p.pkg.Name,
+		})
 	}
 	return ExitOK
+}
+
+func upgradeCmdFor(mgr manager.Manager, name string, yes bool) *exec.Cmd {
+	if yes {
+		if ni, ok := mgr.(manager.NonInteractiveUpgrader); ok {
+			if cmd := ni.UpgradeCmdYes(name); cmd != nil {
+				return cmd
+			}
+		}
+	}
+	if up, ok := mgr.(manager.Upgrader); ok {
+		return up.UpgradeCmd(name)
+	}
+	return nil
+}
+
+// runUpgradeAll runs each available manager's bulk upgrade command — the
+// `gpk upgrade` / `-Syu` "bring everything up to date" path. A failure in one
+// manager doesn't stop the others.
+func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet bool, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
+	holds := snapshot.LoadHolds()
+	var rows []groupedCmd
+	for _, m := range filtered {
+		if !m.Available() {
+			continue
+		}
+		b, ok := m.(manager.BulkUpgrader)
+		if !ok {
+			continue
+		}
+		var cmd *exec.Cmd
+		held := snapshot.HeldNames(holds, m.Name())
+		if ig, ok := m.(manager.IgnoringBulkUpgrader); ok && len(held) > 0 {
+			cmd = ig.UpgradeAllCmdIgnoring(yes, held)
+		} else {
+			cmd = b.UpgradeAllCmd(yes)
+		}
+		if cmd == nil {
+			continue
+		}
+		var detail []string
+		if len(held) > 0 {
+			detail = []string{st.dim("holding: " + strings.Join(held, " "))}
+		}
+		rows = append(rows, groupedCmd{mgr: m, cmd: cmd, detail: detail})
+	}
+	if len(rows) == 0 {
+		fmt.Fprintln(stderr, "no installed managers support bulk upgrade")
+		return ExitOK
+	}
+	return executeGrouped("Upgrade everything", rows, dryRun, yes, quiet, st, r, stdout, stderr)
 }

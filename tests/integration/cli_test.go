@@ -82,16 +82,20 @@ func TestCLI_SourceOfMissing(t *testing.T) {
 	}
 }
 
-// TestCLI_UnknownSubcommand verifies the dispatcher rejects unknown names.
-func TestCLI_UnknownSubcommand(t *testing.T) {
+// TestCLI_SubcommandTypo verifies a near-miss command name yields a "did you
+// mean" hint and exit 1, while a clear bareword falls through to search.
+func TestCLI_SubcommandTypo(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
-		[]string{"definitely-not-a-real-subcommand"},
+		[]string{"instal", "git"},
 		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 1 {
 		t.Fatalf("exit %d, want 1", code)
+	}
+	if !strings.Contains(errOut.String(), "did you mean") {
+		t.Errorf("stderr = %q, want a suggestion", errOut.String())
 	}
 }
 

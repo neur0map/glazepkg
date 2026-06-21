@@ -36,34 +36,38 @@ Arch and other Linux, macOS, and Windows. The same commands work everywhere. gpk
 - Export your package list for backup or moving to a new machine.
 - Several built-in color themes, with the option to add your own.
 - Update gpk itself (`gpk update`).
+- Drive every action from the command line, with the pacman/yay short flags (`-S`, `-Ss`, `-Syu`, `-R`, `-Q`) next to the plain words.
+- Search across every tool and install from a numbered list (`gpk search`, or just `gpk <name>`).
+- Update everything at once (`gpk upgrade` / `-Syu`).
+- Pin a version at install (`gpk install name@version`) or roll back with a picker (`gpk downgrade name`).
+- Tidy up: remove orphaned dependencies (`gpk autoremove`) and clear caches (`gpk clean`).
+- Hold a package so upgrades skip it (`gpk hold` / `gpk unhold`), and undo the last action (`gpk undo`, with `gpk history`).
 
 ## What needs work first
 
-These are the gaps I most want to close, roughly in order.
+A lot of this has landed since the first draft. What works now: one command to
+update everything (`gpk upgrade` / `-Syu`), a numbered "pick a source" install
+when a name lives in several tools, "did you mean" suggestions on a miss,
+cleaning up (`gpk autoremove` for orphaned deps, `gpk clean` for caches),
+downgrades with a version picker, choosing a version at install time
+(`name@version`), and the full pacman/yay flag set alongside the plain words.
 
-1. **One command to update everything.** Today you upgrade packages one at a time. There is no single "bring it all up to date" yet. This is the biggest missing piece for everyday use.
+Still on the list, roughly in order:
 
-2. **A smarter install.**
-   - When a name exists in more than one tool, show a numbered list and let you pick, instead of stopping and asking you to add a flag.
-   - When you mistype, suggest the closest match, the way yay does ("did you mean ...").
-   - Before anything runs, show what will actually change: what gets added, what comes along as a dependency, and how much it downloads.
+1. **Install preview.** Before anything runs, show what comes along as a
+   dependency and how much it downloads, not just the command that will run.
 
-3. **Cleaning up.** A command to remove leftover dependencies nothing needs anymore, and one to clear out old download caches.
-
-4. **Going back.** Downgrade a package to an earlier version, hold a package so it stays put during updates, and undo the last thing gpk did.
-
-5. **Being dependable.**
+2. **Being dependable.**
    - Read each tool's output the same way no matter the system language.
    - Make search quick by keeping a local index, instead of waiting on each tool every time.
-   - Keep a short history of what gpk changed, so you can look back and reverse it.
 
-6. **Proper nix support.** On NixOS, installing should add the package to your configuration and rebuild, which is how NixOS is meant to work, with a quick way to just try something without keeping it. The current method uses an older command that does not fit flake-based systems. The compatibility table is also out of date for nix and needs to match the code.
+3. **Proper nix support.** On NixOS, installing should add the package to your configuration and rebuild, which is how NixOS is meant to work, with a quick way to just try something without keeping it. The current method uses an older command that does not fit flake-based systems. The compatibility table is also out of date for nix and needs to match the code.
 
 ## Familiar commands
 
-Most people who use pacman or yay know the short flags by heart. `-S` to install, `-R` to remove, `-Syu` to update everything. Those flags are not owned by anyone. yay took them from pacman, paru took them too. gpk can offer the same shortcuts for people who want them, next to the plain words anyone can read at a glance.
+Most people who use pacman or yay know the short flags by heart. `-S` to install, `-R` to remove, `-Syu` to update everything. Those flags are not owned by anyone. yay took them from pacman, paru took them too. gpk offers the same shortcuts, next to the plain words anyone can read at a glance.
 
-So you will be able to write it either way:
+You can write it either way:
 
 | What you want | Plain words | Short flags |
 |---|---|---|

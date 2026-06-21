@@ -20,15 +20,15 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		mgrFlag      = fs.String("manager", "", "comma list of managers (e.g. pacman,aur or !brew); 'all' for all")
-		jsonFlag     = fs.Bool("json", false, "emit JSON envelope")
-		noCacheFlag  = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
-		quietFlag    = fs.Bool("quiet", false, "suppress progress messages on stderr")
-		updatesOnly  = fs.Bool("updates-only", false, "only packages whose latest_version differs from version")
+		mgrFlag     = fs.String("manager", "", "comma list of managers (e.g. pacman,aur or !brew); 'all' for all")
+		jsonFlag    = fs.Bool("json", false, "emit JSON envelope")
+		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
+		quietFlag   = fs.Bool("quiet", false, "suppress progress messages on stderr")
+		updatesOnly = fs.Bool("updates-only", false, "only packages whose latest_version differs from version")
 	)
 	fs.BoolVar(quietFlag, "q", *quietFlag, "alias for --quiet")
 	fs.StringVar(mgrFlag, "m", *mgrFlag, "alias for --manager")
-	args = reorderFlagsFirst(args, []string{"manager", "m"})
+	args = prepManagerArgs(args, mgrs)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return ExitOK
@@ -53,6 +53,10 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 		pkgs = withUpdates(filtered, pkgs)
 	}
 
+	if terms := fs.Args(); len(terms) > 0 {
+		pkgs = filterByTerms(pkgs, terms)
+	}
+
 	sort.Slice(pkgs, func(i, j int) bool { return pkgs[i].Name < pkgs[j].Name })
 
 	if *jsonFlag {
@@ -63,7 +67,7 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 		return ExitOK
 	}
 
-	writeListHuman(stdout, pkgs)
+	writeListHuman(stdout, pkgs, newStyler())
 	return ExitOK
 }
 
@@ -115,6 +119,26 @@ func filterByManagers(pkgs []model.Package, mgrs []manager.Manager) []model.Pack
 	return out
 }
 
+// filterByTerms keeps packages whose name or description contains any of the
+// given substrings (case-insensitive). Powers `gpk list <term>` and `-Qs`.
+func filterByTerms(pkgs []model.Package, terms []string) []model.Package {
+	lowered := make([]string, len(terms))
+	for i, t := range terms {
+		lowered[i] = strings.ToLower(t)
+	}
+	out := pkgs[:0:0]
+	for _, p := range pkgs {
+		name, desc := strings.ToLower(p.Name), strings.ToLower(p.Description)
+		for _, t := range lowered {
+			if strings.Contains(name, t) || strings.Contains(desc, t) {
+				out = append(out, p)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // withUpdates returns only packages whose LatestVersion is set and differs
 // from Version. Lazily fetches updates for managers missing from the cache.
 func withUpdates(mgrs []manager.Manager, pkgs []model.Package) []model.Package {
@@ -133,9 +157,9 @@ func withUpdates(mgrs []manager.Manager, pkgs []model.Package) []model.Package {
 // writeListHuman prints a plain text table: NAME VERSION SOURCE.
 // No ANSI codes; the cli emits plain text whenever stdout isn't a TTY,
 // and tests always run with a bytes.Buffer writer (non-TTY).
-func writeListHuman(w io.Writer, pkgs []model.Package) {
+func writeListHuman(w io.Writer, pkgs []model.Package, st *styler) {
 	if len(pkgs) == 0 {
-		fmt.Fprintln(w, "(no packages)")
+		fmt.Fprintln(w, st.dim("(no packages)"))
 		return
 	}
 	nameW, verW, srcW := 4, 7, 6 // header widths
@@ -150,9 +174,12 @@ func writeListHuman(w io.Writer, pkgs []model.Package) {
 			srcW = l
 		}
 	}
-	fmt.Fprintf(w, "%-*s  %-*s  %-*s\n", nameW, "NAME", verW, "VERSION", srcW, "SOURCE")
-	fmt.Fprintln(w, strings.Repeat("-", nameW+verW+srcW+4))
+	fmt.Fprintln(w, st.dim(fmt.Sprintf("%-*s  %-*s  %-*s", nameW, "NAME", verW, "VERSION", srcW, "SOURCE")))
+	fmt.Fprintln(w, st.dim(strings.Repeat("-", nameW+verW+srcW+4)))
 	for _, p := range pkgs {
-		fmt.Fprintf(w, "%-*s  %-*s  %-*s\n", nameW, p.Name, verW, p.Version, srcW, string(p.Source))
+		name := st.paint(padRight(p.Name, nameW), st.pal.White, false)
+		ver := st.version(padRight(p.Version, verW))
+		src := st.paint(padRight(string(p.Source), srcW), st.mgrColorOf(p.Source), true)
+		fmt.Fprintf(w, "%s  %s  %s\n", name, ver, src)
 	}
 }

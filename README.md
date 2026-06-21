@@ -4,7 +4,7 @@
 
 **See every package on your system — one gorgeous terminal dashboard.**
 
-A beautiful TUI that unifies **41 package managers** into a single searchable, snapshotable, diffable view.
+A beautiful TUI that unifies **42 package managers** into a single searchable, snapshotable, diffable view.
 Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea). Zero config. One binary. Just run `gpk`.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
@@ -28,7 +28,7 @@ You have `brew`, `pip`, `cargo`, `npm`, `apt`, maybe `flatpak` — all installin
 
 ## Features
 
-- **41 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, uv, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update, AM/AppMan, gvm, mise, Quicklisp, softwareupdate
+- **42 package managers** — brew, pacman, AUR, apt, dnf, snap, pip, pipx, uv, cargo, go, npm, pnpm, bun, flatpak, MacPorts, pkgsrc, opam, gem, pkg, composer, mas, apk, nix, conda/mamba, luarocks, XBPS, Portage, Guix, winget, Chocolatey, Scoop, NuGet, PowerShell modules, Maven, Windows Update, AM/AppMan, gvm, mise, Quicklisp, softwareupdate
 - **Instant startup** — scans once, caches for 10 days, opens in milliseconds on repeat launches
 - **Fuzzy search** — find any package across all managers instantly with `/`
 - **Package operations** — upgrade, remove, search, and install packages without leaving the TUI
@@ -134,6 +134,9 @@ gpk -R foo                # remove  (-Rns to take orphaned deps too)
 gpk downgrade foo         # roll back to an earlier version
 gpk -Sc                   # clear cached downloads
 gpk autoremove            # remove dependencies nothing needs
+gpk hold linux            # pin a package so upgrades skip it
+gpk undo                  # reverse the last thing gpk did
+gpk managers              # which managers are detected, with package counts
 gpk -Qi foo               # info    ·  gpk -Q lists everything installed
 ```
 
@@ -212,7 +215,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 </details>
 
 <details>
-<summary><strong>Supported Package Managers (41)</strong></summary>
+<summary><strong>Supported Package Managers (42)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|

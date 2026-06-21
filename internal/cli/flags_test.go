@@ -3,6 +3,8 @@ package cli
 import (
 	"reflect"
 	"testing"
+
+	"github.com/neur0map/glazepkg/internal/manager"
 )
 
 func TestReorderFlagsFirst(t *testing.T) {
@@ -32,6 +34,30 @@ func TestReorderFlagsFirst(t *testing.T) {
 			}
 			if !reflect.DeepEqual(got, c.want) {
 				t.Errorf("reorderFlagsFirst(%v) = %v, want %v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
+func TestPrepManagerArgs(t *testing.T) {
+	mgrs := manager.All()
+	cases := []struct {
+		name       string
+		in         []string
+		valueFlags []string
+		want       []string
+	}{
+		{"inline manager", []string{"ffmpeg", "-aur"}, nil, []string{"--manager", "aur", "ffmpeg"}},
+		{"cask alias", []string{"--cask", "firefox"}, nil, []string{"--manager", "brew-cask", "firefox"}},
+		{"merge explicit and inline", []string{"pkg", "--manager", "brew", "-aur"}, nil, []string{"--manager", "brew,aur", "pkg"}},
+		{"value flag kept with value", []string{"ripgrep", "--limit", "5"}, []string{"limit"}, []string{"--limit", "5", "ripgrep"}},
+		{"no manager", []string{"git", "--json"}, nil, []string{"--json", "git"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := prepManagerArgs(c.in, mgrs, c.valueFlags...)
+			if !reflect.DeepEqual(got, c.want) {
+				t.Errorf("prepManagerArgs(%v) = %v, want %v", c.in, got, c.want)
 			}
 		})
 	}

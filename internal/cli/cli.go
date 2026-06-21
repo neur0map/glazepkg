@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 )
@@ -23,18 +24,32 @@ var subcommands = map[string]subcommandFunc{}
 
 // Dispatch routes args[0] to the matching subcommand. Returns the exit code
 // the caller should propagate (cmd/gpk/main.go does os.Exit on the result).
+//
+// An unknown name that closely matches a real subcommand yields a "did you
+// mean" hint; any other bareword is treated as a search query with an
+// interactive install picker, the way `yay <pkg>` behaves.
 func Dispatch(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "error: no subcommand specified")
 		return ExitErr
 	}
 	name := args[0]
-	fn, ok := subcommands[name]
-	if !ok {
-		fmt.Fprintf(stderr, "error: unknown subcommand %q\n", name)
+	if fn, ok := subcommands[name]; ok {
+		return fn(args[1:], mgrs, version, stdout, stderr, stdin)
+	}
+	if strings.HasPrefix(name, "-") {
+		fmt.Fprintf(stderr, "error: unknown option %q\n", name)
 		return ExitErr
 	}
-	return fn(args[1:], mgrs, version, stdout, stderr, stdin)
+	if best, d := closest(name, SubcommandNames()); d > 0 && d <= 2 {
+		fmt.Fprintf(stderr, "error: unknown command %q — did you mean %q?\n", name, best)
+		return ExitErr
+	}
+	if search, ok := subcommands["search"]; ok {
+		return search(append([]string{"--install"}, args...), mgrs, version, stdout, stderr, stdin)
+	}
+	fmt.Fprintf(stderr, "error: unknown subcommand %q\n", name)
+	return ExitErr
 }
 
 // SubcommandNames returns the registered subcommand names, sorted, for use
@@ -47,4 +62,3 @@ func SubcommandNames() []string {
 	sort.Strings(names)
 	return names
 }
-

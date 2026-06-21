@@ -68,66 +68,6 @@ func stripSudoStdinFlag(cmd *exec.Cmd) *exec.Cmd {
 	return newCmd
 }
 
-// resolveInstallManager picks the manager to use for `gpk install <name>`.
-//
-// If the user passed --manager (via the filtered set being narrower than
-// the full set), and exactly one of those managers reports the package
-// available via Search, that manager wins.
-//
-// If the user did NOT pass --manager (filtered == manager.All()), and the
-// package is available via Search in exactly one manager, that one wins.
-//
-// If the package is available in multiple managers, returns an error
-// suitable for exit-3: "available in N managers (a, b, c), pick with
-// --manager". Callers detect this via errors.Is(err, ErrAmbiguous).
-//
-// If no manager has the package available, returns ErrNotFound.
-//
-// The "available" check uses each manager's Search method (managers that
-// don't implement Searcher are skipped, so they can't be auto-picked).
-func resolveInstallManager(name string, filtered []manager.Manager) (manager.Manager, error) {
-	var candidates []manager.Manager
-	for _, m := range filtered {
-		if !m.Available() {
-			continue
-		}
-		s, ok := m.(manager.Searcher)
-		if !ok {
-			continue
-		}
-		results, err := s.Search(name)
-		if err != nil {
-			continue // swallow per-manager errors; we just won't auto-pick this one
-		}
-		for _, p := range results {
-			if p.Name == name {
-				candidates = append(candidates, m)
-				break
-			}
-		}
-	}
-
-	switch len(candidates) {
-	case 0:
-		return nil, fmt.Errorf("%w: %q not available in any searched manager", ErrNotFound, name)
-	case 1:
-		return candidates[0], nil
-	default:
-		var names []string
-		for _, m := range candidates {
-			names = append(names, string(m.Name()))
-		}
-		return nil, fmt.Errorf("%w: %q available in %d managers (%s)",
-			ErrAmbiguous, name, len(candidates), strings.Join(names, ", "))
-	}
-}
-
-// Sentinel errors returned by resolveInstallManager. Tests use errors.Is.
-var (
-	ErrAmbiguous = fmt.Errorf("ambiguous package")
-	ErrNotFound  = fmt.Errorf("package not found")
-)
-
 // invalidateAfterWrite clears cached state for a manager after install,
 // remove, or upgrade. Always called after a successful subprocess run.
 //

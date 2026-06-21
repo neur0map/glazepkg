@@ -10,17 +10,28 @@ import (
 	"github.com/neur0map/glazepkg/internal/manager"
 )
 
-func TestDispatchUnknownSubcommand(t *testing.T) {
+func TestDispatchTypoSuggestsSubcommand(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code := Dispatch([]string{"bogus"}, nil, "test", &out, &errOut, nil)
+	code := Dispatch([]string{"instal", "git"}, nil, "test", &out, &errOut, nil)
 	if code != ExitErr {
 		t.Errorf("exit code = %d, want %d", code, ExitErr)
 	}
-	if !strings.Contains(errOut.String(), "unknown subcommand") {
-		t.Errorf("stderr = %q, want substring 'unknown subcommand'", errOut.String())
+	if !strings.Contains(errOut.String(), "did you mean") || !strings.Contains(errOut.String(), "install") {
+		t.Errorf("stderr = %q, want a suggestion for 'install'", errOut.String())
 	}
-	if out.Len() != 0 {
-		t.Errorf("stdout = %q, want empty", out.String())
+}
+
+func TestDispatchBarewordSearches(t *testing.T) {
+	// A word far from any subcommand is treated as a search query (yay-style).
+	// With no managers there is nothing to find, so it reports a clean miss.
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"zzzznotacommand"}, nil, "test", &out, &errOut, nil)
+	if code != ExitNegative {
+		t.Errorf("exit code = %d, want %d", code, ExitNegative)
+	}
+	if !strings.Contains(errOut.String(), "no packages found") {
+		t.Errorf("stderr = %q, want 'no packages found'", errOut.String())
 	}
 }
 

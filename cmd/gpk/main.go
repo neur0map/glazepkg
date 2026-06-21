@@ -29,11 +29,11 @@ func main() {
 			runUpdate()
 			return
 		}
-		// Any other first arg is treated as a subcommand attempt.
-		// cli.Dispatch handles unknown names with a clean error + ExitErr,
-		// so users typing `gpk install foo` get a real message instead of
-		// the TUI failing with a TTY error.
-		os.Exit(cli.Dispatch(os.Args[1:], manager.All(), version, os.Stdout, os.Stderr, os.Stdin))
+		args := os.Args[1:]
+		if opArgs, ok := cli.TranslateOps(args); ok {
+			args = opArgs
+		}
+		os.Exit(cli.Dispatch(args, manager.All(), version, os.Stdout, os.Stderr, os.Stdin))
 	}
 
 	p := tea.NewProgram(ui.NewModel(version), tea.WithAltScreen())
@@ -87,34 +87,52 @@ func printHelp() {
 	fmt.Println()
 
 	fmt.Println(section("USAGE"))
-	fmt.Printf("  %s %s\n", cmd("gpk", 22), "Launch the TUI")
-	fmt.Printf("  %s %s\n", cmd("gpk <subcommand>", 22), "Run a headless command")
-	fmt.Printf("  %s %s\n", cmd("gpk update", 22), "Self-update to latest release")
-	fmt.Printf("  %s %s\n", cmd("gpk version", 22), "Show current version")
-	fmt.Printf("  %s %s\n", cmd("gpk -h, --help", 22), "Show this help")
+	fmt.Printf("  %s %s\n", cmd("gpk", 24), "Launch the TUI")
+	fmt.Printf("  %s %s\n", cmd("gpk <pkg>", 24), "Search and install, the way yay does")
+	fmt.Printf("  %s %s\n", cmd("gpk <subcommand> ...", 24), "Run a headless command")
+	fmt.Printf("  %s %s\n", cmd("gpk update", 24), "Self-update to latest release")
+	fmt.Printf("  %s %s\n", cmd("gpk -h, --help", 24), "Show this help")
 	fmt.Println()
 
-	fmt.Printf("%s %s\n", section("HEADLESS"), muted("· read-only"))
-	fmt.Printf("  %s %s\n", cmd("list", 22), "List installed packages across all managers")
-	fmt.Printf("  %s %s\n", cmd("installed <pkg>...", 22), "Check if packages are installed (exit 0/2)")
-	fmt.Printf("  %s %s\n", cmd("info <pkg>", 22), "Show details for one installed package")
-	fmt.Printf("  %s %s\n", cmd("source-of <pkg>", 22), "Print which manager has the package")
-	fmt.Printf("  %s %s\n", cmd("outdated", 22), "List packages with available updates")
+	fmt.Printf("%s %s\n", section("COMMANDS"), muted("· read"))
+	fmt.Printf("  %s %s\n", cmd("search <query>", 24), "Search packages across every manager")
+	fmt.Printf("  %s %s\n", cmd("list [filter]", 24), "List installed packages")
+	fmt.Printf("  %s %s\n", cmd("info <pkg>", 24), "Show details for one package")
+	fmt.Printf("  %s %s\n", cmd("source-of <pkg>", 24), "Print which manager has a package")
+	fmt.Printf("  %s %s\n", cmd("outdated", 24), "List packages with available updates")
+	fmt.Printf("  %s %s\n", cmd("installed <pkg>...", 24), "Check if packages are installed (exit 0/2)")
+	fmt.Printf("  %s %s\n", cmd("managers", 24), "Show which managers are detected, with counts")
 	fmt.Println()
 
-	fmt.Printf("%s %s\n", section("HEADLESS"), muted("· write"))
-	fmt.Printf("  %s %s\n", cmd("install <pkg>...", 22), "Install one or more packages")
-	fmt.Printf("  %s %s\n", cmd("remove <pkg>...", 22), "Remove a package (--with-deps for orphans)")
-	fmt.Printf("  %s %s\n", cmd("upgrade <pkg>...", 22), "Upgrade installed packages to latest")
+	fmt.Printf("%s %s\n", section("COMMANDS"), muted("· write"))
+	fmt.Printf("  %s %s\n", cmd("install <pkg>...", 24), "Install packages (name@version to pin)")
+	fmt.Printf("  %s %s\n", cmd("remove <pkg>...", 24), "Remove a package (--with-deps for orphans)")
+	fmt.Printf("  %s %s\n", cmd("upgrade [pkg...]", 24), "Upgrade packages, or everything if none given")
+	fmt.Printf("  %s %s\n", cmd("downgrade <pkg>", 24), "Install an earlier version (version picker)")
+	fmt.Printf("  %s %s\n", cmd("clean", 24), "Clear cached downloads (--all for everything)")
+	fmt.Printf("  %s %s\n", cmd("autoremove", 24), "Remove orphaned deps (--print to just list)")
+	fmt.Printf("  %s %s\n", cmd("hold/unhold <pkg>", 24), "Pin a package so upgrades skip it")
+	fmt.Printf("  %s %s\n", cmd("history", 24), "Show recent actions gpk performed")
+	fmt.Printf("  %s %s\n", cmd("undo", 24), "Reverse gpk's last action")
+	fmt.Println()
+
+	fmt.Println(section("PACMAN / YAY FLAGS"))
+	fmt.Printf("  %s %-12s  %s %s\n", flagText("-S pkg", 10), "install", flagText("-Ss term", 10), "search")
+	fmt.Printf("  %s %-12s  %s %s\n", flagText("-Syu", 10), "upgrade all", flagText("-Si pkg", 10), "info")
+	fmt.Printf("  %s %-12s  %s %s\n", flagText("-R pkg", 10), "remove", flagText("-Rns pkg", 10), "remove + deps")
+	fmt.Printf("  %s %-12s  %s %s\n", flagText("-Q [term]", 10), "list", flagText("-Qi pkg", 10), "info")
+	fmt.Printf("  %s %-12s  %s %s\n", flagText("-Qu", 10), "outdated", flagText("-Qdt", 10), "list orphans")
+	fmt.Printf("  %s %s\n", flagText("-Sc / -Scc", 10), "clean cached downloads")
 	fmt.Println()
 
 	fmt.Println(section("COMMON FLAGS"))
-	fmt.Printf("  %s %s\n", flagText("--manager M, -m", 18), "filter manager (e.g. pacman, pacman,aur, !brew)")
-	fmt.Printf("  %s %s\n", flagText("--json", 18), "emit a JSON envelope on stdout")
-	fmt.Printf("  %s %s\n", flagText("--no-cache", 18), "bypass the scan/update cache")
-	fmt.Printf("  %s %s\n", flagText("--yes, -y", 18), "skip the y/N prompt (also skips manager's prompt)")
-	fmt.Printf("  %s %s\n", flagText("--dry-run", 18), "print the command without running it (writes only)")
-	fmt.Printf("  %s %s\n", flagText("--quiet, -q", 18), "suppress progress on stderr")
+	fmt.Printf("  %s %s\n", flagText("--manager M, -m", 20), "filter manager (e.g. pacman, pacman,aur, !brew)")
+	fmt.Printf("  %s %s\n", flagText("--aur, --brew, ...", 20), "shorthand for --manager <name>")
+	fmt.Printf("  %s %s\n", flagText("--json", 20), "emit a JSON envelope on stdout")
+	fmt.Printf("  %s %s\n", flagText("--no-cache", 20), "bypass the scan/update cache")
+	fmt.Printf("  %s %s\n", flagText("--yes, -y", 20), "skip prompts")
+	fmt.Printf("  %s %s\n", flagText("--dry-run", 20), "print the command without running it")
+	fmt.Printf("  %s %s\n", flagText("--quiet, -q", 20), "suppress progress on stderr")
 	fmt.Printf("  %s\n", muted("Run `gpk <subcommand> --help` for the full per-command flag list."))
 	fmt.Println()
 
@@ -141,11 +159,13 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("? / q", 18), "Toggle help / quit")
 	fmt.Println()
 
-	fmt.Printf("%s %s\n", section("SUPPORTED MANAGERS"), muted("(36)"))
+	fmt.Printf("%s %s\n", section("SUPPORTED MANAGERS"), muted(fmt.Sprintf("(%d)", len(manager.All()))))
+	fmt.Printf("  %s %s\n", cmd("gpk managers", 22), muted("shows which are detected on your system"))
 	fmt.Println(muted("  brew, pacman, aur, apt, dnf, snap, pip, pipx, uv, cargo, go,"))
 	fmt.Println(muted("  npm, pnpm, bun, flatpak, macports, pkgsrc, opam, gem, pkg,"))
 	fmt.Println(muted("  composer, mas, apk, nix, conda, luarocks, xbps, portage, guix,"))
-	fmt.Println(muted("  winget, chocolatey, nuget, powershell, windows-updates, scoop, maven"))
+	fmt.Println(muted("  winget, chocolatey, nuget, powershell, windows-updates, scoop,"))
+	fmt.Println(muted("  maven, am, gvm, mise, quicklisp, softwareupdate"))
 	fmt.Println()
 
 	fmt.Println(section("DATA PATHS"))

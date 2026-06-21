@@ -36,12 +36,37 @@ func upgradeFakeMgrs() []manager.Manager {
 	}
 }
 
-func TestUpgradeNoArgs(t *testing.T) {
+func TestUpgradeAllNoBulkManagers(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
+	// The fakes expose no bulk-upgrade command, so "upgrade everything" has
+	// nothing to run and reports a clean no-op.
 	code := Dispatch([]string{"upgrade"}, upgradeFakeMgrs(), "test", &out, &errOut, nil)
-	if code != ExitErr {
-		t.Errorf("exit %d, want %d", code, ExitErr)
+	if code != ExitOK {
+		t.Errorf("exit %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(errOut.String(), "bulk upgrade") {
+		t.Errorf("stderr = %q, want a bulk-upgrade notice", errOut.String())
+	}
+}
+
+func TestUpgradeAllExecutes(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	var ran []string
+	bulk := &fakeManager{
+		name: model.SourcePacman, available: true,
+		upgradeAllCmdFn: func(yes bool) *exec.Cmd {
+			ran = append(ran, "pacman")
+			return exec.Command("/bin/true", "-Syu")
+		},
+	}
+	var out, errOut bytes.Buffer
+	code := Dispatch([]string{"upgrade", "--yes", "--quiet"}, []manager.Manager{bulk}, "test", &out, &errOut, nil)
+	if code != ExitOK {
+		t.Fatalf("exit %d, stderr=%q", code, errOut.String())
+	}
+	if len(ran) == 0 {
+		t.Error("expected the bulk upgrade command to be built and run")
 	}
 }
 

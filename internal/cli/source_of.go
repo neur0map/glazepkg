@@ -24,7 +24,7 @@ func runSourceOf(args []string, mgrs []manager.Manager, version string, stdout, 
 		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache")
 	)
 	fs.StringVar(mgrFlag, "m", "", "alias for --manager")
-	args = reorderFlagsFirst(args, []string{"manager", "m"})
+	args = prepManagerArgs(args, mgrs)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return ExitOK

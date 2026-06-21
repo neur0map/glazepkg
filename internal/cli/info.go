@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
@@ -23,7 +24,7 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache")
 	)
 	fs.StringVar(mgrFlag, "m", *mgrFlag, "alias for --manager")
-	args = reorderFlagsFirst(args, []string{"manager", "m"})
+	args = prepManagerArgs(args, mgrs)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return ExitOK
@@ -64,48 +65,70 @@ func runInfo(args []string, mgrs []manager.Manager, version string, stdout, stde
 		}
 	}
 
-	if found == nil {
+	st := newStyler()
+
+	if found != nil {
+		if *jsonFlag {
+			if err := writeEnvelope(stdout, version, toCLIPackage(*found)); err != nil {
+				fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
+				return ExitErr
+			}
+			return ExitOK
+		}
+		writeInfoHuman(stdout, *found, true, st)
+		return ExitOK
+	}
+
+	// Not installed: fall back to what's available across managers, so
+	// `gpk info <pkg>` / `-Si <pkg>` answers "where can I get it, which
+	// version, what is it" the way pacman -Si does.
+	cands := findInstallCandidates(name, filtered)
+	if len(cands) == 0 {
+		if sug := suggestPackages(name, filtered); len(sug) > 0 {
+			fmt.Fprintf(stderr, "%q not found. did you mean: %s\n", name, strings.Join(sug, ", "))
+		}
 		return ExitNegative
 	}
 
 	if *jsonFlag {
-		if err := writeEnvelope(stdout, version, toCLIPackage(*found)); err != nil {
+		if err := writeEnvelope(stdout, version, toCLIPackage(cands[0].pkg)); err != nil {
 			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
 			return ExitErr
 		}
 		return ExitOK
 	}
-
-	writeInfoHuman(stdout, *found)
+	for _, c := range cands {
+		writeInfoHuman(stdout, c.pkg, false, st)
+	}
 	return ExitOK
 }
 
-func writeInfoHuman(w io.Writer, p model.Package) {
+func writeInfoHuman(w io.Writer, p model.Package, installed bool, st *styler) {
+	var lines []string
 	field := func(k, v string) {
 		if v == "" {
 			return
 		}
-		fmt.Fprintf(w, "%-14s %s\n", k+":", v)
+		lines = append(lines, st.dim(padRight(k, 13))+v)
 	}
-	field("Name", p.Name)
-	field("Version", p.Version)
-	field("Source", string(p.Source))
+	field("Version", st.version(p.Version))
+	field("Source", st.mgrName(p.Source))
+	if installed {
+		field("Status", st.ok("installed"))
+	} else {
+		field("Status", st.dim("available"))
+	}
 	field("Description", p.Description)
 	field("Size", p.Size)
 	field("Repository", p.Repository)
 	if p.LatestVersion != "" && p.LatestVersion != p.Version {
-		field("Latest", p.LatestVersion)
+		field("Latest", st.warn(p.LatestVersion))
 	}
 	if len(p.DependsOn) > 0 {
-		fmt.Fprintln(w, "Depends on:")
-		for _, d := range p.DependsOn {
-			fmt.Fprintf(w, "  %s\n", d)
-		}
+		field("Depends on", strings.Join(p.DependsOn, ", "))
 	}
 	if len(p.RequiredBy) > 0 {
-		fmt.Fprintln(w, "Required by:")
-		for _, d := range p.RequiredBy {
-			fmt.Fprintf(w, "  %s\n", d)
-		}
+		field("Required by", strings.Join(p.RequiredBy, ", "))
 	}
+	fmt.Fprintln(w, st.box(p.Name, lines))
 }

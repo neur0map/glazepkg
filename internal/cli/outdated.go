@@ -8,6 +8,8 @@ import (
 	"sort"
 
 	"github.com/neur0map/glazepkg/internal/manager"
+	"github.com/neur0map/glazepkg/internal/model"
+	"github.com/neur0map/glazepkg/internal/snapshot"
 )
 
 func init() {
@@ -34,7 +36,7 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 	)
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
 	fs.StringVar(mgrFlag, "m", "", "alias for --manager")
-	args = reorderFlagsFirst(args, []string{"manager", "m"})
+	args = prepManagerArgs(args, mgrs)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return ExitOK
@@ -67,11 +69,15 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 	}
 	updates := manager.FetchUpdates(filtered, pkgs, cache)
 
-	// Build entries. Stable order: by source then name.
+	// Build entries. Held packages are pinned, so they're left out.
+	holds := snapshot.LoadHolds()
 	entries := make([]outdatedEntry, 0, len(updates))
 	for _, p := range pkgs {
 		latest, ok := updates[p.Key()]
 		if !ok || latest == "" || latest == p.Version {
+			continue
+		}
+		if snapshot.IsHeld(holds, p.Source, p.Name) {
 			continue
 		}
 		entries = append(entries, outdatedEntry{
@@ -102,7 +108,7 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 			return ExitErr
 		}
 	default:
-		writeOutdatedHuman(stdout, entries)
+		writeOutdatedHuman(stdout, entries, newStyler())
 	}
 
 	if *exitCodeFlag && len(entries) > 0 {
@@ -111,9 +117,9 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 	return ExitOK
 }
 
-func writeOutdatedHuman(w io.Writer, entries []outdatedEntry) {
+func writeOutdatedHuman(w io.Writer, entries []outdatedEntry, st *styler) {
 	if len(entries) == 0 {
-		fmt.Fprintln(w, "(no updates)")
+		fmt.Fprintln(w, st.dim("(no updates)"))
 		return
 	}
 	nameW, srcW := 4, 6
@@ -125,8 +131,14 @@ func writeOutdatedHuman(w io.Writer, entries []outdatedEntry) {
 			srcW = len(e.Source)
 		}
 	}
-	fmt.Fprintf(w, "%-*s  %-*s  %s -> %s\n", nameW, "NAME", srcW, "SOURCE", "CURRENT", "LATEST")
+	plural := "s"
+	if len(entries) == 1 {
+		plural = ""
+	}
+	fmt.Fprintln(w, st.title(fmt.Sprintf("%d update%s available", len(entries), plural)))
 	for _, e := range entries {
-		fmt.Fprintf(w, "%-*s  %-*s  %s -> %s\n", nameW, e.Name, srcW, e.Source, e.Current, e.Latest)
+		name := st.paint(padRight(e.Name, nameW), st.pal.White, true)
+		src := st.paint(padRight(e.Source, srcW), st.mgrColorOf(model.Source(e.Source)), true)
+		fmt.Fprintf(w, "  %s  %s  %s %s %s\n", name, src, st.dim(e.Current), st.dim("→"), st.warn(e.Latest))
 	}
 }

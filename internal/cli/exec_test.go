@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -74,81 +73,71 @@ func TestStripSudoStdinFlag_SudoWithoutSStaysIntact(t *testing.T) {
 	}
 }
 
-func TestResolveInstallManager_SingleMatch(t *testing.T) {
+func TestFindCandidates_SingleMatch(t *testing.T) {
 	pacman := &fakeManager{
-		name:      model.SourcePacman,
-		available: true,
+		name: model.SourcePacman, available: true,
 		searchFn: func(q string) ([]model.Package, error) {
 			return []model.Package{{Name: "git", Source: model.SourcePacman}}, nil
 		},
 	}
 	brew := &fakeManager{
-		name:      model.SourceBrew,
-		available: true,
+		name: model.SourceBrew, available: true,
 		searchFn: func(q string) ([]model.Package, error) { return nil, nil },
 	}
-	got, err := resolveInstallManager("git", []manager.Manager{pacman, brew})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got.Name() != model.SourcePacman {
-		t.Errorf("got %s, want pacman", got.Name())
+	cands := findInstallCandidates("git", []manager.Manager{pacman, brew})
+	if len(cands) != 1 || cands[0].mgr.Name() != model.SourcePacman {
+		t.Fatalf("got %d candidates, want 1 (pacman)", len(cands))
 	}
 }
 
-func TestResolveInstallManager_AmbiguousReturnsErr(t *testing.T) {
+func TestFindCandidates_Ambiguous(t *testing.T) {
 	pacman := &fakeManager{
-		name:      model.SourcePacman,
-		available: true,
+		name: model.SourcePacman, available: true,
 		searchFn: func(q string) ([]model.Package, error) {
 			return []model.Package{{Name: "ripgrep"}}, nil
 		},
 	}
 	brew := &fakeManager{
-		name:      model.SourceBrew,
-		available: true,
+		name: model.SourceBrew, available: true,
 		searchFn: func(q string) ([]model.Package, error) {
 			return []model.Package{{Name: "ripgrep"}}, nil
 		},
 	}
-	_, err := resolveInstallManager("ripgrep", []manager.Manager{pacman, brew})
-	if !errors.Is(err, ErrAmbiguous) {
-		t.Fatalf("got %v, want ErrAmbiguous", err)
-	}
-	if !strings.Contains(err.Error(), "pacman") || !strings.Contains(err.Error(), "brew") {
-		t.Errorf("error message should list both managers: %v", err)
+	cands := findInstallCandidates("ripgrep", []manager.Manager{pacman, brew})
+	if len(cands) != 2 {
+		t.Fatalf("got %d candidates, want 2", len(cands))
 	}
 }
 
-func TestResolveInstallManager_NotFoundReturnsErr(t *testing.T) {
+func TestFindCandidates_NotFound(t *testing.T) {
 	pacman := &fakeManager{
-		name:      model.SourcePacman,
-		available: true,
+		name: model.SourcePacman, available: true,
 		searchFn: func(q string) ([]model.Package, error) { return nil, nil },
 	}
-	_, err := resolveInstallManager("nope", []manager.Manager{pacman})
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("got %v, want ErrNotFound", err)
+	if cands := findInstallCandidates("nope", []manager.Manager{pacman}); len(cands) != 0 {
+		t.Fatalf("got %d candidates, want 0", len(cands))
 	}
 }
 
-func TestResolveInstallManager_SkipsNonSearcher(t *testing.T) {
-	// A fakeManager whose searchFn is nil acts as a non-Searcher via the
-	// nil-guard in Search(), but the type assertion still succeeds.
-	// We need a separate type that doesn't implement Search at all.
+func TestFindCandidates_DedupesToCanonicalManager(t *testing.T) {
+	// pacman's search surfaces an AUR-sourced result; the AUR manager returns
+	// the same package. The candidate must map to the AUR manager and not
+	// appear twice.
 	pacman := &fakeManager{
-		name:      model.SourcePacman,
-		available: true,
+		name: model.SourcePacman, available: true,
 		searchFn: func(q string) ([]model.Package, error) {
-			return []model.Package{{Name: "git"}}, nil
+			return []model.Package{{Name: "yay", Source: model.SourceAUR}}, nil
 		},
 	}
-	got, err := resolveInstallManager("git", []manager.Manager{pacman})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	aur := &fakeManager{
+		name: model.SourceAUR, available: true,
+		searchFn: func(q string) ([]model.Package, error) {
+			return []model.Package{{Name: "yay", Source: model.SourceAUR}}, nil
+		},
 	}
-	if got.Name() != model.SourcePacman {
-		t.Errorf("got %s, want pacman", got.Name())
+	cands := findInstallCandidates("yay", []manager.Manager{pacman, aur})
+	if len(cands) != 1 || cands[0].mgr.Name() != model.SourceAUR {
+		t.Fatalf("got %d candidates, want 1 (aur)", len(cands))
 	}
 }
 

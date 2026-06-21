@@ -16,19 +16,20 @@ type fakeManager struct {
 	name      model.Source
 	available bool
 
-	scanFn            func() ([]model.Package, error)
-	checkUpdatesFn    func(pkgs []model.Package) map[string]string
-	describeFn        func(pkgs []model.Package) map[string]string
-	depsFn            func(pkgs []model.Package) map[string][]string
-	upgradeCmdFn         func(name string) *exec.Cmd
-	upgradeCmdYesFn      func(name string) *exec.Cmd
-	removeCmdFn          func(name string) *exec.Cmd
-	removeCmdYesFn       func(name string) *exec.Cmd
-	removeCmdWithDepsFn  func(name string) *exec.Cmd
+	scanFn                 func() ([]model.Package, error)
+	checkUpdatesFn         func(pkgs []model.Package) map[string]string
+	describeFn             func(pkgs []model.Package) map[string]string
+	depsFn                 func(pkgs []model.Package) map[string][]string
+	upgradeCmdFn           func(name string) *exec.Cmd
+	upgradeCmdYesFn        func(name string) *exec.Cmd
+	removeCmdFn            func(name string) *exec.Cmd
+	removeCmdYesFn         func(name string) *exec.Cmd
+	removeCmdWithDepsFn    func(name string) *exec.Cmd
 	removeCmdWithDepsYesFn func(name string) *exec.Cmd
-	searchFn             func(query string) ([]model.Package, error)
-	installCmdFn         func(name string) *exec.Cmd
-	installCmdYesFn      func(name string) *exec.Cmd
+	searchFn               func(query string) ([]model.Package, error)
+	installCmdFn           func(name string) *exec.Cmd
+	installCmdYesFn        func(name string) *exec.Cmd
+	upgradeAllCmdFn        func(yes bool) *exec.Cmd
 }
 
 func (f *fakeManager) Name() model.Source { return f.name }
@@ -95,6 +96,13 @@ func (f *fakeManager) InstallCmdYes(name string) *exec.Cmd {
 		return nil
 	}
 	return f.installCmdYesFn(name)
+}
+
+func (f *fakeManager) UpgradeAllCmd(yes bool) *exec.Cmd {
+	if f.upgradeAllCmdFn == nil {
+		return nil
+	}
+	return f.upgradeAllCmdFn(yes)
 }
 
 func (f *fakeManager) UpgradeCmdYes(name string) *exec.Cmd {
