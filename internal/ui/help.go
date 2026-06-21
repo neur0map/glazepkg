@@ -31,6 +31,7 @@ func helpBody() string {
 		{"f", "Cycle filter"},
 		{"r", "Rescan all managers"},
 		{"U", "System update (active manager tab)"},
+		{"Q", "View operation queue"},
 		{"s", "Save snapshot"},
 		{"i", "Search + install packages"},
 		{"d", "Diff against last snapshot"},

@@ -32,6 +32,8 @@ const (
 	ModalConfirmRemove
 	// ModalConfirmBatch confirms a batch operation on multi-selected packages.
 	ModalConfirmBatch
+	// ModalQueue lists pending queued operations and allows cancelling them.
+	ModalQueue
 )
 
 // ModalFrameOpts is the structural input for every modal. Pure string I/O.
@@ -279,6 +281,7 @@ func (m *Model) resetTransientModalState() {
 	m.removeFocus = 0
 	m.batchFocus = 0
 	m.batchScroll = 0
+	m.queueCursor = 0
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
 }
@@ -302,6 +305,8 @@ func (m *Model) handleModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return handleRemoveConfirmModalKey(m, msg)
 	case ModalConfirmBatch:
 		return handleBatchConfirmModalKey(m, msg)
+	case ModalQueue:
+		return handleQueueModalKey(m, msg)
 	}
 	return m, nil
 }
@@ -329,6 +334,8 @@ func (m *Model) renderModal(base string) string {
 		opts = renderRemoveConfirmModalBody(m)
 	case ModalConfirmBatch:
 		opts = renderBatchConfirmModalBody(m)
+	case ModalQueue:
+		opts = renderQueueModalBody(m)
 	}
 	box := ModalFrame(opts)
 	clipped := clipModalByAnim(box, m.modalAnim)
@@ -764,5 +771,41 @@ func renderBatchConfirmModalBody(m *Model) ModalFrameOpts {
 		Title:  title,
 		Body:   batchConfirmBody(m),
 		Footer: "tab cycle · ↑↓ scroll · enter confirm · esc cancel",
+	}
+}
+
+func handleQueueModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := normalizeHotkey(msg.String())
+	switch key {
+	case "esc", "q", "Q":
+		return m, m.closeModal()
+	case "j", "down":
+		if m.queueCursor < len(m.opQueue)-1 {
+			m.queueCursor++
+		}
+	case "k", "up":
+		if m.queueCursor > 0 {
+			m.queueCursor--
+		}
+	case "g", "home":
+		m.queueCursor = 0
+	case "G", "end":
+		if len(m.opQueue) > 0 {
+			m.queueCursor = len(m.opQueue) - 1
+		}
+	case "x", "d":
+		m.cancelQueuedOp(m.queueCursor)
+		if len(m.opQueue) == 0 {
+			return m, m.closeModal()
+		}
+	}
+	return m, nil
+}
+
+func renderQueueModalBody(m *Model) ModalFrameOpts {
+	return ModalFrameOpts{
+		Title:  "OPERATION QUEUE",
+		Body:   queueBody(m),
+		Footer: "↑↓ navigate · x cancel · esc close",
 	}
 }

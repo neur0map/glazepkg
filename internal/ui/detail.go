@@ -525,3 +525,23 @@ func isHelpHeading(line string) bool {
 	}
 	return false
 }
+
+// queueBody renders the pending operation queue for the queue modal.
+func queueBody(m *Model) string {
+	if len(m.opQueue) == 0 {
+		return StyleDim.Render("  Queue is empty")
+	}
+	var b strings.Builder
+	for i, op := range m.opQueue {
+		label := op.label()
+		if i == m.queueCursor {
+			b.WriteString(StyleSelected.Render(fmt.Sprintf("  ▸ %-44s", label)))
+		} else {
+			b.WriteString(StyleDetailVal.Render(fmt.Sprintf("  %d. %-41s", i+1, label)))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(StyleDim.Render(fmt.Sprintf("  %d queued", len(m.opQueue))))
+	return b.String()
+}

@@ -164,6 +164,21 @@ type removeRequest struct {
 	password   string
 }
 
+// queuedOp is a confirmed upgrade or remove waiting for the in-flight
+// operation to finish (issue #13).
+type queuedOp struct {
+	isRemove bool
+	upgrade  upgradeRequest
+	remove   removeRequest
+}
+
+func (o queuedOp) label() string {
+	if o.isRemove {
+		return "remove " + o.remove.pkg.Name
+	}
+	return o.upgrade.opLabel + " " + o.upgrade.pkg.Name
+}
+
 type removeNotifClearMsg struct{}
 
 type searchResultMsg struct {
@@ -246,6 +261,8 @@ type Model struct {
 	pkgHelpLines     []string
 	pkgHelpScroll    int
 	pkgHelpIsMan     bool
+	opQueue          []queuedOp
+	queueCursor      int
 	confirmFocus     int // 0 = password (privileged only), 1 = Yes, 2 = No
 	pendingUpgrade   *upgradeRequest
 	passwordInput    textinput.Model
@@ -609,11 +626,6 @@ func fetchUpdates(pkgs []model.Package, cache *manager.UpdateCache) tea.Cmd {
 }
 
 func (m *Model) upgradeDetailPackage() tea.Cmd {
-	if m.upgradeInFlight {
-		m.statusMsg = "upgrade already in progress"
-		return nil
-	}
-
 	pkg := m.detailPkg
 
 	mgr := manager.BySource(pkg.Source)
@@ -666,10 +678,6 @@ func (m *Model) activeTabSource() model.Source {
 // systemUpdate runs the active tab manager's whole-system update through the
 // upgrade confirm flow (issue #20).
 func (m *Model) systemUpdate() tea.Cmd {
-	if m.upgradeInFlight || m.removeInFlight {
-		m.statusMsg = "operation already in progress"
-		return nil
-	}
 	src := m.activeTabSource()
 	if src == "" {
 		m.statusMsg = "switch to a manager tab to run a system update"
@@ -830,6 +838,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if op == "" {
 			op = "upgrade"
 		}
+		var rescan tea.Cmd
 		if msg.err != nil {
 			errMsg := msg.err.Error()
 			if len(errMsg) > 120 {
@@ -837,22 +846,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.upgradeNotifMsg = fmt.Sprintf("%s failed: %s", op, errMsg)
 			m.upgradeNotifErr = true
-			return m, tea.Tick(8*time.Second, func(time.Time) tea.Msg {
-				return upgradeNotifClearMsg{}
-			})
+		} else {
+			m.upgradeNotifMsg = fmt.Sprintf("%s %s successfully", msg.pkg.Name, pastTense(op))
+			m.upgradeNotifErr = false
+			if msg.pkg.Description != "" {
+				m.descCache.Set(msg.pkg.Key(), msg.pkg.Description)
+			}
+			rescan = m.rescanManager(msg.pkg.Source)
 		}
-		m.upgradeNotifMsg = fmt.Sprintf("%s %s successfully", msg.pkg.Name, pastTense(op))
-		m.upgradeNotifErr = false
-		// Seed the description cache so the new package shows its description after rescan
-		if msg.pkg.Description != "" {
-			m.descCache.Set(msg.pkg.Key(), msg.pkg.Description)
+		// Start the next queued op; it overwrites the notification with its own
+		// progress, so only schedule the clear once the queue is empty.
+		if next := m.startNextQueued(); next != nil {
+			return m, tea.Batch(rescan, next)
 		}
-		return m, tea.Batch(
-			m.rescanManager(msg.pkg.Source),
-			tea.Tick(5*time.Second, func(time.Time) tea.Msg {
-				return upgradeNotifClearMsg{}
-			}),
-		)
+		delay := 5 * time.Second
+		if m.upgradeNotifErr {
+			delay = 8 * time.Second
+		}
+		return m, tea.Batch(rescan, tea.Tick(delay, func(time.Time) tea.Msg {
+			return upgradeNotifClearMsg{}
+		}))
 
 	case upgradeNotifClearMsg:
 		m.upgradeNotifMsg = ""
@@ -863,6 +876,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.removeInFlight = false
 		m.removingPkgName = ""
 		m.removeCancel = nil
+		var rescan tea.Cmd
 		if msg.err != nil {
 			errMsg := msg.err.Error()
 			if len(errMsg) > 120 {
@@ -870,20 +884,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.removeNotifMsg = fmt.Sprintf("remove failed: %s", errMsg)
 			m.removeNotifErr = true
-			return m, tea.Tick(8*time.Second, func(time.Time) tea.Msg {
-				return removeNotifClearMsg{}
-			})
+		} else {
+			m.removeNotifMsg = fmt.Sprintf("%s removed successfully", msg.pkg.Name)
+			m.removeNotifErr = false
+			m.view = viewList
+			rescan = m.rescanManager(msg.pkg.Source)
 		}
-		m.removeNotifMsg = fmt.Sprintf("%s removed successfully", msg.pkg.Name)
-		m.removeNotifErr = false
-		// Go back to list view since the package no longer exists
-		m.view = viewList
-		return m, tea.Batch(
-			m.rescanManager(msg.pkg.Source),
-			tea.Tick(5*time.Second, func(time.Time) tea.Msg {
-				return removeNotifClearMsg{}
-			}),
-		)
+		if next := m.startNextQueued(); next != nil {
+			return m, tea.Batch(rescan, next)
+		}
+		delay := 5 * time.Second
+		if m.removeNotifErr {
+			delay = 8 * time.Second
+		}
+		return m, tea.Batch(rescan, tea.Tick(delay, func(time.Time) tea.Msg {
+			return removeNotifClearMsg{}
+		}))
 
 	case removeNotifClearMsg:
 		m.removeNotifMsg = ""
@@ -1402,6 +1418,8 @@ func (m *Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "U":
 		return m, m.systemUpdate()
+	case "Q":
+		return m, m.openQueue()
 	}
 	return m, nil
 }
@@ -1471,6 +1489,8 @@ func (m *Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		}
 		m.statusMsg = "loading man page..."
 		return m, fetchManPage(m.detailPkg.Name)
+	case "Q":
+		return m, m.openQueue()
 	}
 	return m, nil
 }
@@ -1887,12 +1907,56 @@ func (m *Model) executePendingUpgrade() tea.Cmd {
 	m.pendingUpgrade = nil
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
+	if m.upgradeInFlight || m.removeInFlight {
+		m.opQueue = append(m.opQueue, queuedOp{upgrade: req})
+		m.statusMsg = fmt.Sprintf("queued %s of %s (Q to view)", req.opLabel, req.pkg.Name)
+		return nil
+	}
+	return m.startUpgrade(req)
+}
+
+// startUpgrade marks an upgrade in flight and runs it.
+func (m *Model) startUpgrade(req upgradeRequest) tea.Cmd {
 	m.upgradeInFlight = true
 	m.upgradingPkgName = req.pkg.Name
-	op := gerund(req.opLabel)
-	m.upgradeNotifMsg = fmt.Sprintf("%s %s...", op, req.pkg.Name)
+	m.upgradeNotifMsg = fmt.Sprintf("%s %s...", gerund(req.opLabel), req.pkg.Name)
 	m.upgradeNotifErr = false
 	return tea.Batch(m.spinner.Tick, m.runUpgradeRequest(req))
+}
+
+// startNextQueued pops and starts the next queued operation, returning its
+// command, or nil when the queue is empty.
+func (m *Model) startNextQueued() tea.Cmd {
+	if len(m.opQueue) == 0 {
+		return nil
+	}
+	op := m.opQueue[0]
+	m.opQueue = m.opQueue[1:]
+	if op.isRemove {
+		return m.startRemove(op.remove)
+	}
+	return m.startUpgrade(op.upgrade)
+}
+
+// openQueue shows the operation queue modal, or a hint when it is empty.
+func (m *Model) openQueue() tea.Cmd {
+	if len(m.opQueue) == 0 {
+		m.statusMsg = "operation queue is empty"
+		return nil
+	}
+	m.queueCursor = 0
+	return m.openModal(ModalQueue)
+}
+
+// cancelQueuedOp drops the queued operation at index i.
+func (m *Model) cancelQueuedOp(i int) {
+	if i < 0 || i >= len(m.opQueue) {
+		return
+	}
+	m.opQueue = append(m.opQueue[:i], m.opQueue[i+1:]...)
+	if m.queueCursor >= len(m.opQueue) && m.queueCursor > 0 {
+		m.queueCursor--
+	}
 }
 
 func (m *Model) needsSudoPassword() bool {
@@ -2022,11 +2086,6 @@ func isPrivilegedSource(source model.Source) bool {
 // --- Remove flow ---
 
 func (m *Model) removeDetailPackage() tea.Cmd {
-	if m.removeInFlight || m.upgradeInFlight {
-		m.statusMsg = "operation already in progress"
-		return nil
-	}
-
 	pkg := m.detailPkg
 
 	mgr := manager.BySource(pkg.Source)
@@ -2100,6 +2159,16 @@ func (m *Model) executeRemove() tea.Cmd {
 	m.pendingRemove = nil
 	m.passwordInput.SetValue("")
 	m.passwordInput.Blur()
+	if m.upgradeInFlight || m.removeInFlight {
+		m.opQueue = append(m.opQueue, queuedOp{isRemove: true, remove: req})
+		m.statusMsg = fmt.Sprintf("queued removal of %s (Q to view)", req.pkg.Name)
+		return nil
+	}
+	return m.startRemove(req)
+}
+
+// startRemove marks a removal in flight and runs it.
+func (m *Model) startRemove(req removeRequest) tea.Cmd {
 	m.removeInFlight = true
 	m.removingPkgName = req.pkg.Name
 	m.removeNotifMsg = fmt.Sprintf("removing %s...", req.pkg.Name)
