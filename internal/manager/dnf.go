@@ -139,10 +139,6 @@ func (d *Dnf) UpgradeCmd(name string) *exec.Cmd {
 	return privilegedCmd("dnf", "upgrade", "-y", name)
 }
 
-func (d *Dnf) SystemUpgradeCmd() *exec.Cmd {
-	return privilegedCmd("dnf", "upgrade", "-y")
-}
-
 func (d *Dnf) RemoveCmd(name string) *exec.Cmd {
 	return privilegedCmd("dnf", "remove", "-y", name)
 }

@@ -688,19 +688,19 @@ func (m *Model) systemUpdate() tea.Cmd {
 		m.statusMsg = fmt.Sprintf("%s is not available", src)
 		return nil
 	}
-	su, ok := mgr.(manager.SystemUpgrader)
+	bulk, ok := mgr.(manager.BulkUpgrader)
 	if !ok {
-		m.statusMsg = fmt.Sprintf("%s has no system update", src)
+		m.statusMsg = fmt.Sprintf("%s has no bulk update", src)
 		return nil
 	}
 
-	cmd := su.SystemUpgradeCmd()
+	cmd := bulk.UpgradeAllCmd(true)
 	req := &upgradeRequest{
 		pkg:        model.Package{Name: "all " + string(src) + " packages", Source: src},
 		cmd:        cmd,
 		cmdStr:     strings.Join(cmd.Args, " "),
 		privileged: isPrivilegedSource(src),
-		opLabel:    "system update",
+		opLabel:    "update",
 	}
 	m.pendingUpgrade = req
 	m.passwordInput.SetValue("")
@@ -854,18 +854,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			rescan = m.rescanManager(msg.pkg.Source)
 		}
-		// Start the next queued op; it overwrites the notification with its own
-		// progress, so only schedule the clear once the queue is empty.
-		if next := m.startNextQueued(); next != nil {
-			return m, tea.Batch(rescan, next)
-		}
 		delay := 5 * time.Second
 		if m.upgradeNotifErr {
 			delay = 8 * time.Second
 		}
-		return m, tea.Batch(rescan, tea.Tick(delay, func(time.Time) tea.Msg {
-			return upgradeNotifClearMsg{}
-		}))
+		clear := tea.Tick(delay, func(time.Time) tea.Msg { return upgradeNotifClearMsg{} })
+		// Start the next queued op (if any) and still schedule this op's clear so a
+		// mixed-type queue never leaves a stale banner on screen.
+		return m, tea.Batch(rescan, m.startNextQueued(), clear)
 
 	case upgradeNotifClearMsg:
 		m.upgradeNotifMsg = ""
@@ -887,19 +883,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.removeNotifMsg = fmt.Sprintf("%s removed successfully", msg.pkg.Name)
 			m.removeNotifErr = false
-			m.view = viewList
+			if m.view == viewDetail && m.detailPkg.Key() == msg.pkg.Key() {
+				m.view = viewList
+			}
 			rescan = m.rescanManager(msg.pkg.Source)
-		}
-		if next := m.startNextQueued(); next != nil {
-			return m, tea.Batch(rescan, next)
 		}
 		delay := 5 * time.Second
 		if m.removeNotifErr {
 			delay = 8 * time.Second
 		}
-		return m, tea.Batch(rescan, tea.Tick(delay, func(time.Time) tea.Msg {
-			return removeNotifClearMsg{}
-		}))
+		clear := tea.Tick(delay, func(time.Time) tea.Msg { return removeNotifClearMsg{} })
+		return m, tea.Batch(rescan, m.startNextQueued(), clear)
 
 	case removeNotifClearMsg:
 		m.removeNotifMsg = ""
@@ -2070,8 +2064,9 @@ func installCmdFor(mgr manager.Manager, inst manager.Installer, name string) *ex
 // isPrivilegedSource flags managers whose Install/Upgrade/Remove commands
 // are wrapped in sudo by internal/manager/privileged_unix.go. The TUI uses
 // this to render the password input inside the confirm modal and to forward
-// the captured password to sudo via stdin. Keep this list in sync with
-// every manager whose *Cmd methods call privilegedCmd.
+// the captured password to sudo via stdin. Covers every manager whose *Cmd
+// methods call privilegedCmd, plus Chocolatey, which needs an elevated Windows
+// terminal (privilegedCmd is a pass-through there, so the modal shows a hint).
 func isPrivilegedSource(source model.Source) bool {
 	switch source {
 	case model.SourceApt, model.SourceDnf, model.SourcePacman, model.SourceAUR,

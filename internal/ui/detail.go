@@ -249,9 +249,11 @@ func detailKeybinds(m *Model) string {
 			{"j/k", "scroll"}, {"pgdn/pgup", "page"}, {"esc", "close"},
 		}
 	case m.modal == ModalDeps:
-		pairs = []struct{ key, desc string }{
-			{"j/k", "navigate"}, {"enter", "open"}, {"esc", "close"},
+		pairs = []struct{ key, desc string }{{"j/k", "navigate"}}
+		if _, ok := m.findPackageByName(m.selectedDepName()); ok {
+			pairs = append(pairs, struct{ key, desc string }{"enter", "open"})
 		}
+		pairs = append(pairs, struct{ key, desc string }{"esc", "close"})
 	default:
 		// Mirror the capability checks the key handler uses, so we don't
 		// advertise keys that the current package can't actually act on:

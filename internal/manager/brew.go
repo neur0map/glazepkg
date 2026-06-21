@@ -211,10 +211,6 @@ func (b *Brew) UpgradeCmd(name string) *exec.Cmd {
 	return exec.Command("brew", "upgrade", name)
 }
 
-func (b *Brew) SystemUpgradeCmd() *exec.Cmd {
-	return exec.Command("sh", "-c", "brew update && brew upgrade")
-}
-
 func (b *Brew) RemoveCmd(name string) *exec.Cmd {
 	return exec.Command("brew", "uninstall", name)
 }

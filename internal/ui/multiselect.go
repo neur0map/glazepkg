@@ -325,6 +325,12 @@ func (m *Model) handleBatchProgress(msg batchProgressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
+	// Drain any single ops queued while the batch was running.
+	if next := m.startNextQueued(); next != nil {
+		cmds = append(cmds, next)
+		return m, tea.Batch(cmds...)
+	}
+
 	dismissTime := 10 * time.Second
 	if len(failed) > 0 {
 		dismissTime = 30 * time.Second

@@ -403,12 +403,15 @@ func handleDepsModalKey(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.depsCursor = total - 1
 		}
 	case "enter":
-		if name := m.selectedDepName(); name != "" {
-			if pkg, ok := m.findPackageByName(name); ok {
-				m.detailPkg = pkg
-				return m, m.closeModal()
-			}
+		name := m.selectedDepName()
+		if name == "" {
+			return m, nil
 		}
+		if pkg, ok := m.findPackageByName(name); ok {
+			m.detailPkg = pkg
+			return m, m.closeModal()
+		}
+		m.statusMsg = name + " is not a separately tracked package"
 	}
 	return m, nil
 }
@@ -417,10 +420,14 @@ func renderDepsModalBody(m *Model) ModalFrameOpts {
 	if m.detailPkg.Name != "" {
 		title = "DEPENDENCIES — " + m.detailPkg.Name
 	}
+	footer := "↑↓ navigate · esc close"
+	if _, ok := m.findPackageByName(m.selectedDepName()); ok {
+		footer = "↑↓ navigate · enter open · esc close"
+	}
 	return ModalFrameOpts{
 		Title:  title,
 		Body:   depsBody(m),
-		Footer: "↑↓ navigate · enter open · esc close",
+		Footer: footer,
 	}
 }
 
