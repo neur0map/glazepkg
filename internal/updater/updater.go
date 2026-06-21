@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,12 +11,19 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"time"
 )
 
 const (
 	repoAPI     = "https://api.github.com/repos/neur0map/glazepkg/releases/latest"
 	releasesURL = "https://github.com/neur0map/glazepkg/releases/latest"
 )
+
+var httpClient = &http.Client{Timeout: 60 * time.Second}
+
+// ErrUpToDate is returned by Update when the installed version is already latest.
+var ErrUpToDate = errors.New("already up to date")
 
 type ghRelease struct {
 	TagName string    `json:"tag_name"`
@@ -46,15 +54,17 @@ func Update(currentVersion string) (string, error) {
 
 	latest := rel.TagName
 	if latest == currentVersion {
-		return latest, fmt.Errorf("already up to date (%s)", latest)
+		return latest, ErrUpToDate
 	}
 
 	assetName := binaryName()
-	var downloadURL string
+	var downloadURL, checksumURL string
 	for _, a := range rel.Assets {
-		if a.Name == assetName {
+		switch a.Name {
+		case assetName:
 			downloadURL = a.BrowserDownloadURL
-			break
+		case "checksums.txt":
+			checksumURL = a.BrowserDownloadURL
 		}
 	}
 	if downloadURL == "" {
@@ -70,7 +80,7 @@ func Update(currentVersion string) (string, error) {
 		return latest, err
 	}
 
-	if err := downloadAndReplace(downloadURL, resolved); err != nil {
+	if err := downloadAndReplace(downloadURL, resolved, checksumURL); err != nil {
 		return latest, err
 	}
 
@@ -78,7 +88,7 @@ func Update(currentVersion string) (string, error) {
 }
 
 func fetchRelease() (*ghRelease, error) {
-	resp, err := http.Get(repoAPI)
+	resp, err := httpClient.Get(repoAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -104,18 +114,11 @@ func binaryName() string {
 }
 
 func resolveExecPath(execPath string) (string, error) {
-	info, err := os.Lstat(execPath)
+	resolved, err := filepath.EvalSymlinks(execPath)
 	if err != nil {
 		return execPath, nil
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		resolved, err := os.Readlink(execPath)
-		if err != nil {
-			return "", fmt.Errorf("cannot resolve symlink: %w", err)
-		}
-		return resolved, nil
-	}
-	return execPath, nil
+	return resolved, nil
 }
 
 // downloadAndReplace stages the new binary in the system temp directory and
@@ -123,23 +126,85 @@ func resolveExecPath(execPath string) (string, error) {
 // rather than beside the destination means the download itself never needs
 // write access to the install directory — we only need that permission for
 // the final swap, and any failure there produces a clear, actionable error.
-func downloadAndReplace(url, destPath string) error {
+func downloadAndReplace(url, destPath, checksumURL string) error {
 	tmpPath, err := stageDownload(url)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmpPath) // no-op once replaceBinary succeeds
 
+	if err := verifyChecksum(tmpPath, binaryName(), checksumURL); err != nil {
+		return err
+	}
 	if err := replaceBinary(tmpPath, destPath); err != nil {
 		return wrapReplaceErr(err, destPath)
 	}
 	return nil
 }
 
+// verifyChecksum compares the sha256 of file against the hash listed for
+// assetName in the release's checksums.txt. It is skipped when no checksum
+// URL is available, the file can't be fetched, or the asset isn't listed, so
+// releases without a checksums file still update; only a real hash mismatch
+// aborts the install.
+func verifyChecksum(file, assetName, checksumURL string) error {
+	if checksumURL == "" {
+		return nil
+	}
+	resp, err := httpClient.Get(checksumURL)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil
+	}
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+	want := checksumFor(string(data), assetName)
+	if want == "" {
+		return nil
+	}
+	got, err := sha256File(file)
+	if err != nil {
+		return fmt.Errorf("cannot verify download: %w", err)
+	}
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("checksum mismatch for %s: refusing to install a corrupt or tampered binary", assetName)
+	}
+	return nil
+}
+
+// checksumFor returns the hash listed for name in sha256sum output, where each
+// line is "<hash>  <name>", or "" when not present.
+func checksumFor(checksums, name string) string {
+	for _, line := range strings.Split(checksums, "\n") {
+		if fields := strings.Fields(line); len(fields) == 2 && fields[1] == name {
+			return fields[0]
+		}
+	}
+	return ""
+}
+
+func sha256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
 // stageDownload streams url into a new file in the system temp dir and
 // returns its path. Caller is responsible for removing it.
 func stageDownload(url string) (string, error) {
-	resp, err := http.Get(url)
+	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("download failed: %w", err)
 	}
@@ -199,10 +264,8 @@ func moveFile(src, dest string) error {
 	return os.Remove(src)
 }
 
-// wrapReplaceErr turns raw permission errors into platform-appropriate
-// guidance. Uses errors.Is against fs.ErrPermission so it works on every
-// OS — the previous string match ("permission denied") never fired on
-// Windows, where os.OpenFile returns "Access is denied".
+// wrapReplaceErr maps permission errors to platform-appropriate guidance via
+// errors.Is against fs.ErrPermission.
 func wrapReplaceErr(err error, destPath string) error {
 	if !errors.Is(err, fs.ErrPermission) {
 		return fmt.Errorf("cannot replace binary: %w", err)

@@ -149,3 +149,28 @@ func TestBinaryName_MatchesCurrentPlatform(t *testing.T) {
 		t.Errorf("non-windows binary name should not end in .exe, got %q", got)
 	}
 }
+
+func TestChecksumFor(t *testing.T) {
+	data := "abc123  gpk-linux-amd64\ndef456  gpk-darwin-arm64\n"
+	if got := checksumFor(data, "gpk-linux-amd64"); got != "abc123" {
+		t.Errorf("checksumFor linux = %q, want abc123", got)
+	}
+	if got := checksumFor(data, "gpk-windows-amd64.exe"); got != "" {
+		t.Errorf("checksumFor missing = %q, want empty", got)
+	}
+}
+
+func TestSHA256File(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(p, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := sha256File(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+	if got != want {
+		t.Errorf("sha256File = %q, want %q", got, want)
+	}
+}
