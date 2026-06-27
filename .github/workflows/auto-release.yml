@@ -209,6 +209,8 @@ jobs:
           envsubst '$TAG $VER $SHA_AMD64 $SHA_ARM64' < .github/templates/PKGBUILD > PKGBUILD
 
       - name: Publish to AUR
+        id: aur
+        continue-on-error: true
         uses: KSXGitHub/github-actions-deploy-aur@v4.1.2
         with:
           pkgname: gpk-bin
@@ -219,7 +221,26 @@ jobs:
           commit_message: "Update to ${{ env.TAG }}"
           force_push: true
 
+      # The AUR clone occasionally drops the TLS connection mid handshake
+      # (OpenSSL "unexpected eof"). Try once more before failing, so a
+      # transient hiccup does not block the release.
+      - name: Publish to AUR (retry)
+        if: steps.aur.outcome == 'failure'
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.2
+        with:
+          pkgname: gpk-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: neur0map
+          commit_email: 90535780+neur0map@users.noreply.github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ env.TAG }}"
+          force_push: true
+
+      # Runs even when AUR ultimately fails, so a flaky AUR never blocks the
+      # Homebrew release. Clone and push are retried for the same reason, and
+      # the commit is skipped when the formula is already current (safe reruns).
       - name: Update Homebrew tap
+        if: ${{ !cancelled() }}
         env:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -229,12 +250,30 @@ jobs:
           export SHA_LINUX_ARM64=$(sha256sum  ./dist/gpk-linux-arm64  | awk '{print $1}')
           envsubst '$VER $TAG $SHA_DARWIN_AMD64 $SHA_DARWIN_ARM64 $SHA_LINUX_AMD64 $SHA_LINUX_ARM64' < .github/templates/gpk.rb > gpk.rb
 
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/neur0map/homebrew-tap.git" tap
+          tap_url="https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/neur0map/homebrew-tap.git"
+          for attempt in 1 2 3; do
+            rm -rf tap
+            git clone "$tap_url" tap && break
+            echo "tap clone failed (attempt $attempt), retrying..."; sleep $((attempt * 10))
+          done
+          if [ ! -d tap/.git ]; then
+            echo "could not clone Homebrew tap after retries" >&2; exit 1
+          fi
+
           mkdir -p tap/Formula
           cp gpk.rb tap/Formula/gpk.rb
           cd tap
           git config user.name  "neur0map"
           git config user.email "90535780+neur0map@users.noreply.github.com"
           git add Formula/gpk.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date; nothing to push."
+            exit 0
+          fi
           git commit -m "gpk ${VER}"
-          git push
+          for attempt in 1 2 3; do
+            git push && exit 0
+            echo "tap push failed (attempt $attempt), retrying..."; sleep $((attempt * 10))
+            git pull --rebase || true
+          done
+          echo "Homebrew tap push failed after retries" >&2; exit 1
