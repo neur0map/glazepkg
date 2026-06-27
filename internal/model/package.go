@@ -47,6 +47,7 @@ const (
 	SourceMise           Source = "mise"
 	SourceQuicklisp      Source = "quicklisp"
 	SourceSoftwareUpdate Source = "softwareupdate"
+	SourceLocal          Source = "local"
 )
 
 type Package struct {

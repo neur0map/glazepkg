@@ -62,6 +62,7 @@ func All() []Manager {
 		&Mise{},
 		&Quicklisp{},
 		&SoftwareUpdate{},
+		&Local{},
 	}
 }
 

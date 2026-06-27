@@ -79,6 +79,7 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourceMise, "mise"},
 		{model.SourceGvm, "gvm"},
 		{model.SourceAM, "am"},
+		{model.SourceLocal, "local"},
 		{model.SourceQuicklisp, "quicklisp"},
 		{model.SourceSoftwareUpdate, "swupd"},
 	}

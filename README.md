@@ -4,7 +4,7 @@
 
 **One command for every package manager you have.**
 
-`gpk` is `yay` for your whole machine — install, search, upgrade, and roll back across **42 package managers** with one familiar syntax. Plus a gorgeous TUI to see it all. Zero config, one binary, macOS · Linux · Windows.
+`gpk` is `yay` for your whole machine — install, search, upgrade, and roll back across **43 package managers** (plus the apps you installed by hand) with one familiar syntax. Plus a gorgeous TUI to see it all. Zero config, one binary, macOS · Linux · Windows.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg?style=for-the-badge&color=00ADD8)](https://go.dev/)
@@ -23,7 +23,7 @@
 
 You already juggle `brew`, `pip`, `cargo`, `npm`, `apt`, `pacman`, the AUR — each with its own flags, its own search, its own "what's even installed?". Move to a new machine and you relearn all of it.
 
-`gpk` gives you one. The pacman/yay muscle memory you already have, pointed at all 42:
+`gpk` gives you one. The pacman/yay muscle memory you already have, pointed at all 43:
 
 ```bash
 gpk ffmpeg          # search every manager, pick a source, install — like yay
@@ -38,7 +38,7 @@ Not sure which manager has it? gpk searches them all and shows you — name, ver
 
 | | |
 |---|---|
-| **`yay` for all 42** | pacman/yay short flags (`-S -Ss -Si -Syu -R -Q`) and plain words, across every manager |
+| **`yay` for all 43** | pacman/yay short flags (`-S -Ss -Si -Syu -R -Q`) and plain words, across every manager |
 | **Find it anywhere** | one search across all managers in parallel — versions, descriptions, "did you mean" on typos |
 | **Eye candy** | themed `::`/`✓`/`✗` runs and a true-color TUI worth screenshotting |
 | **Versions, handled** | pin `pkg@1.2.3`, pick interactively, `downgrade` to roll back, compared across formats |
@@ -255,7 +255,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 </details>
 
 <details>
-<summary><strong>Supported Package Managers (42)</strong></summary>
+<summary><strong>Supported Package Managers (43)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
@@ -299,6 +299,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 | **mise** | Cross-platform | Tools managed by mise | — |
 | **quicklisp** | Cross-platform | Common Lisp libraries via Quicklisp | — |
 | **softwareupdate** | macOS | Pending macOS system updates | inline from scan |
+| **local** | Linux | Apps installed outside any package manager — desktop entries (Zed, Discord, Termius…) and standalone binaries (Claude Code, omp…) | from `.desktop` / path |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Descriptions are fetched in the background and cached for 24 hours.

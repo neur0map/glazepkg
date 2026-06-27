@@ -14,19 +14,19 @@ Every operation `gpk` exposes maps to one Go interface in `internal/manager/`. A
 
 | Operation | TUI | Headless | Interface | Coverage |
 |---|---|---|---|---|
-| List installed packages | the package table | `gpk list` | `Manager.Scan` | **42 / 42** |
-| Package details | `Enter` → detail view | `gpk info <pkg>` | `Manager.Scan` (base) + `Describer` (description) | base 42 / 42; rich desc 34 / 42 |
-| Dependency tree | `d` in detail | _(detail-only)_ | `DependencyLister` | 23 / 42 |
-| Which manager has it | source pill in row | `gpk source-of <pkg>` | `Manager.Scan` | 42 / 42 |
-| Update detection (`↑`) | indicator in row | `gpk outdated` / `--count` / `--exit-code` | `UpdateChecker` | 29 / 42 |
-| Install search (catalog) | `i` → search overlay | `gpk install <pkg>` (resolution step) | `Searcher` | 25 / 42 |
-| Install | search → install confirm | `gpk install <pkg>` | `Installer` | 36 / 42 |
-| Install non-interactive | _(uses modal)_ | `gpk install --yes` | `NonInteractiveInstaller` *(see note)* | 5 / 42 explicit; the rest are no-ops |
-| Upgrade single | `u` in detail | `gpk upgrade <pkg>` | `Upgrader` | 38 / 42 |
-| Upgrade non-interactive | _(uses modal)_ | `gpk upgrade --yes` | `NonInteractiveUpgrader` *(see note)* | 5 / 42 explicit |
-| Remove | `x` in detail | `gpk remove <pkg>` | `Remover` | 37 / 42 |
-| Remove non-interactive | _(uses modal)_ | `gpk remove --yes` | `NonInteractiveRemover` *(see note)* | 5 / 42 explicit |
-| Remove + deps | remove modal "deep" option | `gpk remove --with-deps` | `DeepRemover` | 4 / 42 (pacman, apt, dnf, xbps) |
+| List installed packages | the package table | `gpk list` | `Manager.Scan` | **43 / 43** |
+| Package details | `Enter` → detail view | `gpk info <pkg>` | `Manager.Scan` (base) + `Describer` (description) | base 43 / 43; rich desc 34 / 43 |
+| Dependency tree | `d` in detail | _(detail-only)_ | `DependencyLister` | 23 / 43 |
+| Which manager has it | source pill in row | `gpk source-of <pkg>` | `Manager.Scan` | 43 / 43 |
+| Update detection (`↑`) | indicator in row | `gpk outdated` / `--count` / `--exit-code` | `UpdateChecker` | 29 / 43 |
+| Install search (catalog) | `i` → search overlay | `gpk install <pkg>` (resolution step) | `Searcher` | 28 / 43 |
+| Install | search → install confirm | `gpk install <pkg>` | `Installer` | 35 / 43 |
+| Install non-interactive | _(uses modal)_ | `gpk install --yes` | `NonInteractiveInstaller` *(see note)* | 5 / 43 explicit; the rest are no-ops |
+| Upgrade single | `u` in detail | `gpk upgrade <pkg>` | `Upgrader` | 36 / 43 |
+| Upgrade non-interactive | _(uses modal)_ | `gpk upgrade --yes` | `NonInteractiveUpgrader` *(see note)* | 5 / 43 explicit |
+| Remove | `x` in detail | `gpk remove <pkg>` | `Remover` | 36 / 43 |
+| Remove non-interactive | _(uses modal)_ | `gpk remove --yes` | `NonInteractiveRemover` *(see note)* | 5 / 43 explicit |
+| Remove + deps | remove modal "deep" option | `gpk remove --with-deps` | `DeepRemover` | 4 / 43 (pacman, apt, dnf, xbps) |
 | Snapshots / diff / export | `s` / `d` / `e` | _(TUI-only in Phase 1)_ | filesystem (no manager interface) | universal |
 | Fuzzy filter | `/` over the table | _(implicit via `gpk list` + pipe)_ | client-side | universal |
 | Theme picker | `t` | _(N/A)_ | reads `~/.config/glazepkg/themes/*.toml` | universal |
@@ -92,6 +92,7 @@ Column legend:
 | **mise** | Cross | no | ✓ | ─ | ─ | ✓ | ─ | ✓ | ─ | ✓ | ─ | ✓ | ─ | ─ | ─ |
 | **quicklisp** | Cross (Lisp) | no | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ |
 | **softwareupdate** | macOS | no | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ |
+| **local** | Linux | YES | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ✓ | ─ | ─ | ─ |
 
 ## Read-side notes
 

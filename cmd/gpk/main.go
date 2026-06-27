@@ -184,7 +184,7 @@ func printHelp() {
 	fmt.Println(muted("  npm, pnpm, bun, flatpak, macports, pkgsrc, opam, gem, pkg,"))
 	fmt.Println(muted("  composer, mas, apk, nix, conda, luarocks, xbps, portage, guix,"))
 	fmt.Println(muted("  winget, chocolatey, nuget, powershell, windows-updates, scoop,"))
-	fmt.Println(muted("  maven, am, gvm, mise, quicklisp, softwareupdate"))
+	fmt.Println(muted("  maven, am, gvm, mise, quicklisp, softwareupdate, local"))
 	fmt.Println()
 
 	fmt.Println(section("DATA PATHS"))

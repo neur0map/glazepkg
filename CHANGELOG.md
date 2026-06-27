@@ -3,6 +3,19 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
+## Unreleased
+
+### Added
+- `local` source (Linux) — detects and removes apps installed outside any
+  package manager: GUI apps that drop an XDG `.desktop` entry (Zed, Discord,
+  Termius…) and standalone CLI binaries dropped into `~/.local/bin` or
+  `/usr/local/bin` by a `curl | sh` installer (Claude Code, omp…). Anything a
+  system package manager owns, and any `#!` interpreter script (pip/pipx/npm
+  entry points, shell wrappers), is deliberately skipped. Shows up as its own
+  `local` tab in the TUI and under `gpk -m local`; `gpk -R <app>` removes the
+  app's files — desktop entry, launcher, and self-contained install dir —
+  leaving user config/data untouched.
+
 ## v0.6.0 — 2026-06-21
 
 ### Added
