@@ -158,7 +158,9 @@ func runUndo(args []string, mgrs []manager.Manager, version string, stdout, stde
 			failed = true
 			break
 		}
-		invalidateAfterWrite(mgrByName(mgrs, s.item.Source), nil)
+		// Undo semantics are ambiguous (an undone install is a removal and
+		// vice versa), so pass nothing and let the whole cache drop.
+		invalidateAfterWrite(mgrByName(mgrs, s.item.Source), nil, nil)
 	}
 	if failed {
 		return ExitErr

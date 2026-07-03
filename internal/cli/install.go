@@ -395,7 +395,7 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 			fmt.Fprintln(stderr, st.bad("✗")+" "+p.name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
 			return ExitErr
 		}
-		invalidateAfterWrite(p.mgr, []model.Package{{Name: p.name, Source: p.mgr.Name()}})
+		invalidateAfterWrite(p.mgr, []model.Package{{Name: p.name, Source: p.mgr.Name()}}, nil)
 		ver := p.version
 		if ver == "" {
 			ver = p.availVer

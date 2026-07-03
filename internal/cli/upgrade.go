@@ -148,7 +148,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			fmt.Fprintln(stderr, st.bad("✗")+" "+p.pkg.Name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
 			return ExitErr
 		}
-		invalidateAfterWrite(p.mgr, []model.Package{p.pkg})
+		invalidateAfterWrite(p.mgr, []model.Package{p.pkg}, nil)
 		_ = snapshot.AppendHistory(snapshot.HistoryItem{
 			Group: grp, Time: time.Now(), Op: snapshot.OpUpgrade,
 			Source: p.mgr.Name(), Name: p.pkg.Name,

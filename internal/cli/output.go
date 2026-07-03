@@ -46,6 +46,7 @@ type cliPackage struct {
 	RequiredBy    []string     `json:"required_by,omitempty"`
 	InstalledAt   time.Time    `json:"installed_at"`
 	LatestVersion string       `json:"latest_version,omitempty"`
+	Installed     bool         `json:"installed,omitempty"`
 }
 
 func toCLIPackage(p model.Package) cliPackage {
@@ -61,6 +62,7 @@ func toCLIPackage(p model.Package) cliPackage {
 		RequiredBy:    p.RequiredBy,
 		InstalledAt:   p.InstalledAt,
 		LatestVersion: p.LatestVersion,
+		Installed:     p.Installed,
 	}
 }
 

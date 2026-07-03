@@ -110,7 +110,7 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 		fmt.Fprintln(stderr, st.bad("✗")+" "+name+st.dim(" — "+string(mgr.Name())+" reported an error (details above)"))
 		return ExitErr
 	}
-	invalidateAfterWrite(mgr, []model.Package{{Name: name, Source: mgr.Name()}})
+	invalidateAfterWrite(mgr, []model.Package{{Name: name, Source: mgr.Name()}}, nil)
 	_ = snapshot.AppendHistory(snapshot.HistoryItem{
 		Group: nextGroup(), Time: time.Now(), Op: snapshot.OpDowngrade,
 		Source: mgr.Name(), Name: name, Version: ver, PrevVersion: curVer,

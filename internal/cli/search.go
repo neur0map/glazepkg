@@ -82,6 +82,7 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 		out := make([]cliPackage, len(rows))
 		for i, r := range rows {
 			out[i] = toCLIPackage(r.pkg)
+			out[i].Installed = r.installed
 		}
 		if err := writeEnvelope(stdout, version, out); err != nil {
 			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
@@ -167,7 +168,9 @@ func searchManagers(filtered []manager.Manager, query string) ([]searchRow, erro
 			}
 			seen[key] = true
 			p.Source = src
-			rows = append(rows, searchRow{pkg: p, mgr: canonical})
+			// Seed installed from the manager's own live marker (pacman -Ss
+			// emits one) so rows are right even with a missing or stale cache.
+			rows = append(rows, searchRow{pkg: p, mgr: canonical, installed: p.Installed})
 		}
 	}
 	return rows, searchErr

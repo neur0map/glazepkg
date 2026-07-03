@@ -49,7 +49,9 @@ func executeGrouped(title string, rows []groupedCmd, dryRun, yes, quiet bool, st
 			failed++
 			continue
 		}
-		invalidateAfterWrite(row.mgr, nil)
+		// Autoremove doesn't know which packages went away, so pass nothing
+		// and let the whole cache drop.
+		invalidateAfterWrite(row.mgr, nil, nil)
 		if !quiet {
 			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(string(row.mgr.Name()), st.pal.White, true))
 		}

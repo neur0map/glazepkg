@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
@@ -60,37 +59,40 @@ func stripSudoStdinFlag(cmd *exec.Cmd) *exec.Cmd {
 	return newCmd
 }
 
-// invalidateAfterWrite clears cached state for a manager after install,
+// invalidateAfterWrite updates cached state for a manager after install,
 // remove, or upgrade. Always called after a successful subprocess run.
 //
-// Currently invalidates: scan cache (rewritten on next gpk list); update
-// cache entries for that manager's packages.
+// Currently updates: scan cache (added packages upserted, removed packages
+// dropped); update cache entries for those packages are invalidated.
 //
 // Safe to call concurrently; cache files are rewritten atomically.
-func invalidateAfterWrite(mgr manager.Manager, pkgs []model.Package) {
-	// Scan cache: nuke it entirely so the next gpk list does a fresh scan.
-	// We can't surgically remove just one manager's packages without first
-	// reading and rewriting the file, and this is a write operation —
-	// freshness matters more than performance.
-	_ = os.Remove(scanCachePath())
+func invalidateAfterWrite(mgr manager.Manager, added, removed []model.Package) {
+	// Scan cache: surgically upsert installed packages and drop removed
+	// ones so the next gpk list keeps its warm cache. Call sites whose
+	// effect on installed packages is ambiguous (autoremove, history undo)
+	// pass neither; those still delete the whole file so the next list
+	// does a fresh scan. If the rewrite fails, delete too: freshness
+	// matters more than performance on a write operation.
+	if len(added) == 0 && len(removed) == 0 {
+		manager.DeleteScanCache()
+	} else {
+		removeKeys := make([]string, 0, len(removed))
+		for _, p := range removed {
+			removeKeys = append(removeKeys, p.Key())
+		}
+		if err := manager.UpdateScanCache(added, removeKeys); err != nil {
+			manager.DeleteScanCache()
+		}
+	}
 
 	// Update cache: invalidate keys for this manager's packages.
 	cache := manager.NewUpdateCache()
 	var keys []string
-	for _, p := range pkgs {
+	for _, p := range added {
+		keys = append(keys, p.Key())
+	}
+	for _, p := range removed {
 		keys = append(keys, p.Key())
 	}
 	cache.Invalidate(keys)
-}
-
-// scanCachePath duplicates the logic in internal/manager/scancache.go so
-// we don't expose the path constant publicly. If manager ever exports a
-// "DeleteScanCache" helper, switch to that.
-func scanCachePath() string {
-	base := os.Getenv("XDG_DATA_HOME")
-	if base == "" {
-		home, _ := os.UserHomeDir()
-		base = filepath.Join(home, ".local", "share")
-	}
-	return filepath.Join(base, "glazepkg", "cache", "scan.json")
 }

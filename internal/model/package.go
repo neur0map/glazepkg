@@ -63,6 +63,7 @@ type Package struct {
 	InstalledAt   time.Time `json:"installed_at"`
 	LatestVersion string    `json:"-"` // not persisted, populated at runtime
 	Location      string    `json:"-"`
+	Installed     bool      `json:"-"` // not persisted, populated at runtime by search
 	SizeBytes     int64     `json:"size_bytes,omitempty"`
 }
 

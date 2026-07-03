@@ -212,7 +212,7 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			fmt.Fprintln(stderr, st.bad("✗")+" "+p.pkg.Name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
 			return ExitErr
 		}
-		invalidateAfterWrite(p.mgr, []model.Package{p.pkg})
+		invalidateAfterWrite(p.mgr, nil, []model.Package{p.pkg})
 		_ = snapshot.AppendHistory(snapshot.HistoryItem{
 			Group: grp, Time: time.Now(), Op: snapshot.OpRemove,
 			Source: p.mgr.Name(), Name: p.pkg.Name, Version: p.pkg.Version,

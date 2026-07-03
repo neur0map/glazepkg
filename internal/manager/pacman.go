@@ -167,8 +167,15 @@ func (p *Pacman) Search(query string) ([]model.Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	return ParsePacmanSearch(string(out)), nil
+}
+
+// ParsePacmanSearch parses `pacman -Ss` output into packages. Header lines
+// may carry trailing markers after the version, such as "(group)" and
+// "[installed]" or "[installed: <version>]"; the latter set Installed.
+func ParsePacmanSearch(out string) []model.Package {
 	var pkgs []model.Package
-	lines := strings.Split(string(out), "\n")
+	lines := strings.Split(out, "\n")
 	for i := 0; i < len(lines)-1; i += 2 {
 		header := strings.TrimSpace(lines[i])
 		desc := strings.TrimSpace(lines[i+1])
@@ -182,6 +189,15 @@ func (p *Pacman) Search(query string) ([]model.Package, error) {
 		}
 		nameWithRepo := parts[0]
 		version := parts[1]
+		// Anything after the version is a marker; "[installed" also covers
+		// the "[installed: <version>]" form, which splits across fields.
+		installed := false
+		for _, f := range parts[2:] {
+			if strings.HasPrefix(f, "[installed") {
+				installed = true
+				break
+			}
+		}
 		// Extract repo prefix to distinguish AUR from native pacman results
 		source := model.SourcePacman
 		if idx := strings.Index(nameWithRepo, "/"); idx >= 0 {
@@ -196,9 +212,10 @@ func (p *Pacman) Search(query string) ([]model.Package, error) {
 			Version:     version,
 			Source:      source,
 			Description: desc,
+			Installed:   installed,
 		})
 	}
-	return pkgs, nil
+	return pkgs
 }
 
 func (p *Pacman) InstallCmd(name string) *exec.Cmd {
