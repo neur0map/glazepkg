@@ -164,7 +164,15 @@ find it — or set a standing preference in the config so it never has to ask:
 # ~/.config/glazepkg/config.toml
 [install]
 prefer = ["aur", "brew"]
+
+[search]
+bottom_up = true   # best match printed last, right above your prompt
 ```
+
+Miss yay's bottom-up search order? Pass `--bottomup` to `search` (or `-Ss`),
+or set `bottom_up = true` as above to make it the default — `--topdown` flips
+any single run back. Result numbers don't move: `1` is always the best match,
+so the interactive `--install` picker means the same thing in either order.
 
 | Plain words | Short flags |
 |---|---|

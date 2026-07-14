@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/neur0map/glazepkg/internal/config"
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 )
@@ -29,16 +30,19 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
-		mgrFlag     = fs.String("manager", "", "comma list of managers (default: all)")
-		jsonFlag    = fs.Bool("json", false, "emit JSON envelope")
-		installFlag = fs.Bool("install", false, "pick results to install interactively")
-		yesFlag     = fs.Bool("yes", false, "skip the install confirmation prompt")
-		quietFlag   = fs.Bool("quiet", false, "suppress progress messages on stderr")
-		limitFlag   = fs.Int("limit", 60, "maximum results to display")
+		mgrFlag      = fs.String("manager", "", "comma list of managers (default: all)")
+		jsonFlag     = fs.Bool("json", false, "emit JSON envelope")
+		installFlag  = fs.Bool("install", false, "pick results to install interactively")
+		yesFlag      = fs.Bool("yes", false, "skip the install confirmation prompt")
+		quietFlag    = fs.Bool("quiet", false, "suppress progress messages on stderr")
+		limitFlag    = fs.Int("limit", 60, "maximum results to display")
+		bottomUpFlag = fs.Bool("bottomup", false, "print best match last, right above the prompt (yay-style)")
+		topDownFlag  = fs.Bool("topdown", false, "print best match first (overrides a bottom_up config)")
 	)
 	fs.BoolVar(installFlag, "i", false, "alias for --install")
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
+	fs.BoolVar(bottomUpFlag, "reverse", false, "alias for --bottomup")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return ExitOK
@@ -92,7 +96,8 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 	}
 
 	st := newStyler()
-	writeSearchHuman(stdout, query, rows, st)
+	bottomUp := (config.Load().Search.BottomUp || *bottomUpFlag) && !*topDownFlag
+	writeSearchHuman(stdout, query, rows, st, bottomUp)
 
 	if !*installFlag {
 		return ExitOK
@@ -224,8 +229,16 @@ func markInstalledRows(rows []searchRow) {
 	}
 }
 
-func writeSearchHuman(w io.Writer, query string, rows []searchRow, st *styler) {
-	fmt.Fprintf(w, "%s %s  %s\n\n", st.title("results for"), st.accent(strconv.Quote(query)), st.dim("("+strconv.Itoa(len(rows))+")"))
+// writeSearchHuman renders ranked rows for a terminal. With bottomUp the rows
+// print in reverse and the summary header moves below them, so the best match
+// (#1) and the query context sit right above the prompt. Numbering never
+// changes: 1 is always the best match, so --install selections mean the same
+// thing in either order.
+func writeSearchHuman(w io.Writer, query string, rows []searchRow, st *styler, bottomUp bool) {
+	header := fmt.Sprintf("%s %s  %s", st.title("results for"), st.accent(strconv.Quote(query)), st.dim("("+strconv.Itoa(len(rows))+")"))
+	if !bottomUp {
+		fmt.Fprintf(w, "%s\n\n", header)
+	}
 
 	nameW, srcW := 0, 0
 	for _, r := range rows {
@@ -240,7 +253,12 @@ func writeSearchHuman(w io.Writer, query string, rows []searchRow, st *styler) {
 	srcW = clamp(srcW, 1, 14)
 	numW := len(strconv.Itoa(len(rows)))
 
-	for i, r := range rows {
+	for n := range rows {
+		i := n
+		if bottomUp {
+			i = len(rows) - 1 - n
+		}
+		r := rows[i]
 		idx := st.num(fmt.Sprintf("%*d", numW, i+1))
 		name := st.paint(padRight(r.pkg.Name, nameW), st.pal.White, true)
 		src := st.paint(padRight(string(r.pkg.Source), srcW), st.mgrColorOf(r.pkg.Source), true)
@@ -253,6 +271,9 @@ func writeSearchHuman(w io.Writer, query string, rows []searchRow, st *styler) {
 			line += "\n" + strings.Repeat(" ", numW+4) + st.dim(truncate(r.pkg.Description, 72))
 		}
 		fmt.Fprintln(w, line)
+	}
+	if bottomUp {
+		fmt.Fprintf(w, "\n%s\n", header)
 	}
 }
 

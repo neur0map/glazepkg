@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Appearance AppearanceConfig `toml:"appearance"`
 	Install    InstallConfig    `toml:"install"`
+	Search     SearchConfig     `toml:"search"`
 }
 
 type AppearanceConfig struct {
@@ -22,6 +23,14 @@ type AppearanceConfig struct {
 // highest-ranked one instead of asking.
 type InstallConfig struct {
 	Prefer []string `toml:"prefer"`
+}
+
+// SearchConfig holds search display preferences. BottomUp reverses the
+// printed order so the best match (#1) lands at the bottom, right above the
+// prompt, like yay's --bottomup. Result numbering is unchanged: 1 is always
+// the best match.
+type SearchConfig struct {
+	BottomUp bool `toml:"bottom_up"`
 }
 
 func configDir() string {

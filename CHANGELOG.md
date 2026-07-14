@@ -6,6 +6,12 @@ follows Keep a Changelog.
 ## Unreleased
 
 ### Added
+- `gpk search --bottomup` (alias `--reverse`) prints results in reverse order
+  so the best match lands at the bottom, right above the prompt, like
+  `yay --bottomup`. Result numbers don't move — 1 is always the best match —
+  so the interactive `--install` picker selects the same packages in either
+  order. Set `[search] bottom_up = true` in the config to make it the default;
+  `--topdown` overrides it for a single run.
 - `local` source (Linux) — detects and removes apps installed outside any
   package manager: GUI apps that drop an XDG `.desktop` entry (Zed, Discord,
   Termius…) and standalone CLI binaries dropped into `~/.local/bin` or
