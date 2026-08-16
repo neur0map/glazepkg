@@ -4,7 +4,7 @@
 
 **One command for every package manager you have.**
 
-`gpk` is `yay` for your whole machine — install, search, upgrade, and roll back across **43 package managers** (plus the apps you installed by hand) with one familiar syntax. Plus a gorgeous TUI to see it all. Zero config, one binary, macOS · Linux · Windows.
+`gpk` is `yay` for your whole machine — install, search, upgrade, and roll back across **46 package managers** (plus the apps you installed by hand) with one familiar syntax. Plus a gorgeous TUI to see it all. Zero config, one binary, macOS · Linux · Windows.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/neur0map/glazepkg/ci.yml?style=for-the-badge)](https://github.com/neur0map/glazepkg/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/neur0map/glazepkg?style=for-the-badge&color=00ADD8)](https://go.dev/)
@@ -38,7 +38,7 @@ Not sure which manager has it? gpk searches them all and shows you — name, ver
 
 | | |
 |---|---|
-| **`yay` for all 43** | pacman/yay short flags (`-S -Ss -Si -Syu -R -Q`) and plain words, across every manager |
+| **`yay` for all 46** | pacman/yay short flags (`-S -Ss -Si -Syu -R -Q`) and plain words, across every manager |
 | **Find it anywhere** | one search across all managers in parallel — versions, descriptions, "did you mean" on typos |
 | **Eye candy** | themed `::`/`✓`/`✗` runs and a true-color TUI worth screenshotting |
 | **Versions, handled** | pin `pkg@1.2.3`, pick interactively, `downgrade` to roll back, compared across formats |
@@ -61,6 +61,13 @@ brew install neur0map/tap/gpk
 
 ```bash
 yay -S gpk-bin
+```
+
+### Nix (any Linux, macOS)
+
+```bash
+nix run github:neur0map/glazepkg          # try it without installing
+nix profile install github:neur0map/glazepkg
 ```
 
 ### Go
@@ -153,6 +160,9 @@ gpk export -o pkgs.json   # back up everything installed
 gpk import pkgs.json      # restore it on another machine (skips installed)
 gpk -Qi foo               # info    ·  gpk -Q lists everything installed
 gpk why openssl           # what depends on it (is it safe to remove?)
+gpk snapshot              # record what's installed right now
+gpk snapshot diff 2 1     # what changed between two snapshots (or `diff` vs live)
+gpk -Qu --notify          # check for updates and raise a desktop notification
 ```
 
 When a package exists in more than one manager, gpk lists them with versions and
@@ -203,6 +213,24 @@ envelope), and `install`/`remove`/`upgrade`/`downgrade` accept `--json` to print
 the resolved plan — manager, version, and the exact command — without running
 anything. Exit codes are stable (`0` ok, `1` error, `2` "no", `3` ambiguous), so
 gpk drops cleanly behind a GUI or script.
+
+### Snapshots on a schedule
+
+`gpk snapshot` writes to the same store the TUI's `s` uses, so a systemd timer,
+launchd agent or cron entry can take periodic snapshots and you can diff any two
+of them later to find what changed inside a time window.
+
+```bash
+gpk snapshot --keep 30          # take one, keep only the newest 30
+gpk snapshot list               # newest first, numbered
+gpk snapshot diff 5 2           # compare two saved snapshots
+gpk snapshot diff 5             # compare one against the system right now
+gpk snapshot diff --json        # newest snapshot vs live, as JSON
+```
+
+Pair it with `gpk outdated --notify` to get a desktop notification when updates
+land — `osascript` on macOS, `notify-send` on Linux, a toast on Windows. gpk
+still runs and exits; nothing stays resident.
 
 <details>
 <summary><strong>Keybindings</strong></summary>
@@ -263,7 +291,7 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 </details>
 
 <details>
-<summary><strong>Supported Package Managers (43)</strong></summary>
+<summary><strong>Supported Package Managers (46)</strong></summary>
 
 | Manager | Platform | What it scans | Descriptions |
 |---------|----------|---------------|-------------|
@@ -308,6 +336,9 @@ All operations work on macOS, Linux, and Windows. Each manager maps to its corre
 | **quicklisp** | Cross-platform | Common Lisp libraries via Quicklisp | — |
 | **softwareupdate** | macOS | Pending macOS system updates | inline from scan |
 | **local** | Linux | Apps installed outside any package manager — desktop entries (Zed, Discord, Termius…) and standalone binaries (Claude Code, omp…) | from `.desktop` / path |
+| **aqua** | Cross-platform | CLI tools declared in `aqua.yaml` and the global aqua config | — |
+| **bin** | Cross-platform | Pre-compiled binaries installed by `bin` from GitHub/GitLab/http | — |
+| **dotnet-tool** | Cross-platform | .NET global tools (`dotnet tool install -g`) | — |
 
 - Managers that aren't installed are silently skipped — no errors, no config needed.
 - Descriptions are fetched in the background and cached for 24 hours.

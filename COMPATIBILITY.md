@@ -14,25 +14,26 @@ Every operation `gpk` exposes maps to one Go interface in `internal/manager/`. A
 
 | Operation | TUI | Headless | Interface | Coverage |
 |---|---|---|---|---|
-| List installed packages | the package table | `gpk list` | `Manager.Scan` | **43 / 43** |
-| Package details | `Enter` → detail view | `gpk info <pkg>` | `Manager.Scan` (base) + `Describer` (description) | base 43 / 43; rich desc 34 / 43 |
-| Dependency tree | `d` in detail | _(detail-only)_ | `DependencyLister` | 23 / 43 |
-| Which manager has it | source pill in row | `gpk source-of <pkg>` | `Manager.Scan` | 43 / 43 |
-| Update detection (`↑`) | indicator in row | `gpk outdated` / `--count` / `--exit-code` | `UpdateChecker` | 29 / 43 |
-| Install search (catalog) | `i` → search overlay | `gpk install <pkg>` (resolution step) | `Searcher` | 28 / 43 |
-| Install | search → install confirm | `gpk install <pkg>` | `Installer` | 35 / 43 |
-| Install non-interactive | _(uses modal)_ | `gpk install --yes` | `NonInteractiveInstaller` *(see note)* | 5 / 43 explicit; the rest are no-ops |
-| Upgrade single | `u` in detail | `gpk upgrade <pkg>` | `Upgrader` | 36 / 43 |
-| Upgrade non-interactive | _(uses modal)_ | `gpk upgrade --yes` | `NonInteractiveUpgrader` *(see note)* | 5 / 43 explicit |
-| Remove | `x` in detail | `gpk remove <pkg>` | `Remover` | 36 / 43 |
-| Remove non-interactive | _(uses modal)_ | `gpk remove --yes` | `NonInteractiveRemover` *(see note)* | 5 / 43 explicit |
-| Remove + deps | remove modal "deep" option | `gpk remove --with-deps` | `DeepRemover` | 4 / 43 (pacman, apt, dnf, xbps) |
-| Snapshots / diff / export | `s` / `d` / `e` | _(TUI-only in Phase 1)_ | filesystem (no manager interface) | universal |
+| List installed packages | the package table | `gpk list` | `Manager.Scan` | **46 / 46** |
+| Package details | `Enter` → detail view | `gpk info <pkg>` | `Manager.Scan` (base) + `Describer` (description) | base 46 / 46; rich desc 34 / 46 |
+| Dependency tree | `d` in detail | _(detail-only)_ | `DependencyLister` | 23 / 46 |
+| Which manager has it | source pill in row | `gpk source-of <pkg>` | `Manager.Scan` | 46 / 46 |
+| Update detection (`↑`) | indicator in row | `gpk outdated` / `--count` / `--exit-code` / `--notify` | `UpdateChecker` | 31 / 46 |
+| Install search (catalog) | `i` → search overlay | `gpk install <pkg>` (resolution step) | `Searcher` | 30 / 46 |
+| Install | search → install confirm | `gpk install <pkg>` | `Installer` | 38 / 46 |
+| Install non-interactive | _(uses modal)_ | `gpk install --yes` | `NonInteractiveInstaller` *(see note)* | 5 / 46 explicit; the rest are no-ops |
+| Upgrade single | `u` in detail | `gpk upgrade <pkg>` | `Upgrader` | 38 / 46 |
+| Upgrade non-interactive | _(uses modal)_ | `gpk upgrade --yes` | `NonInteractiveUpgrader` *(see note)* | 6 / 46 explicit |
+| Remove | `x` in detail | `gpk remove <pkg>` | `Remover` | 38 / 46 |
+| Remove non-interactive | _(uses modal)_ | `gpk remove --yes` | `NonInteractiveRemover` *(see note)* | 5 / 46 explicit |
+| Remove + deps | remove modal "deep" option | `gpk remove --with-deps` | `DeepRemover` | 4 / 46 (pacman, apt, dnf, xbps) |
+| Snapshots / diff | `s` / `d` | `gpk snapshot` / `gpk snapshot diff A B` | filesystem (no manager interface) | universal |
+| Export | `e` | `gpk export` / `gpk import` | filesystem (no manager interface) | universal |
 | Fuzzy filter | `/` over the table | _(implicit via `gpk list` + pipe)_ | client-side | universal |
-| Theme picker | `t` | _(N/A)_ | reads `~/.config/glazepkg/themes/*.toml` | universal |
-| User notes (custom descriptions) | `e` in detail | _(TUI-only in Phase 1)_ | persists to `~/.local/share/glazepkg/notes.json` | universal |
+| Theme picker | `t` | `gpk theme [name]` | reads `~/.config/glazepkg/themes/*.toml` | universal |
+| User notes (custom descriptions) | `e` in detail | _(TUI-only)_ | persists to `~/.local/share/glazepkg/notes.json` | universal |
 
-**Note on `--yes`:** the headless `--yes` flag works correctly for **all 38 manager-capable tools** even though only 5 implement the explicit `NonInteractive*` interfaces. The other 33 either don't prompt by default (brew, cargo, npm, etc.) or already include their non-interactive flag in the regular command (apt has `-y` baked in, winget has `--disable-interactivity`, etc.). The 5 with explicit `*Yes` variants are the ones whose standard command does prompt: **pacman, aur, apt, dnf, chocolatey**.
+**Note on `--yes`:** the headless `--yes` flag works correctly for **all 38 manager-capable tools** even though only 5 implement the explicit `NonInteractive*` interfaces. The other 33 either don't prompt by default (brew, cargo, npm, etc.) or already include their non-interactive flag in the regular command (apt has `-y` baked in, winget has `--disable-interactivity`, etc.). The 5 with explicit `*Yes` variants are the ones whose standard command does prompt: **pacman, aur, apt, dnf, chocolatey**. `bin` adds a sixth for bulk upgrade.
 
 ## Capability matrix
 
@@ -93,26 +94,30 @@ Column legend:
 | **quicklisp** | Cross (Lisp) | no | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ |
 | **softwareupdate** | macOS | no | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ |
 | **local** | Linux | YES | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ─ | ✓ | ─ | ─ | ─ |
+| **aqua** | Cross | no | ✓ | ─ | ─ | ─ | ✓ | ✓ | ─ | ─ | ─ | ─ | ─ | ─ | ─ |
+| **bin** | Cross | no | ✓ | ─ | ─ | ✓ | ─ | ✓ | ─ | ✓ | ✓ | ✓ | ─ | ─ | ─ |
+| **dotnet-tool** | Cross (.NET) | no | ✓ | ─ | ─ | ✓ | ✓ | ✓ | ─ | ✓ | ─ | ✓ | ─ | ─ | ─ |
 
 ## Read-side notes
 
 **Scan is universal.** Every manager `gpk` knows about lists installed packages, so `gpk list` and the TUI always work. Even `windows-updates` and `maven` — which have no install/remove semantics — implement `Scan` (windows-updates returns pending Windows updates; maven returns artifacts cached in `~/.m2/repository`).
 
-**`Desc` (`Describer`)** — when missing, `gpk info` and the TUI's detail view still show name/version/source/size, just without a description string. Missing: `nuget`, `windows-updates`, `maven`.
+**`Desc` (`Describer`)** — when missing, `gpk info` and the TUI's detail view still show name/version/source/size, just without a description string. Missing: `nuget`, `windows-updates`, `maven`, `aqua`, `bin`, `dotnet-tool`.
 
 **`Deps` (`DependencyLister`)** — when missing, `gpk info` and the TUI's `d` overlay show "(no dependency info)". This is most useful for system managers (pacman, apt, dnf, brew); cross-platform language managers like `cargo`, `go`, `bun`, `uv`, etc. often don't expose deps in a useful single-package way.
 
-**`Updates` (`UpdateChecker`)** — when missing, `gpk outdated` skips that manager silently, and the TUI's `↑` indicator never lights up for its packages. Notably missing: `pipx`, `cargo`, `go`, `bun`, `nix`, `nuget`, `powershell`, `pkgsrc`. Reason varies — most language toolchains don't ship a "what's outdated" subcommand.
+**`Updates` (`UpdateChecker`)** — when missing, `gpk outdated` skips that manager silently, and the TUI's `↑` indicator never lights up for its packages. Notably missing: `pipx`, `cargo`, `go`, `bun`, `nix`, `nuget`, `powershell`, `pkgsrc`, `aqua`. Reason varies — most language toolchains don't ship a "what's outdated" subcommand.
 
-**`Search` (`Searcher`)** — needed for `gpk install <pkg>` to resolve which manager has the package when `--manager` isn't passed. When missing, you must pass `--manager` explicitly (`gpk install foo --manager npm`). Missing managers default to "requires `--manager`": `pipx`, `go`, `bun`, `pnpm`, `nix`, `pkgsrc`, `nuget`, `powershell`, `windows-updates`, `maven`, `uv`.
+**`Search` (`Searcher`)** — needed for `gpk install <pkg>` to resolve which manager has the package when `--manager` isn't passed. When missing, you must pass `--manager` explicitly (`gpk install foo --manager npm`). Missing managers default to "requires `--manager`": `pipx`, `go`, `bun`, `pnpm`, `nix`, `pkgsrc`, `nuget`, `powershell`, `windows-updates`, `maven`, `uv`, `bin`.
 
 ## Write-side notes
 
-**`Inst` / `Up` / `Rm` are nearly universal.** Of the 37 managers, the only ones missing write operations are:
+**`Inst` / `Up` / `Rm` are nearly universal.** Of the 46 managers, the only ones missing write operations are:
 - `pkgsrc`: install/upgrade not exposed (NetBSD's pkgsrc is bootstrap-driven from source). Remove via `pkg_delete` works.
 - `mas`: remove not exposed (Apple's Mac App Store CLI doesn't allow uninstall).
 - `maven`: only upgrade is meaningful (`mvn dependency:resolve -U`); Maven's local cache isn't a user-managed package set.
 - `windows-updates`: pure status reader. Triggering installs is owned by the Settings app.
+- `aqua`: single-package upgrade and remove are not honestly expressible; see Deliberate gaps. Bulk upgrade works.
 
 **`Deep` (`DeepRemover`) is rare.** Only 4 managers: pacman, apt, dnf, xbps. These tools have a dedicated "remove this package AND its orphaned dependencies" command (`pacman -Rns`, `apt-get autoremove`, `dnf autoremove`, `xbps-remove -R`). Others can be approximated by `gpk remove pkg && gpk autoremove`, but autoremove isn't exposed as a separate gpk command yet.
 
@@ -352,13 +357,28 @@ AUR remove delegates to pacman because `yay -R` is a passthrough; using pacman d
   install:        nuget install DUMMY
   upgrade:        nuget update DUMMY
   remove:         (filesystem delete in ~/.nuget/packages/)
+
+=== dotnet-tool ===
+  install:        dotnet tool install --global DUMMY
+  upgrade:        dotnet tool update --global DUMMY
+  remove:         dotnet tool uninstall --global DUMMY
+
+=== aqua ===
+  install:        aqua generate -g -i DUMMY
+  upgrade:        (not supported; bulk only, see Deliberate gaps)
+  remove:         (not supported; see Deliberate gaps)
+
+=== bin ===
+  install:        bin install DUMMY
+  upgrade:        bin update DUMMY
+  remove:         bin remove DUMMY
 ```
 
 `go remove` is the only filesystem-level operation in the matrix — `go` itself has no uninstall command, so gpk runs `rm $GOPATH/bin/<name>`. Safe because the file was created by `go install` in the first place.
 
 ## Deliberate gaps
 
-Five spots where a manager intentionally doesn't implement an interface. These aren't gpk bugs:
+Eight spots where a manager intentionally doesn't implement an interface. These aren't gpk bugs:
 
 | Manager | Missing | Why |
 |---|---|---|
@@ -367,6 +387,9 @@ Five spots where a manager intentionally doesn't implement an interface. These a
 | `maven` | Install, Remove, Search, Deps, Desc | Maven's local cache (`~/.m2/repository`) is build-output, not a user-managed package set. There's no install/remove concept; the only write op is "refresh the cache" via `mvn dependency:resolve -U`. |
 | `windows-updates` | Almost everything | Status-only manager — counts pending Windows updates. Triggering the install is owned by the Settings app or `UsoClient`. |
 | `nuget` | Desc, Deps, Updates, Search | NuGet's surface here is the global package cache. Per-package introspection beyond install/upgrade/remove is package-source-dependent and not surfaced by the `nuget` CLI in a portable way. |
+| `aqua` | Upgrade, Remove, Updates | aqua is config-driven. Its per-package `update` resolves by *command* name (`gh`), not package name (`cli/cli`), so gpk has nothing honest to pass; `aqua rm` deletes downloaded files but deliberately leaves the package in `aqua.yaml`, so gpk would still list it as installed; and aqua has no read-only "outdated" query — `aqua update` rewrites the config in place. Bulk upgrade works and targets the global config explicitly. |
+| `bin` | Search, Desc, Deps | `bin` has no registry: every install is a URL, so there is nothing to search and no metadata to describe. Standalone binaries have no dependency graph. |
+| `dotnet-tool` | Desc, Deps, all `+y` | `dotnet tool install/update/uninstall` never prompt and have no `--yes` flag, so the non-interactive variants would be identical. Descriptions exist only behind a per-package network call (`dotnet tool search --detail`), and global tools expose no dependency graph. |
 
 ## Verifying locally
 

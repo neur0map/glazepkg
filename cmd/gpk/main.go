@@ -119,6 +119,7 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("installed <pkg>...", 24), "Check if packages are installed (exit 0/2)")
 	fmt.Printf("  %s %s\n", cmd("managers", 24), "Show which managers are detected, with counts")
 	fmt.Printf("  %s %s\n", cmd("export [-o file]", 24), "Dump installed packages for backup/migration")
+	fmt.Printf("  %s %s\n", cmd("outdated --notify", 24), "Also raise a desktop notification when updates exist")
 	fmt.Println()
 
 	fmt.Printf("%s %s\n", section("COMMANDS"), muted("· write"))
@@ -133,6 +134,7 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("undo", 24), "Reverse gpk's last action")
 	fmt.Printf("  %s %s\n", cmd("theme [name]", 24), "List or set the color theme")
 	fmt.Printf("  %s %s\n", cmd("import <file>", 24), "Install everything from an export, skipping installed")
+	fmt.Printf("  %s %s\n", cmd("snapshot [save|list]", 24), "Record installed packages (snapshot diff A B)")
 	fmt.Println()
 
 	fmt.Println(section("PACMAN / YAY FLAGS"))
@@ -184,7 +186,8 @@ func printHelp() {
 	fmt.Println(muted("  npm, pnpm, bun, flatpak, macports, pkgsrc, opam, gem, pkg,"))
 	fmt.Println(muted("  composer, mas, apk, nix, conda, luarocks, xbps, portage, guix,"))
 	fmt.Println(muted("  winget, chocolatey, nuget, powershell, windows-updates, scoop,"))
-	fmt.Println(muted("  maven, am, gvm, mise, quicklisp, softwareupdate, local"))
+	fmt.Println(muted("  maven, am, gvm, mise, quicklisp, softwareupdate, local,"))
+	fmt.Println(muted("  aqua, bin, dotnet-tool"))
 	fmt.Println()
 
 	fmt.Println(section("DATA PATHS"))

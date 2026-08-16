@@ -3,9 +3,34 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
-## Unreleased
+## v0.6.3 — 2026-08-16
 
 ### Added
+- `gpk snapshot` — the snapshot store the TUI writes with `s`, exposed as a
+  subcommand so a systemd timer or launchd agent can take periodic snapshots
+  (#64). `snapshot list` numbers them newest-first, `snapshot diff A B` compares
+  any two (a list index, a path, `latest`, or `live` for the system right now),
+  and `snapshot prune --keep N` / `snapshot --keep N` stops scheduled snapshots
+  growing without bound. `--json` throughout.
+- `gpk outdated --notify` raises a desktop notification when updates exist,
+  using what the OS already ships — `osascript` on macOS, `notify-send` on
+  Linux, a toast on Windows (#29). gpk still runs and exits; no daemon, no menu
+  bar, no cgo. Schedule it yourself.
+- `aqua` source — CLI tools declared in `aqua.yaml` and the global aqua config
+  (#66). Lists, searches the registries, and adds tools to the global config;
+  bulk upgrade targets that config explicitly.
+- `bin` source — pre-compiled binaries installed by
+  [bin](https://github.com/marcosnils/bin) from GitHub/GitLab/http (#67). Reads
+  bin's own config, detects updates via `bin update --dry-run`, and supports
+  install/upgrade/remove.
+- `dotnet-tool` source — .NET global tools from `dotnet tool install -g` (#65),
+  with search and update detection through nuget.org. `--dotnet` works as a
+  manager selector.
+- Long-running steps report progress. A package manager that prints nothing for
+  a while now gets a "still running" line at widening intervals naming the
+  manager, the command and the elapsed time, instead of leaving the terminal
+  looking dead; `gpk` also shows a spinner while it does its own scanning and
+  update checks.
 - `gpk search --bottomup` (alias `--reverse`) prints results in reverse order
   so the best match lands at the bottom, right above the prompt, like
   `yay --bottomup`. Result numbers don't move — 1 is always the best match —
@@ -21,6 +46,21 @@ follows Keep a Changelog.
   `local` tab in the TUI and under `gpk -m local`; `gpk -R <app>` removes the
   app's files — desktop entry, launcher, and self-contained install dir —
   leaving user config/data untouched.
+
+### Fixed
+- `pip` is detected and driven as `pip3` when only `pip3` exists, which is the
+  default on Homebrew Python and several distro packages (#68).
+- A failed manager in a multi-manager run (`gpk -Syu`, `clean`, `autoremove`) is
+  restated in a summary at the end, with its exit status, its command, how many
+  managers did succeed, and how to retry or skip it. Previously the only notice
+  scrolled past thousands of lines earlier and the run just exited 1.
+- `gpk upgrade`/`install`/`remove`/`downgrade`/`undo` with nothing able to
+  answer the confirmation prompt (a closed stdin, `</dev/null`, a timer unit)
+  now fail with an actionable error instead of printing "cancelled" and exiting
+  0 after doing nothing.
+- Ctrl-C during a package-manager run goes to the manager rather than killing
+  gpk first, so the transaction decides when to stop and gpk still reports the
+  outcome. A second Ctrl-C abandons it and exits 130.
 
 ## v0.6.0 — 2026-06-21
 
