@@ -33,6 +33,7 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 		jsonFlag     = fs.Bool("json", false, "emit JSON envelope")
 		noCacheFlag  = fs.Bool("no-cache", false, "force fresh CheckUpdates")
 		quietFlag    = fs.Bool("quiet", false, "suppress progress on stderr")
+		notifyFlag   = fs.Bool("notify", false, "also raise a desktop notification when updates exist")
 	)
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
 	fs.StringVar(mgrFlag, "m", "", "alias for --manager")
@@ -109,6 +110,14 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 		}
 	default:
 		writeOutdatedHuman(stdout, entries, newStyler())
+	}
+
+	if *notifyFlag && len(entries) > 0 {
+		title := fmt.Sprintf("%s available", plural(len(entries), "package update", "package updates"))
+		if err := notify(title, notifyBody(entries), stderr); err != nil {
+			fmt.Fprintf(stderr, "error: notification failed: %v\n", err)
+			return ExitErr
+		}
 	}
 
 	if *exitCodeFlag && len(entries) > 0 {
