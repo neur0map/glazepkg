@@ -3,6 +3,25 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
+## v0.6.7 — 2026-08-16
+
+### Fixed
+- `gpk update` no longer overwrites a binary a package manager owns. Installing
+  gpk with Homebrew, the AUR, Nix, Scoop or Chocolatey and then running
+  `gpk update` used to replace the managed file, which desyncs that manager's
+  database: brew reverts it on the next upgrade, pacman flags it as modified,
+  and the Nix store is read-only so it just failed. gpk now asks who owns the
+  running binary and names the right command instead. The TUI's update banner
+  says the same thing rather than always suggesting `gpk update`.
+  Self-update is untouched for release downloads and `go install`.
+
+### Added
+- A `noselfupdate` build tag that compiles the self-updater out entirely, for
+  distributions that manage gpk themselves. The Nix package builds with it, and
+  it is what a homebrew-core formula needs: core's policy requires self-update
+  to be disabled. `packaging/homebrew/gpk.rb` is the core candidate that builds
+  from source; the tap formula and its pre-built binaries are unchanged.
+
 ## v0.6.6 — 2026-08-16
 
 ### Added

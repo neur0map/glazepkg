@@ -80,6 +80,20 @@ go install github.com/neur0map/glazepkg/cmd/gpk@latest
 
 Grab a binary from [releases](https://github.com/neur0map/glazepkg/releases) for macOS (ARM/Intel), Linux (x64/ARM), or Windows (x64/ARM).
 
+### Keeping it up to date
+
+`gpk update` replaces the binary in place, and is meant for the pre-built
+downloads above. If a package manager installed gpk, that manager owns the file
+and gpk will point you at it instead of fighting it:
+
+| Installed with | Upgrade with |
+|---|---|
+| Homebrew | `brew upgrade gpk` |
+| AUR | `yay -S gpk-bin` |
+| Nix | `nix profile upgrade gpk` |
+| Scoop / Chocolatey | `scoop update gpk` / `choco upgrade gpk` |
+| a release download, `go install` | `gpk update` |
+
 <details>
 <summary><strong>Windows: seeing a "virus detected" or "Windows protected your PC" warning?</strong></summary>
 

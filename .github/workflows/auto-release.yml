@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - README.md
       - .github/**
+      - packaging/**
   workflow_dispatch:
     inputs:
       version:
