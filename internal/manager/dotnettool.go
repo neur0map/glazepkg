@@ -3,7 +3,9 @@ package manager
 import (
 	"bufio"
 	"bytes"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/neur0map/glazepkg/internal/model"
@@ -15,7 +17,39 @@ type DotnetTool struct{}
 
 func (d *DotnetTool) Name() model.Source { return model.SourceDotnetTool }
 
-func (d *DotnetTool) Available() bool { return commandExists("dotnet") }
+// Available requires an SDK, not just the `dotnet` on PATH. Plenty of machines
+// carry the host and runtime alone (a dependency of some other package), and
+// there every `dotnet tool` command fails with "No .NET SDKs were found" — so
+// claiming the manager would break every `gpk upgrade` on those boxes.
+func (d *DotnetTool) Available() bool {
+	return commandExists("dotnet") && dotnetSDKPresent()
+}
+
+// dotnetSDKPresent looks for a populated sdk directory beside the dotnet host.
+// Checked on the filesystem rather than by running `dotnet --list-sdks`, since
+// Available runs for every manager on every gpk command.
+func dotnetSDKPresent() bool {
+	var roots []string
+	if r := os.Getenv("DOTNET_ROOT"); r != "" {
+		roots = append(roots, r)
+	}
+	if bin, err := exec.LookPath("dotnet"); err == nil {
+		if real, err := filepath.EvalSymlinks(bin); err == nil {
+			roots = append(roots, filepath.Dir(real))
+		}
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		roots = append(roots, filepath.Join(home, ".dotnet"))
+	}
+	for _, r := range roots {
+		// An empty sdk dir is left behind by some uninstalls, so require an
+		// entry in it rather than just the directory.
+		if entries, err := os.ReadDir(filepath.Join(r, "sdk")); err == nil && len(entries) > 0 {
+			return true
+		}
+	}
+	return false
+}
 
 func (d *DotnetTool) Scan() ([]model.Package, error) {
 	// The table format is stable across every SDK; `--format json` only exists

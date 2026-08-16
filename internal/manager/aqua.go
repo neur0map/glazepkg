@@ -21,7 +21,46 @@ type Aqua struct{}
 
 func (a *Aqua) Name() model.Source { return model.SourceAqua }
 
-func (a *Aqua) Available() bool { return commandExists("aqua") }
+// Available requires a configuration aqua can actually act on. With aqua
+// installed but no config, its own commands exit with "configuration file isn't
+// found", which would fail every `gpk upgrade` for anyone who installed aqua
+// for project-local use and ran gpk from elsewhere.
+func (a *Aqua) Available() bool {
+	return commandExists("aqua") && aquaConfigPresent()
+}
+
+// aquaConfigNames are the file names aqua's own config finder accepts.
+var aquaConfigNames = [...]string{"aqua.yaml", "aqua.yml", ".aqua.yaml", ".aqua.yml"}
+
+// aquaConfigPresent reports whether AQUA_GLOBAL_CONFIG names an existing file,
+// or a config sits in the working directory or any parent, which is the same
+// pair of places the aqua commands gpk builds will look.
+func aquaConfigPresent() bool {
+	for _, p := range filepath.SplitList(os.Getenv("AQUA_GLOBAL_CONFIG")) {
+		if p == "" {
+			continue
+		}
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return true
+		}
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	for {
+		for _, name := range aquaConfigNames {
+			if info, err := os.Stat(filepath.Join(dir, name)); err == nil && !info.IsDir() {
+				return true
+			}
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
+}
 
 // Scan lists the tools aqua manages via `aqua list --installed --all`, which
 // enumerates the packages declared in the nearest aqua.yaml and every global
