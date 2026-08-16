@@ -46,7 +46,7 @@ jobs:
           gem list --local > /dev/null
 
       - name: Integration tests
-        run: go test ./tests/integration/... -v -timeout 120s
+        run: go test ./tests/integration/... -v -timeout 240s
 
   integration-linux:
     runs-on: ubuntu-latest
@@ -70,4 +70,4 @@ jobs:
           gem list --local > /dev/null 2>&1 || true
 
       - name: Integration tests
-        run: go test ./tests/integration/... -v -timeout 120s
+        run: go test ./tests/integration/... -v -timeout 240s

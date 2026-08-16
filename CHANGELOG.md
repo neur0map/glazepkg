@@ -3,6 +3,20 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
+## v0.6.4 — 2026-08-16
+
+### Fixed
+- `local` scans no longer ask the system package database once per file. Every
+  executable in a bin dir and every `.desktop` entry in a system dir used to
+  cost its own `dpkg -S` (or `pacman -Qo`) subprocess, and dpkg walks its whole
+  file list on each call, so a populated `/usr/local/bin` made `gpk list` crawl
+  on Debian and Ubuntu. Both tools accept many paths at once, so it is one
+  query now: 136ms for 300 paths against a projected 30s one at a time.
+- The integration suite stopped scanning the machine six times. Each CLI test
+  had its own data dir and bypassed the cache, so all six did a full live scan;
+  the Linux job was using 117 of its 120 allowed seconds and had already failed
+  once. It shares one scan now and takes a third of the time.
+
 ## v0.6.3 — 2026-08-16
 
 ### Added
