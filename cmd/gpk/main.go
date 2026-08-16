@@ -53,6 +53,20 @@ func main() {
 }
 
 func runUpdate() {
+	if in := updater.Managed(); in.Manager != "" {
+		fmt.Fprintf(os.Stderr, "gpk was installed by %s, which owns this binary.\n", in.Manager)
+		if in.Upgrade != "" {
+			fmt.Fprintf(os.Stderr, "Upgrade it with: %s\n", in.Upgrade)
+		} else {
+			fmt.Fprintf(os.Stderr, "Upgrade the %s package with %s instead.\n", in.Package, in.Manager)
+		}
+		os.Exit(1)
+	}
+	if updater.DisabledByCompilation {
+		fmt.Fprintln(os.Stderr, "this build of gpk cannot replace its own binary; upgrade it the way you installed it")
+		os.Exit(1)
+	}
+
 	fmt.Printf("gpk %s — checking for updates...\n", version)
 
 	newVersion, err := updater.Update(version)

@@ -44,9 +44,10 @@ func LatestVersion() (string, error) {
 	return rel.TagName, nil
 }
 
-// Update downloads the latest release binary and replaces the current executable.
-// Returns the new version string.
-func Update(currentVersion string) (string, error) {
+// update downloads the latest release binary and replaces the current
+// executable. Reached only through Update, which the noselfupdate build tag
+// swaps for a stub.
+func update(currentVersion string) (string, error) {
 	rel, err := fetchRelease()
 	if err != nil {
 		return "", fmt.Errorf("failed to check for updates: %w", err)

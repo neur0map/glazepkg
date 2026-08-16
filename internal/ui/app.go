@@ -1142,7 +1142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case updateAvailableMsg:
-		m.updateBanner = fmt.Sprintf("↑ %s → %s available — run `gpk update`", m.version, msg.latest)
+		m.updateBanner = fmt.Sprintf("↑ %s → %s available — %s", m.version, msg.latest, updater.Managed().UpgradeHint())
 		return m, nil
 
 	case exportDoneMsg:

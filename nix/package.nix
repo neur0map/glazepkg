@@ -16,6 +16,10 @@ buildGoModule {
 
   ldflags = [ "-s" "-w" "-X" "main.version=${version}" ];
 
+  # The store is read-only and Nix owns the file, so `gpk update` must refuse
+  # rather than try to replace it.
+  tags = [ "noselfupdate" ];
+
   nativeBuildInputs = [ installShellFiles ];
 
   postInstall = ''
