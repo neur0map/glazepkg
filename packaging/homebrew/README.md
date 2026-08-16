@@ -29,24 +29,46 @@ The tag is opt-in. Every other channel (release downloads, the tap, AUR,
 are covered at runtime instead: `updater.Managed()` asks who owns the running
 binary and refuses when the answer is a package manager.
 
-## Before submitting
+## State of the submission
 
-The formula's `url` and `sha256` must point at a release that contains the
-build tag, or `-tags noselfupdate` is a silent no-op — Go accepts unknown tags
-without complaint. The `test do` block catches exactly that: it asserts
-`gpk update` exits non-zero.
+A branch is staged at `neur0map/homebrew-core`, branch `gpk`, one commit
+`gpk 0.6.7 (new formula)` adding `Formula/g/gpk.rb`. The pull request itself is
+not opened: homebrew-core's template asks the submitter to confirm they will
+answer maintainer questions themselves, and to disclose any AI involvement, so
+that is yours to fill in and send.
 
-Run the audit before opening the PR:
+`brew audit --strict --online --new local/audit/gpk` passes clean against
+v0.6.7 on brew 6.0.17. Note the flag: `--new-formula` was renamed to `--new`,
+so older write-ups are out of date. Auditing a formula that is not in a tap
+needs one:
 
 ```bash
-brew audit --strict --online --new-formula gpk
-brew install --build-from-source ./packaging/homebrew/gpk.rb
-brew test gpk
+brew tap-new local/audit --no-git
+cp packaging/homebrew/gpk.rb "$(brew --repository local/audit)/Formula/"
+brew audit --strict --online --new local/audit/gpk
 ```
 
-Notability was already met at submission time: 572 stars against the 225 that
-core wants for a self-submission by the repository owner (75 if someone else
-opens the PR).
+Still to run, on a machine where `go` has a bottle:
+
+```bash
+HOMEBREW_NO_INSTALL_FROM_API=1 brew install --build-from-source local/audit/gpk
+brew test local/audit/gpk
+```
+
+Every command those two would run has been checked by hand against the
+published v0.6.7 tarball: the declared sha256 matches, the build line
+`std_go_args` expands to succeeds, completions generate for bash, zsh and fish,
+and all four test assertions pass. What is unverified is Homebrew's own
+plumbing around them.
+
+The `url` and `sha256` must always point at a release that contains the build
+tag, or `-tags noselfupdate` is a silent no-op, because Go accepts unknown tags
+without complaint. The `test do` block exists to catch that: it asserts
+`gpk update` exits non-zero. It caught exactly that mistake when the formula
+was first pointed at v0.6.6.
+
+Notability is met: 572 stars against the 225 core wants for a self-submission
+by the repository owner, or 75 if somebody else opens it.
 
 ## Retiring the tap afterwards
 
