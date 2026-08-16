@@ -6,7 +6,27 @@ demo.tape
 PLAN.md
 docs/
 
+# nix build output symlinks
+/result
+/result-*
+
 .claude/
 .worktrees/
 .prowl/
 AGENTS.md
+# prowl-agent: derived state
+!.prowl/
+.prowl/*
+!.prowl/config.toml
+!.prowl/rules.toml
+!.prowl/knowledge/
+!.prowl/knowledge/**
+!.prowl/proposals/
+!.prowl/proposals/**
+.prowl/index.db*
+.prowl/cache/
+.prowl/logs/
+.prowl/editor/
+.prowl/setup-applies.json
+.prowl-setup.lock
+# /prowl-agent: derived state
