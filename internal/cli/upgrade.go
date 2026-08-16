@@ -133,19 +133,23 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		return ExitOK
 	}
 
-	if !*yesFlag && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
-		fmt.Fprintln(stderr, "cancelled")
-		return ExitOK
+	if !*yesFlag {
+		if ok, code := confirmProceed(st, r, stdout, stderr); !ok {
+			return code
+		}
 	}
 
 	grp := nextGroup()
-	for _, p := range plans {
+	for i, p := range plans {
+		label := p.pkg.Name + " (" + string(p.mgr.Name()) + ")"
 		if !*quietFlag {
-			fmt.Fprintln(stderr, st.accent(":: ")+"upgrading "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
+			fmt.Fprintln(stderr, st.accent(":: ")+stepPrefix(i, len(plans))+"upgrading "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
 		}
 		cmd := upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag)
-		if err := headlessExec(cmd); err != nil {
-			fmt.Fprintln(stderr, st.bad("✗")+" "+p.pkg.Name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
+		took, err := runStep(cmd, label, st, stderr, *quietFlag)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s %s %s\n", st.bad("✗"), p.pkg.Name,
+				st.dim("· "+string(p.mgr.Name())+" "+exitReason(err)+" after "+humanDuration(took)+" — its output is above"))
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{p.pkg}, nil)
@@ -154,7 +158,8 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			Source: p.mgr.Name(), Name: p.pkg.Name,
 		})
 		if !*quietFlag {
-			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" upgraded"))
+			fmt.Fprintf(stderr, "%s %s %s\n", st.ok("✓"),
+				st.paint(p.pkg.Name, st.pal.White, true), st.dim("upgraded · "+humanDuration(took)))
 		}
 	}
 	return ExitOK
@@ -222,5 +227,5 @@ func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool
 		}
 		return ExitOK
 	}
-	return executeGrouped("Upgrade everything", rows, dryRun, yes, quiet, st, r, stdout, stderr)
+	return executeGrouped("Upgrade everything", "upgrade", rows, dryRun, yes, quiet, st, r, stdout, stderr)
 }

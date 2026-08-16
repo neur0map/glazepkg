@@ -60,5 +60,5 @@ func runClean(args []string, mgrs []manager.Manager, version string, stdout, std
 
 	st := newStyler()
 	r := newPromptReader(stdin)
-	return executeGrouped("Clean caches", rows, *dryRunFlag, *yesFlag, *quietFlag, st, r, stdout, stderr)
+	return executeGrouped("Clean caches", "clean", rows, *dryRunFlag, *yesFlag, *quietFlag, st, r, stdout, stderr)
 }

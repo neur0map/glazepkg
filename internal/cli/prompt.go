@@ -22,19 +22,52 @@ func newPromptReader(in io.Reader) *bufio.Reader {
 	return bufio.NewReader(in)
 }
 
-// confirm prints prompt and returns true only for y/yes. A shared reader is
-// used so a later read in the same flow doesn't lose buffered input.
-func confirm(prompt string, r *bufio.Reader, out io.Writer) bool {
+// answer is the outcome of a confirmation prompt. Saying no and having nobody
+// there to answer are different facts: a decision, versus a run that must not
+// look like a successful no-op.
+type answer int
+
+const (
+	answerNo answer = iota
+	answerYes
+	answerUnavailable
+)
+
+// confirm prints prompt and reads a y/n answer. A shared reader is used so a
+// later read in the same flow doesn't lose buffered input.
+func confirm(prompt string, r *bufio.Reader, out io.Writer) answer {
 	if r == nil {
-		return false
+		return answerUnavailable
 	}
 	fmt.Fprint(out, prompt)
 	line, err := r.ReadString('\n')
-	if err != nil && line == "" {
-		return false
+	if err != nil && strings.TrimSpace(line) == "" {
+		// EOF before a single character: </dev/null, a closed pipe, a timer unit.
+		fmt.Fprintln(out)
+		return answerUnavailable
 	}
-	answer := strings.ToLower(strings.TrimSpace(line))
-	return answer == "y" || answer == "yes"
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return answerYes
+	}
+	return answerNo
+}
+
+// confirmProceed asks the standard "==> proceed?" question and turns the answer
+// into the exit code the caller should return. A refusal is success; an
+// unanswerable prompt is an error, because `gpk upgrade </dev/null` reporting
+// exit 0 after upgrading nothing is worse than either.
+func confirmProceed(st *styler, r *bufio.Reader, stdout, stderr io.Writer) (proceed bool, code int) {
+	switch confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
+	case answerYes:
+		return true, ExitOK
+	case answerNo:
+		fmt.Fprintln(stderr, "cancelled")
+		return false, ExitOK
+	default:
+		fmt.Fprintln(stderr, "error: no confirmation possible — stdin is closed or empty; pass --yes (or --noconfirm) to run unattended")
+		return false, ExitErr
+	}
 }
 
 // readSelection prints prompt and returns the raw line. ok is false on EOF.

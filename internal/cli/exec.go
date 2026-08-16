@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"time"
 
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
@@ -42,6 +45,41 @@ func headlessExec(cmd *exec.Cmd) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// runStep runs one package-manager command on the user's terminal and reports
+// while it works: a "still running" notice at widening intervals, and Ctrl-C
+// held so the child decides when to stop. quiet drops the notices but keeps the
+// signal handling, so a scripted run still can't orphan a `pacman`.
+func runStep(cmd *exec.Cmd, label string, st *styler, w io.Writer, quiet bool) (time.Duration, error) {
+	if cmd == nil {
+		return 0, headlessExec(nil)
+	}
+	var s *step
+	if !quiet {
+		s = startStep(w, st, label, displayCmd(cmd))
+	}
+	release := holdInterrupt(w, st, label)
+	started := time.Now()
+	err := headlessExec(cmd)
+	release()
+	s.finish()
+	return time.Since(started), err
+}
+
+// exitReason describes why a step failed, in the shortest form that is still
+// actionable: the child's exit status when it ran, otherwise why it couldn't.
+func exitReason(err error) string {
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if code := ee.ExitCode(); code >= 0 {
+			return fmt.Sprintf("exit %d", code)
+		}
+		// Terminated by a signal, so there is no status to report: ExitCode
+		// would say -1, while String says "signal: interrupt".
+		return ee.String()
+	}
+	return err.Error()
 }
 
 // stripSudoStdinFlag returns a copy of cmd with the "-S" argument removed

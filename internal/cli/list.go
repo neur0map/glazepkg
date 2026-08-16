@@ -50,7 +50,7 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 	}
 
 	if *updatesOnly {
-		pkgs = withUpdates(filtered, pkgs)
+		pkgs = withUpdates(filtered, pkgs, *quietFlag, stderr)
 	}
 
 	if terms := fs.Args(); len(terms) > 0 {
@@ -72,7 +72,8 @@ func runList(args []string, mgrs []manager.Manager, version string, stdout, stde
 }
 
 // collectPackages either loads from scan cache or runs a fresh live scan
-// across the filtered manager set, writing back to cache afterward.
+// across the filtered manager set, writing back to cache afterward. A live scan
+// captures its subprocess output, so the progress line is gpk's to animate.
 func collectPackages(mgrs []manager.Manager, noCache, quiet bool, stderr io.Writer, cacheOK bool) ([]model.Package, error) {
 	if !noCache {
 		if cached := manager.LoadScanCache(); cached != nil {
@@ -82,19 +83,21 @@ func collectPackages(mgrs []manager.Manager, noCache, quiet bool, stderr io.Writ
 		}
 	}
 
+	var sp *spinner
+	if !quiet {
+		sp = startSpinner(stderr, newStyler(), "")
+		defer sp.stop()
+	}
+
 	var out []model.Package
 	for _, m := range mgrs {
 		if !m.Available() {
 			continue
 		}
-		if !quiet {
-			fmt.Fprintf(stderr, "scanning %s...\n", m.Name())
-		}
+		sp.update("scanning " + string(m.Name()))
 		pkgs, err := m.Scan()
 		if err != nil {
-			if !quiet {
-				fmt.Fprintf(stderr, "warning: %s scan failed: %v\n", m.Name(), err)
-			}
+			sp.note(fmt.Sprintf("warning: %s scan failed: %v", m.Name(), err))
 			continue
 		}
 		out = append(out, pkgs...)
@@ -139,11 +142,23 @@ func filterByTerms(pkgs []model.Package, terms []string) []model.Package {
 	return out
 }
 
+// fetchUpdates asks each manager for the latest available versions, showing a
+// progress line while it works. Update checks reach the network (repo
+// databases, the AUR RPC, PyPI) so this is the second place a gpk command can
+// sit for a long time with nothing of its own to print.
+func fetchUpdates(mgrs []manager.Manager, pkgs []model.Package, cache *manager.UpdateCache, quiet bool, stderr io.Writer) map[string]string {
+	if !quiet {
+		sp := startSpinner(stderr, newStyler(), "checking for updates")
+		defer sp.stop()
+	}
+	return manager.FetchUpdates(mgrs, pkgs, cache)
+}
+
 // withUpdates returns only packages whose LatestVersion is set and differs
 // from Version. Lazily fetches updates for managers missing from the cache.
-func withUpdates(mgrs []manager.Manager, pkgs []model.Package) []model.Package {
+func withUpdates(mgrs []manager.Manager, pkgs []model.Package, quiet bool, stderr io.Writer) []model.Package {
 	cache := manager.NewUpdateCache()
-	updates := manager.FetchUpdates(mgrs, pkgs, cache)
+	updates := fetchUpdates(mgrs, pkgs, cache, quiet, stderr)
 	out := make([]model.Package, 0, len(pkgs))
 	for _, p := range pkgs {
 		if latest, ok := updates[p.Key()]; ok && latest != "" && latest != p.Version {

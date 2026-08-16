@@ -98,16 +98,19 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 		return ExitOK
 	}
 
-	if !*yesFlag && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
-		fmt.Fprintln(stderr, "cancelled")
-		return ExitOK
+	if !*yesFlag {
+		if ok, code := confirmProceed(st, r, stdout, stderr); !ok {
+			return code
+		}
 	}
 
 	if !*quietFlag {
 		fmt.Fprintln(stderr, st.accent(":: ")+"downgrading "+st.paint(name, st.pal.White, true)+st.dim(" to "+ver+" via "+string(mgr.Name())))
 	}
-	if err := headlessExec(cmd); err != nil {
-		fmt.Fprintln(stderr, st.bad("✗")+" "+name+st.dim(" — "+string(mgr.Name())+" reported an error (details above)"))
+	took, err := runStep(cmd, name+" ("+string(mgr.Name())+")", st, stderr, *quietFlag)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s %s %s\n", st.bad("✗"), name,
+			st.dim("· "+string(mgr.Name())+" "+exitReason(err)+" after "+humanDuration(took)+" — its output is above"))
 		return ExitErr
 	}
 	invalidateAfterWrite(mgr, []model.Package{{Name: name, Source: mgr.Name()}}, nil)
@@ -116,7 +119,8 @@ func runDowngrade(args []string, mgrs []manager.Manager, version string, stdout,
 		Source: mgr.Name(), Name: name, Version: ver, PrevVersion: curVer,
 	})
 	if !*quietFlag {
-		fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(name, st.pal.White, true)+st.dim(" downgraded to "+ver))
+		fmt.Fprintf(stderr, "%s %s %s\n", st.ok("✓"),
+			st.paint(name, st.pal.White, true), st.dim("downgraded to "+ver+" · "+humanDuration(took)))
 	}
 	return ExitOK
 }

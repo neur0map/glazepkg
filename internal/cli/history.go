@@ -143,18 +143,21 @@ func runUndo(args []string, mgrs []manager.Manager, version string, stdout, stde
 	}
 
 	r := newPromptReader(stdin)
-	if !*yesFlag && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
-		fmt.Fprintln(stderr, "cancelled")
-		return ExitOK
+	if !*yesFlag {
+		if ok, code := confirmProceed(st, r, stdout, stderr); !ok {
+			return code
+		}
 	}
 
 	failed := false
-	for _, s := range steps {
+	for i, s := range steps {
 		if !*quietFlag {
-			fmt.Fprintf(stderr, "reverting %s...\n", s.item.Name)
+			fmt.Fprintf(stderr, "%s%sreverting %s\n", st.accent(":: "), stepPrefix(i, len(steps)), s.item.Name)
 		}
-		if err := headlessExec(s.cmd); err != nil {
-			fmt.Fprintf(stderr, "error: undo %s failed: %v\n", s.item.Name, err)
+		took, err := runStep(s.cmd, s.item.Name+" ("+string(s.item.Source)+")", st, stderr, *quietFlag)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s %s %s\n", st.bad("✗"), s.item.Name,
+				st.dim("· undo failed: "+exitReason(err)+" after "+humanDuration(took)+" — its output is above"))
 			failed = true
 			break
 		}

@@ -199,7 +199,8 @@ var defaultPreference = []string{
 	"brew", "brew-cask", "flatpak", "snap", "macports", "pkgsrc", "pkg", "mas",
 	"scoop", "chocolatey", "winget", "am",
 	"go", "cargo", "npm", "pnpm", "bun", "pip", "pipx", "uv", "gem", "composer",
-	"conda", "luarocks", "opam", "nuget", "maven", "powershell", "mise", "gvm", "quicklisp",
+	"conda", "luarocks", "opam", "nuget", "dotnet-tool", "maven", "powershell",
+	"mise", "aqua", "bin", "gvm", "quicklisp",
 }
 
 func buildPlan(c candidate, ver string, stderr io.Writer) (installPlan, int, bool) {
@@ -380,19 +381,23 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 		return ExitOK
 	}
 
-	if !yes && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
-		fmt.Fprintln(stderr, "cancelled")
-		return ExitOK
+	if !yes {
+		if ok, code := confirmProceed(st, r, stdout, stderr); !ok {
+			return code
+		}
 	}
 
 	grp := nextGroup()
-	for _, p := range plans {
+	for i, p := range plans {
+		label := p.name + " (" + string(p.mgr.Name()) + ")"
 		if !quiet {
-			fmt.Fprintln(stderr, st.accent(":: ")+"installing "+st.paint(p.name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
+			fmt.Fprintln(stderr, st.accent(":: ")+stepPrefix(i, len(plans))+"installing "+st.paint(p.name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
 		}
 		cmd := installCmdFor(p, yes)
-		if err := headlessExec(cmd); err != nil {
-			fmt.Fprintln(stderr, st.bad("✗")+" "+p.name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
+		took, err := runStep(cmd, label, st, stderr, quiet)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s %s %s\n", st.bad("✗"), p.name,
+				st.dim("· "+string(p.mgr.Name())+" "+exitReason(err)+" after "+humanDuration(took)+" — its output is above"))
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, []model.Package{{Name: p.name, Source: p.mgr.Name()}}, nil)
@@ -405,7 +410,8 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 			Source: p.mgr.Name(), Name: p.name, Version: ver,
 		})
 		if !quiet {
-			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(p.name, st.pal.White, true)+st.dim(" installed"))
+			fmt.Fprintf(stderr, "%s %s %s\n", st.ok("✓"),
+				st.paint(p.name, st.pal.White, true), st.dim("installed · "+humanDuration(took)))
 		}
 	}
 	return ExitOK

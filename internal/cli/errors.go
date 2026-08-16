@@ -8,4 +8,8 @@ const (
 	ExitNegative  = 2 // meaningful "no" (not installed, has updates, not found)
 	ExitAmbiguous = 3 // install candidate available in multiple managers
 	// 4 reserved for Phase 2 cache+network failure.
+
+	// ExitInterrupted follows the shell convention (128+SIGINT) and is only
+	// used when the user asks twice to abandon a running package manager.
+	ExitInterrupted = 130
 )

@@ -67,7 +67,7 @@ func runOutdated(args []string, mgrs []manager.Manager, version string, stdout, 
 		}
 		cache.Invalidate(keys)
 	}
-	updates := manager.FetchUpdates(filtered, pkgs, cache)
+	updates := fetchUpdates(filtered, pkgs, cache, *quietFlag, stderr)
 
 	// Build entries. Held packages are pinned, so they're left out.
 	holds := snapshot.LoadHolds()
@@ -131,11 +131,11 @@ func writeOutdatedHuman(w io.Writer, entries []outdatedEntry, st *styler) {
 			srcW = len(e.Source)
 		}
 	}
-	plural := "s"
+	suffix := "s"
 	if len(entries) == 1 {
-		plural = ""
+		suffix = ""
 	}
-	fmt.Fprintln(w, st.title(fmt.Sprintf("%d update%s available", len(entries), plural)))
+	fmt.Fprintln(w, st.title(fmt.Sprintf("%d update%s available", len(entries), suffix)))
 	for _, e := range entries {
 		name := st.paint(padRight(e.Name, nameW), st.pal.White, true)
 		src := st.paint(padRight(e.Source, srcW), st.mgrColorOf(model.Source(e.Source)), true)

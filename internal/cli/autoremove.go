@@ -93,5 +93,5 @@ func runAutoremove(args []string, mgrs []manager.Manager, version string, stdout
 	}
 
 	r := newPromptReader(stdin)
-	return executeGrouped("Remove orphans", rows, *dryRunFlag, *yesFlag, *quietFlag, st, r, stdout, stderr)
+	return executeGrouped("Remove orphans", "autoremove", rows, *dryRunFlag, *yesFlag, *quietFlag, st, r, stdout, stderr)
 }

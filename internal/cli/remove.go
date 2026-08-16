@@ -178,15 +178,16 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 		return ExitOK
 	}
 
-	if !*yesFlag && !confirm(st.accent("==> proceed?")+" [y/N] ", r, stdout) {
-		fmt.Fprintln(stderr, "cancelled")
-		return ExitOK
+	if !*yesFlag {
+		if ok, code := confirmProceed(st, r, stdout, stderr); !ok {
+			return code
+		}
 	}
 
 	grp := nextGroup()
-	for _, p := range plans {
+	for i, p := range plans {
 		if !*quietFlag {
-			fmt.Fprintln(stderr, st.accent(":: ")+"removing "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
+			fmt.Fprintln(stderr, st.accent(":: ")+stepPrefix(i, len(plans))+"removing "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" via "+string(p.mgr.Name())))
 		}
 		var c *exec.Cmd
 		if *withDepsFlag {
@@ -208,8 +209,10 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 				c = p.remover.RemoveCmd(p.pkg.Name)
 			}
 		}
-		if err := headlessExec(c); err != nil {
-			fmt.Fprintln(stderr, st.bad("✗")+" "+p.pkg.Name+st.dim(" — "+string(p.mgr.Name())+" reported an error (details above)"))
+		took, err := runStep(c, p.pkg.Name+" ("+string(p.mgr.Name())+")", st, stderr, *quietFlag)
+		if err != nil {
+			fmt.Fprintf(stderr, "%s %s %s\n", st.bad("✗"), p.pkg.Name,
+				st.dim("· "+string(p.mgr.Name())+" "+exitReason(err)+" after "+humanDuration(took)+" — its output is above"))
 			return ExitErr
 		}
 		invalidateAfterWrite(p.mgr, nil, []model.Package{p.pkg})
@@ -218,7 +221,8 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			Source: p.mgr.Name(), Name: p.pkg.Name, Version: p.pkg.Version,
 		})
 		if !*quietFlag {
-			fmt.Fprintln(stderr, st.ok("✓")+" "+st.paint(p.pkg.Name, st.pal.White, true)+st.dim(" removed"))
+			fmt.Fprintf(stderr, "%s %s %s\n", st.ok("✓"),
+				st.paint(p.pkg.Name, st.pal.White, true), st.dim("removed · "+humanDuration(took)))
 		}
 	}
 	return ExitOK
