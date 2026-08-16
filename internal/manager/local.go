@@ -2,6 +2,7 @@ package manager
 
 import (
 	"bufio"
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,7 +116,8 @@ func discoverLocalApps() []localApp {
 // --- desktop entries (GUI apps) ---
 
 func scanDesktopApps(home string) []localApp {
-	var apps []localApp
+	var paths []string
+	var systemPaths []string
 	seen := map[string]bool{} // a user entry shadows a same-named system one
 	for _, dir := range desktopAppDirs(home) {
 		entries, err := os.ReadDir(dir)
@@ -126,10 +128,21 @@ func scanDesktopApps(home string) []localApp {
 			if e.IsDir() || !strings.HasSuffix(e.Name(), ".desktop") || seen[e.Name()] {
 				continue
 			}
-			if app, ok := parseDesktopApp(filepath.Join(dir, e.Name()), home); ok {
-				seen[e.Name()] = true
-				apps = append(apps, app)
+			seen[e.Name()] = true
+			path := filepath.Join(dir, e.Name())
+			paths = append(paths, path)
+			// A .desktop sitting in a system dir might still belong to a package.
+			if !underHome(path, home) {
+				systemPaths = append(systemPaths, path)
 			}
+		}
+	}
+
+	owned := ownedByPackage(systemPaths)
+	apps := make([]localApp, 0, len(paths))
+	for _, path := range paths {
+		if app, ok := parseDesktopApp(path, home, owned); ok {
+			apps = append(apps, app)
 		}
 	}
 	return apps
@@ -147,7 +160,9 @@ func desktopAppDirs(home string) []string {
 	return append(dirs, systemDesktopDirs...)
 }
 
-func parseDesktopApp(path, home string) (localApp, bool) {
+// parseDesktopApp builds an app from a .desktop entry. owned is the set of
+// system paths a package manager claims, resolved in one batch by the caller.
+func parseDesktopApp(path, home string, owned map[string]bool) (localApp, bool) {
 	entry := parseDesktopEntry(path)
 	if entry == nil || !strings.EqualFold(entry["Type"], "Application") {
 		return localApp{}, false
@@ -156,7 +171,7 @@ func parseDesktopApp(path, home string) (localApp, bool) {
 		return localApp{}, false
 	}
 	// A .desktop sitting in a system dir might still belong to a package.
-	if !underHome(path, home) && isPackageOwned(path) {
+	if owned[path] {
 		return localApp{}, false
 	}
 
@@ -212,8 +227,17 @@ func parseDesktopApp(path, home string) (localApp, bool) {
 
 // --- standalone binaries (CLI apps) ---
 
+// binCandidate is one bin-dir entry that survived the cheap filters and is
+// waiting on the batched package-ownership answer.
+type binCandidate struct {
+	name string
+	path string
+	real string
+}
+
 func scanLocalBinaries(home string, claimedRoots []string) []localApp {
-	var apps []localApp
+	var cands []binCandidate
+	var systemPaths []string
 	seen := map[string]bool{} // dedup by resolved target across bin dirs
 	for _, dir := range binDirs(home) {
 		entries, err := os.ReadDir(dir)
@@ -235,37 +259,47 @@ func scanLocalBinaries(home string, claimedRoots []string) []localApp {
 			if !isNativeBinary(real) {
 				continue
 			}
-			// A system-path binary a package owns is not a "local" install.
-			if !underHome(path, home) && isPackageOwned(path) {
-				continue
-			}
 			if seen[real] {
 				continue
 			}
 			seen[real] = true
-
-			app := localApp{
-				name:        e.Name(),
-				desc:        binaryDesc(path, real),
-				primary:     path,
-				paths:       []string{path},
-				scope:       scopeFor(path, home),
-				installedAt: fileModTime(real),
+			cands = append(cands, binCandidate{name: e.Name(), path: path, real: real})
+			// A system package manager never owns anything under $HOME, so only
+			// system paths are worth asking about.
+			if !underHome(path, home) {
+				systemPaths = append(systemPaths, path)
 			}
-			if root, ok := ownedRoot(real, home); ok {
-				app.roots = appendUnique(app.roots, root)
-				app.paths = appendUnique(app.paths, root)
-			} else if real != "" && real != path {
-				app.paths = appendUnique(app.paths, real)
-			}
-			app.version = versionFromPaths(app.roots, real)
-			app.sizeBytes = totalSize(app.paths)
-			app.privileged = anyOutsideHome(app.paths, home)
-			if app.privileged {
-				app.scope = "system"
-			}
-			apps = append(apps, app)
 		}
+	}
+
+	owned := ownedByPackage(systemPaths)
+	apps := make([]localApp, 0, len(cands))
+	for _, c := range cands {
+		// A system-path binary a package owns is not a "local" install.
+		if owned[c.path] {
+			continue
+		}
+		app := localApp{
+			name:        c.name,
+			desc:        binaryDesc(c.path, c.real),
+			primary:     c.path,
+			paths:       []string{c.path},
+			scope:       scopeFor(c.path, home),
+			installedAt: fileModTime(c.real),
+		}
+		if root, ok := ownedRoot(c.real, home); ok {
+			app.roots = appendUnique(app.roots, root)
+			app.paths = appendUnique(app.paths, root)
+		} else if c.real != "" && c.real != c.path {
+			app.paths = appendUnique(app.paths, c.real)
+		}
+		app.version = versionFromPaths(app.roots, c.real)
+		app.sizeBytes = totalSize(app.paths)
+		app.privileged = anyOutsideHome(app.paths, home)
+		if app.privileged {
+			app.scope = "system"
+		}
+		apps = append(apps, app)
 	}
 	return apps
 }
@@ -464,26 +498,73 @@ func isNativeBinary(path string) bool {
 	return n >= 4 && hdr[0] == 0x7f && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F'
 }
 
-// isPackageOwned reports whether a system package manager owns path. Only
-// meaningful for system locations, so callers skip it (and its subprocess cost)
-// for paths under $HOME, which a system package manager never owns.
-func isPackageOwned(path string) bool {
-	probes := []struct {
-		bin  string
-		args []string
-	}{
-		{"pacman", []string{"-Qo"}},
-		{"dpkg", []string{"-S"}},
-		{"rpm", []string{"-qf"}},
+// ownedByPackage returns the subset of paths a system package manager owns, in
+// one subprocess for the whole set rather than one per path. That distinction
+// matters: /usr/local/bin on a CI runner or a developer box holds hundreds of
+// binaries and `dpkg -S` walks its whole file list on every call, so probing
+// them one at a time turns a scan into minutes.
+//
+// dpkg and pacman both echo the queried path, so results map back to inputs.
+// rpm prints only package names, so on rpm systems each path is asked for
+// separately.
+func ownedByPackage(paths []string) map[string]bool {
+	owned := make(map[string]bool, len(paths))
+	if len(paths) == 0 {
+		return owned
 	}
-	for _, pr := range probes {
-		if !commandExists(pr.bin) {
-			continue
+	switch {
+	case commandExists("pacman"):
+		out, _ := exec.Command("pacman", append([]string{"-Qo"}, paths...)...).Output()
+		markOwned(owned, paths, out, pacmanOwnedPath)
+	case commandExists("dpkg"):
+		out, _ := exec.Command("dpkg", append([]string{"-S"}, paths...)...).Output()
+		markOwned(owned, paths, out, dpkgOwnedPath)
+	case commandExists("rpm"):
+		for _, p := range paths {
+			if exec.Command("rpm", "-qf", p).Run() == nil {
+				owned[p] = true
+			}
 		}
-		// First available tool is authoritative for this system.
-		return exec.Command(pr.bin, append(pr.args, path)...).Run() == nil
 	}
-	return false
+	return owned
+}
+
+// markOwned records every queried path the tool reported. Paths are matched
+// exactly rather than by substring, or querying both /usr/bin/ls and
+// /usr/bin/lsblk would mark the first owned because of the second.
+func markOwned(owned map[string]bool, paths []string, out []byte, pathOf func(string) string) {
+	if len(out) == 0 {
+		return
+	}
+	queried := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		queried[p] = true
+	}
+	sc := bufio.NewScanner(bytes.NewReader(out))
+	for sc.Scan() {
+		if p := pathOf(sc.Text()); queried[p] {
+			owned[p] = true
+		}
+	}
+}
+
+// pacmanOwnedPath reads "/usr/bin/ls is owned by coreutils 9.11-2".
+func pacmanOwnedPath(line string) string {
+	path, _, ok := strings.Cut(line, " is owned by ")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(path)
+}
+
+// dpkgOwnedPath reads "coreutils: /usr/bin/ls", where the package field may
+// itself be a comma-separated list or a diversion note.
+func dpkgOwnedPath(line string) string {
+	i := strings.LastIndex(line, ": ")
+	if i < 0 {
+		return ""
+	}
+	return strings.TrimSpace(line[i+2:])
 }
 
 // --- versions, sizes, paths ---
