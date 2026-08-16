@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/neur0map/glazepkg/internal/manager"
@@ -107,5 +110,81 @@ func TestParseManagerFilter_NegationWithSpace(t *testing.T) {
 		if string(m.Name()) == "pacman" {
 			t.Errorf("pacman should have been excluded")
 		}
+	}
+}
+
+// writeSkipConfig points the config at a temp dir listing names to skip.
+func writeSkipConfig(t *testing.T, names ...string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if len(names) == 0 {
+		return
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "glazepkg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "[managers]\nskip = [\"" + strings.Join(names, "\", \"") + "\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "glazepkg", "config.toml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A manager that fails identically on every run can be taken out of the default
+// set, which is the whole point: one broken pnpm otherwise makes `gpk upgrade`
+// exit non-zero forever.
+func TestParseManagerFilter_SkipsConfiguredManagers(t *testing.T) {
+	writeSkipConfig(t, "pnpm", "npm")
+	for _, filter := range []string{"", "all"} {
+		got, err := parseManagerFilter(filter, realMgrs())
+		if err != nil {
+			t.Fatalf("filter %q: %v", filter, err)
+		}
+		for _, m := range got {
+			if m.Name() == model.SourcePnpm || m.Name() == model.SourceNpm {
+				t.Errorf("filter %q kept skipped manager %s", filter, m.Name())
+			}
+		}
+		if len(got) != len(realMgrs())-2 {
+			t.Errorf("filter %q returned %d mgrs, want %d", filter, len(got), len(realMgrs())-2)
+		}
+	}
+}
+
+// Naming a manager is an explicit request, so it beats the config. That keeps
+// the "retry" hint in the failure summary working after a skip.
+func TestParseManagerFilter_ExplicitNameBeatsSkip(t *testing.T) {
+	writeSkipConfig(t, "pnpm")
+	got, err := parseManagerFilter("pnpm", realMgrs())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].Name() != model.SourcePnpm {
+		t.Errorf("explicit --manager pnpm returned %v, want just pnpm", sourceSet(got))
+	}
+}
+
+// A negative filter still honors the skip list; both are exclusions.
+func TestParseManagerFilter_SkipCombinesWithNegation(t *testing.T) {
+	writeSkipConfig(t, "pnpm")
+	got, err := parseManagerFilter("!brew", realMgrs())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, m := range got {
+		if m.Name() == model.SourcePnpm || m.Name() == model.SourceBrew {
+			t.Errorf("filter kept excluded manager %s", m.Name())
+		}
+	}
+}
+
+func TestParseManagerFilter_NoSkipConfigChangesNothing(t *testing.T) {
+	writeSkipConfig(t)
+	got, err := parseManagerFilter("", realMgrs())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != len(realMgrs()) {
+		t.Errorf("returned %d mgrs, want all %d", len(got), len(realMgrs()))
 	}
 }

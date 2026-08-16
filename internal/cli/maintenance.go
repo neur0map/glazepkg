@@ -118,8 +118,12 @@ func writeFailureSummary(w io.Writer, st *styler, title, verb string, total int,
 	if ok := total - len(failures); ok > 0 {
 		fmt.Fprintf(w, "  %s\n", st.dim(fmt.Sprintf("%s finished, and their changes are applied", plural(ok, "other manager", "other managers"))))
 	}
-	fmt.Fprintf(w, "  %s\n", st.dim("retry: gpk "+verb+" --manager "+strings.Join(names, ",")))
-	fmt.Fprintf(w, "  %s\n", st.dim("skip:  gpk "+verb+" --manager '!"+strings.Join(names, ",!")+"'"))
+	hint := func(label, cmd string) {
+		fmt.Fprintf(w, "  %s\n", st.dim(fmt.Sprintf("%-14s %s", label, cmd)))
+	}
+	hint("retry:", "gpk "+verb+" --manager "+strings.Join(names, ","))
+	hint("skip once:", "gpk "+verb+" --manager '!"+strings.Join(names, ",!")+"'")
+	hint("skip for good:", "gpk managers skip "+strings.Join(names, " "))
 }
 
 // plural renders "1 manager" / "3 managers" without the caller branching.

@@ -445,7 +445,7 @@ func loadOrScan() tea.Msg {
 // a live scan, used to size the progress bar.
 func availableManagerCount() int {
 	n := 0
-	for _, mgr := range manager.All() {
+	for _, mgr := range manager.Enabled() {
 		if mgr.Available() {
 			n++
 		}
@@ -458,7 +458,7 @@ func availableManagerCount() int {
 // the UI can update progress as results arrive.
 func scanManagerCmds() []tea.Cmd {
 	var cmds []tea.Cmd
-	for _, mgr := range manager.All() {
+	for _, mgr := range manager.Enabled() {
 		if !mgr.Available() {
 			continue
 		}
@@ -516,7 +516,7 @@ func fetchDescriptions(pkgs []model.Package, cache *manager.DescriptionCache, sk
 				toFetch = append(toFetch, p)
 			}
 		}
-		mgrs := manager.All()
+		mgrs := manager.Enabled()
 		descs := manager.FetchDescriptions(mgrs, toFetch, cache)
 		return descriptionsDoneMsg{descs: descs}
 	}
@@ -615,7 +615,7 @@ func fetchDependencies(pkgs []model.Package, cache *manager.DepsCache) tea.Cmd {
 				toFetch = append(toFetch, p)
 			}
 		}
-		mgrs := manager.All()
+		mgrs := manager.Enabled()
 		deps := manager.FetchDependencies(mgrs, toFetch, cache)
 		return depsDoneMsg{deps: deps}
 	}
@@ -623,7 +623,7 @@ func fetchDependencies(pkgs []model.Package, cache *manager.DepsCache) tea.Cmd {
 
 func fetchUpdates(pkgs []model.Package, cache *manager.UpdateCache) tea.Cmd {
 	return func() tea.Msg {
-		mgrs := manager.All()
+		mgrs := manager.Enabled()
 		updates := manager.FetchUpdates(mgrs, pkgs, cache)
 		return updatesDoneMsg{updates: updates}
 	}

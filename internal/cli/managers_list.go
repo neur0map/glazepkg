@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/neur0map/glazepkg/internal/config"
 	"github.com/neur0map/glazepkg/internal/manager"
 	"github.com/neur0map/glazepkg/internal/model"
 )
@@ -20,10 +21,83 @@ func init() {
 type managerStat struct {
 	Name      string `json:"name"`
 	Available bool   `json:"available"`
+	Skipped   bool   `json:"skipped,omitempty"`
 	Count     int    `json:"count"`
 }
 
 func runManagers(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "skip":
+			return editSkipList(args[1:], mgrs, true, stdout, stderr)
+		case "unskip":
+			return editSkipList(args[1:], mgrs, false, stdout, stderr)
+		default:
+			fmt.Fprintf(stderr, "error: unknown managers action %q (want skip or unskip)\n", args[0])
+			return ExitErr
+		}
+	}
+	return listManagers(args, mgrs, version, stdout, stderr)
+}
+
+// editSkipList adds or removes managers from `[managers] skip`. Skipping is the
+// answer to a manager that fails identically on every run: one broken pnpm
+// otherwise makes `gpk upgrade` exit non-zero forever.
+func editSkipList(names []string, mgrs []manager.Manager, add bool, stdout, stderr io.Writer) int {
+	if len(names) == 0 {
+		fmt.Fprintln(stderr, "usage: gpk managers skip|unskip <name>...")
+		return ExitErr
+	}
+	known := make(map[string]bool, len(mgrs))
+	for _, m := range mgrs {
+		known[string(m.Name())] = true
+	}
+
+	cfg := config.Load()
+	current := make(map[string]bool, len(cfg.Managers.Skip))
+	for _, n := range cfg.Managers.Skip {
+		current[n] = true
+	}
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if alias, ok := managerAliases[name]; ok {
+			name = alias
+		}
+		// Unskip accepts an unknown name so a typo already in the config can be
+		// removed; skip does not, or the typo would silently do nothing.
+		if add && !known[name] {
+			fmt.Fprintf(stderr, "error: unknown manager %q (known: %s)\n", name, knownNames(mgrs))
+			return ExitErr
+		}
+		if add {
+			current[name] = true
+		} else {
+			delete(current, name)
+		}
+	}
+
+	cfg.Managers.Skip = make([]string, 0, len(current))
+	for n := range current {
+		cfg.Managers.Skip = append(cfg.Managers.Skip, n)
+	}
+	sort.Strings(cfg.Managers.Skip)
+	if err := config.Save(cfg); err != nil {
+		fmt.Fprintf(stderr, "error: saving config: %v\n", err)
+		return ExitErr
+	}
+
+	st := newStyler()
+	if len(cfg.Managers.Skip) == 0 {
+		fmt.Fprintf(stdout, "%s %s\n", st.ok("✓"), st.dim("no managers skipped"))
+		return ExitOK
+	}
+	fmt.Fprintf(stdout, "%s skipping %s\n", st.ok("✓"),
+		st.paint(strings.Join(cfg.Managers.Skip, ", "), st.pal.White, true))
+	fmt.Fprintln(stdout, "  "+st.dim("these are left out of every command unless you name one with --manager"))
+	return ExitOK
+}
+
+func listManagers(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("managers", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
@@ -40,8 +114,9 @@ func runManagers(args []string, mgrs []manager.Manager, version string, stdout, 
 		return ExitErr
 	}
 
+	skip := manager.Skipped()
 	counts := make(map[model.Source]int)
-	if pkgs, err := collectPackages(mgrs, *noCacheFlag, *quietFlag, stderr, true); err == nil {
+	if pkgs, err := collectPackages(dropSkipped(mgrs, nil), *noCacheFlag, *quietFlag, stderr, true); err == nil {
 		for _, p := range pkgs {
 			counts[p.Source]++
 		}
@@ -50,14 +125,21 @@ func runManagers(args []string, mgrs []manager.Manager, version string, stdout, 
 	stats := make([]managerStat, 0, len(mgrs))
 	available := 0
 	for _, m := range mgrs {
-		avail := m.Available()
+		// A skipped manager is reported as skipped rather than counted as
+		// available, so a config setting can never look like a detection bug.
+		avail := m.Available() && !skip[m.Name()]
 		if avail {
 			available++
 		}
 		if *availFlag && !avail {
 			continue
 		}
-		stats = append(stats, managerStat{Name: string(m.Name()), Available: avail, Count: counts[m.Name()]})
+		stats = append(stats, managerStat{
+			Name:      string(m.Name()),
+			Available: avail,
+			Skipped:   skip[m.Name()],
+			Count:     counts[m.Name()],
+		})
 	}
 
 	if *jsonFlag {
@@ -94,6 +176,11 @@ func runManagers(args []string, mgrs []manager.Manager, version string, stdout, 
 
 	const barW = 24
 	for _, s := range stats {
+		if s.Skipped {
+			fmt.Fprintf(stdout, "  %s  %s  %s\n", st.warn("−"), st.dim(padRight(s.Name, 16)),
+				st.dim("skipped · gpk managers unskip "+s.Name))
+			continue
+		}
 		if !s.Available {
 			fmt.Fprintf(stdout, "  %s  %s\n", st.dim("✗"), st.dim(padRight(s.Name, 16)))
 			continue

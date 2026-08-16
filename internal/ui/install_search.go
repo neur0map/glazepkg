@@ -36,7 +36,7 @@ func (m *Model) executeSearch() tea.Cmd {
 	m.searchInput.Blur()
 	m.searchPending = 0
 
-	mgrs := manager.All()
+	mgrs := manager.Enabled()
 	var cmds []tea.Cmd
 	for _, mgr := range mgrs {
 		searcher, ok := mgr.(manager.Searcher)

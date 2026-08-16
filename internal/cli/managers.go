@@ -17,6 +17,10 @@ import (
 //	"pacman,aur"     → union of named managers
 //	"!brew,!cask"    → everything except the named managers
 //
+// The "all managers" forms also drop whatever `[managers] skip` names in the
+// config. Naming a manager positively overrides that, so a skipped manager
+// stays reachable with `--manager <name>`.
+//
 // Mixing positive and negative selectors in one filter is an error: it's
 // almost always a mistake by the user. Unknown manager names are also an
 // error; the error message includes the sorted list of known names so the
@@ -24,7 +28,7 @@ import (
 func parseManagerFilter(value string, all []manager.Manager) ([]manager.Manager, error) {
 	value = strings.TrimSpace(value)
 	if value == "" || value == "all" {
-		return all, nil
+		return dropSkipped(all, nil), nil
 	}
 
 	parts := strings.Split(value, ",")
@@ -84,14 +88,22 @@ func parseManagerFilter(value string, all []manager.Manager) ([]manager.Manager,
 		}
 		excluded[name] = true
 	}
-	var out []manager.Manager
+	return dropSkipped(all, excluded), nil
+}
+
+// dropSkipped returns the managers that are neither excluded by the filter nor
+// skipped in the config. Only reached when the user did not name a manager
+// positively, so an explicit `--manager pnpm` still resolves a skipped one.
+func dropSkipped(all []manager.Manager, excluded map[string]bool) []manager.Manager {
+	skip := manager.Skipped()
+	out := make([]manager.Manager, 0, len(all))
 	for _, m := range all {
-		if excluded[string(m.Name())] {
+		if excluded[string(m.Name())] || skip[m.Name()] {
 			continue
 		}
 		out = append(out, m)
 	}
-	return out, nil
+	return out
 }
 
 // knownNames returns a sorted, comma-separated string of manager names for

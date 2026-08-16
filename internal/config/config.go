@@ -12,6 +12,17 @@ type Config struct {
 	Appearance AppearanceConfig `toml:"appearance"`
 	Install    InstallConfig    `toml:"install"`
 	Search     SearchConfig     `toml:"search"`
+	Managers   ManagersConfig   `toml:"managers"`
+}
+
+// ManagersConfig holds which managers gpk should leave alone. Skip names the
+// ones to treat as not installed: a manager whose CLI is broken or
+// misconfigured fails on every `gpk upgrade` forever otherwise, and there was
+// no way to take it out of the rotation short of naming every other manager by
+// hand. Selecting a skipped manager explicitly still works, so it stays
+// reachable when you want to look at it.
+type ManagersConfig struct {
+	Skip []string `toml:"skip"`
 }
 
 type AppearanceConfig struct {
