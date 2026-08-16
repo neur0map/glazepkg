@@ -87,7 +87,7 @@ func pacmanCacheFile(name, version string) string {
 }
 
 func (p *Pip) Versions(name string) ([]string, error) {
-	out, err := exec.Command("pip", "index", "versions", name).Output()
+	out, err := exec.Command(p.pipCmd(), "index", "versions", name).Output()
 	if err != nil {
 		return nil, err
 	}

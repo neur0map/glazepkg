@@ -11,7 +11,7 @@ type VersionedInstaller interface {
 
 func (p *Pip) InstallVersionCmd(name, version string) *exec.Cmd {
 	args := append([]string{"install"}, pipUserArgs()...)
-	return exec.Command("pip", append(args, name+"=="+version)...)
+	return exec.Command(p.pipCmd(), append(args, name+"=="+version)...)
 }
 
 func (p *Pipx) InstallVersionCmd(name, version string) *exec.Cmd {

@@ -54,7 +54,7 @@ func (b *Bun) CleanCacheCmd(_, _ bool) *exec.Cmd {
 }
 
 func (p *Pip) CleanCacheCmd(_, _ bool) *exec.Cmd {
-	return exec.Command("pip", "cache", "purge")
+	return exec.Command(p.pipCmd(), "cache", "purge")
 }
 
 func (u *Uv) CleanCacheCmd(_, _ bool) *exec.Cmd {

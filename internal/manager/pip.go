@@ -15,12 +15,21 @@ type Pip struct{}
 
 func (p *Pip) Name() model.Source { return model.SourcePip }
 
-func (p *Pip) Available() bool { return commandExists("pip") }
+// Available reports pip usable under either name: Homebrew's Python and some
+// distro packages ship only pip3, with no pip shim (#68).
+func (p *Pip) Available() bool { return commandExists("pip") || commandExists("pip3") }
+
+func (p *Pip) pipCmd() string {
+	if commandExists("pip") {
+		return "pip"
+	}
+	return "pip3"
+}
 
 func (p *Pip) Scan() ([]model.Package, error) {
 	// --not-required filters out packages that are dependencies of other packages,
 	// showing only top-level user-intended installs.
-	out, err := exec.Command("pip", "list", "--not-required", "--format=json").Output()
+	out, err := exec.Command(p.pipCmd(), "list", "--not-required", "--format=json").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +46,7 @@ func (p *Pip) Scan() ([]model.Package, error) {
 	// package is env-scoped and a user/global label would be misleading (#12).
 	var userSet map[string]bool
 	if os.Getenv("VIRTUAL_ENV") == "" {
-		if uout, uerr := exec.Command("pip", "list", "--user", "--format=json").Output(); uerr == nil {
+		if uout, uerr := exec.Command(p.pipCmd(), "list", "--user", "--format=json").Output(); uerr == nil {
 			userSet = parsePipNameSet(uout)
 		}
 	}
@@ -87,7 +96,7 @@ func normalizePipName(s string) string {
 }
 
 func (p *Pip) CheckUpdates(pkgs []model.Package) map[string]string {
-	out, err := exec.Command("pip", "list", "--outdated", "--format=json").Output()
+	out, err := exec.Command(p.pipCmd(), "list", "--outdated", "--format=json").Output()
 	if err != nil || len(out) == 0 {
 		return nil
 	}
@@ -110,7 +119,7 @@ func (p *Pip) CheckUpdates(pkgs []model.Package) map[string]string {
 func (p *Pip) ListDependencies(pkgs []model.Package) map[string][]string {
 	deps := make(map[string][]string, len(pkgs))
 	for _, pkg := range pkgs {
-		out, err := exec.Command("pip", "show", pkg.Name).Output()
+		out, err := exec.Command(p.pipCmd(), "show", pkg.Name).Output()
 		if err != nil {
 			continue
 		}
@@ -141,7 +150,7 @@ func (p *Pip) ListDependencies(pkgs []model.Package) map[string][]string {
 func (p *Pip) Describe(pkgs []model.Package) map[string]string {
 	descs := make(map[string]string)
 	for _, pkg := range pkgs {
-		out, err := exec.Command("pip", "show", pkg.Name).Output()
+		out, err := exec.Command(p.pipCmd(), "show", pkg.Name).Output()
 		if err != nil {
 			continue
 		}
@@ -159,16 +168,16 @@ func (p *Pip) Describe(pkgs []model.Package) map[string]string {
 
 func (p *Pip) UpgradeCmd(name string) *exec.Cmd {
 	args := append([]string{"install", "--upgrade"}, pipUserArgs()...)
-	return exec.Command("pip", append(args, name)...)
+	return exec.Command(p.pipCmd(), append(args, name)...)
 }
 
 func (p *Pip) RemoveCmd(name string) *exec.Cmd {
-	return exec.Command("pip", "uninstall", "-y", name)
+	return exec.Command(p.pipCmd(), "uninstall", "-y", name)
 }
 
 func (p *Pip) Search(query string) ([]model.Package, error) {
 	// pip doesn't have a real search. Use pip index versions for exact match.
-	out, err := exec.Command("pip", "index", "versions", query).Output()
+	out, err := exec.Command(p.pipCmd(), "index", "versions", query).Output()
 	if err != nil {
 		return nil, nil // no results, not an error
 	}
@@ -208,5 +217,5 @@ func pipUserArgs() []string {
 
 func (p *Pip) InstallCmd(name string) *exec.Cmd {
 	args := append([]string{"install"}, pipUserArgs()...)
-	return exec.Command("pip", append(args, name)...)
+	return exec.Command(p.pipCmd(), append(args, name)...)
 }
