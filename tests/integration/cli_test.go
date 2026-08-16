@@ -3,6 +3,8 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -11,11 +13,28 @@ import (
 	"github.com/neur0map/glazepkg/internal/manager"
 )
 
+// TestMain gives the whole package one scan cache. These tests assert CLI
+// contracts, not cache freshness, and a fresh cache per test meant six live
+// scans of every manager on the machine, which took this suite to within
+// seconds of its CI timeout. The first test still scans live, so the live path
+// stays covered; the rest read what it wrote.
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "gpk-integration-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "integration: cannot create data dir:", err)
+		os.Exit(1)
+	}
+	os.Setenv("XDG_DATA_HOME", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
+}
+
 // TestCLI_ListJSON runs `gpk list --json` against real managers and verifies
 // the envelope shape. Doesn't care how many packages are present — runners
 // may have zero managers and zero packages; data being an array is enough.
 func TestCLI_ListJSON(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"list", "--json", "--no-cache", "--quiet"},
@@ -39,10 +58,9 @@ func TestCLI_ListJSON(t *testing.T) {
 
 // TestCLI_InstalledMissing verifies the exit-2 contract for absent packages.
 func TestCLI_InstalledMissing(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
-		[]string{"installed", "definitely-not-a-real-package-xyz-zzz", "--no-cache", "--quiet"},
+		[]string{"installed", "definitely-not-a-real-package-xyz-zzz", "--quiet"},
 		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 2 {
@@ -52,7 +70,7 @@ func TestCLI_InstalledMissing(t *testing.T) {
 
 // TestCLI_OutdatedCountFormat verifies `--count` output is exactly a number.
 func TestCLI_OutdatedCountFormat(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"outdated", "--count", "--quiet"},
@@ -68,10 +86,9 @@ func TestCLI_OutdatedCountFormat(t *testing.T) {
 
 // TestCLI_SourceOfMissing verifies the exit-2 + empty-stdout contract.
 func TestCLI_SourceOfMissing(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
-		[]string{"source-of", "--no-cache", "definitely-not-a-real-package-xyz-zzz"},
+		[]string{"source-of", "definitely-not-a-real-package-xyz-zzz"},
 		manager.All(), "integration-test", &out, &errOut, nil,
 	)
 	if code != 2 {
@@ -85,7 +102,7 @@ func TestCLI_SourceOfMissing(t *testing.T) {
 // TestCLI_SubcommandTypo verifies a near-miss command name yields a "did you
 // mean" hint and exit 1, while a clear bareword falls through to search.
 func TestCLI_SubcommandTypo(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
 	var out, errOut bytes.Buffer
 	code := cli.Dispatch(
 		[]string{"instal", "git"},
@@ -103,11 +120,10 @@ func TestCLI_SubcommandTypo(t *testing.T) {
 // a command against real installed packages without actually executing.
 // Skips if no packages have updates (nothing to upgrade).
 func TestCLI_UpgradeDryRun(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	// First find an outdated package on this system.
 	var outBuf, errBuf bytes.Buffer
 	code := cli.Dispatch(
-		[]string{"outdated", "--json", "--no-cache", "--quiet"},
+		[]string{"outdated", "--json", "--quiet"},
 		manager.All(), "integration-test", &outBuf, &errBuf, nil,
 	)
 	if code != 0 {
