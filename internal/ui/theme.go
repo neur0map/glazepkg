@@ -97,6 +97,9 @@ func defaultManagerColorMap() map[model.Source]lipgloss.Color {
 		model.SourceQuicklisp:      ColorPurple,
 		model.SourceSoftwareUpdate: ColorRed,
 		model.SourceLocal:          ColorGreen,
+		model.SourceAqua:           ColorCyan,
+		model.SourceBin:            ColorOrange,
+		model.SourceDotnetTool:     ColorPurple,
 	}
 }
 

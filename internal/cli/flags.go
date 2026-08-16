@@ -13,6 +13,8 @@ var managerAliases = map[string]string{
 	"choco":          "chocolatey",
 	"windows-update": "windows-updates",
 	"winupdate":      "windows-updates",
+	"dotnet":         "dotnet-tool",
+	"dotnet-tools":   "dotnet-tool",
 }
 
 // prepManagerArgs normalizes a subcommand's args: it lifts inline manager

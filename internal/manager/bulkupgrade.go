@@ -147,3 +147,26 @@ func (c *Composer) UpgradeAllCmd(_ bool) *exec.Cmd {
 func (m *Mise) UpgradeAllCmd(_ bool) *exec.Cmd {
 	return exec.Command("mise", "upgrade")
 }
+
+func (b *Bin) UpgradeAllCmd(yes bool) *exec.Cmd {
+	if yes {
+		return exec.Command("bin", "update", "-y")
+	}
+	return exec.Command("bin", "update")
+}
+
+func (d *DotnetTool) UpgradeAllCmd(_ bool) *exec.Cmd {
+	return exec.Command("dotnet", "tool", "update", "--all", "--global")
+}
+
+// UpgradeAllCmd updates every package in the primary global config to its
+// latest version. `aqua update` with no args ignores $AQUA_GLOBAL_CONFIG and
+// only touches the nearest local aqua.yaml, so gpk targets the first global
+// config file explicitly; without one it falls back to aqua's directory-aware
+// default. -p limits the update to packages, leaving registry refs pinned.
+func (a *Aqua) UpgradeAllCmd(_ bool) *exec.Cmd {
+	if cfg := aquaGlobalConfig(); cfg != "" {
+		return exec.Command("aqua", "-c", cfg, "update", "-p")
+	}
+	return exec.Command("aqua", "update", "-p")
+}

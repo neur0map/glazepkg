@@ -82,6 +82,9 @@ func buildTabs(pkgs []model.Package) []tabItem {
 		{model.SourceLocal, "local"},
 		{model.SourceQuicklisp, "quicklisp"},
 		{model.SourceSoftwareUpdate, "swupd"},
+		{model.SourceAqua, "aqua"},
+		{model.SourceBin, "bin"},
+		{model.SourceDotnetTool, "dotnet"},
 	}
 
 	for _, s := range sources {

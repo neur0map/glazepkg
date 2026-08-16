@@ -62,6 +62,9 @@ func All() []Manager {
 		&Mise{},
 		&Quicklisp{},
 		&SoftwareUpdate{},
+		&Aqua{},
+		&Bin{},
+		&DotnetTool{},
 		&Local{},
 	}
 }

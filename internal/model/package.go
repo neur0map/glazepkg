@@ -48,6 +48,9 @@ const (
 	SourceQuicklisp      Source = "quicklisp"
 	SourceSoftwareUpdate Source = "softwareupdate"
 	SourceLocal          Source = "local"
+	SourceAqua           Source = "aqua"
+	SourceBin            Source = "bin"
+	SourceDotnetTool     Source = "dotnet-tool"
 )
 
 type Package struct {

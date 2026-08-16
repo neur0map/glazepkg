@@ -144,5 +144,8 @@ func managerHexes(p config.Palette) map[model.Source]string {
 		model.SourceMaven:          p.Orange,
 		model.SourceUv:             p.Purple,
 		model.SourceLocal:          p.Green,
+		model.SourceAqua:           p.Cyan,
+		model.SourceBin:            p.Orange,
+		model.SourceDotnetTool:     p.Purple,
 	}
 }
