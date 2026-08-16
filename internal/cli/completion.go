@@ -95,6 +95,8 @@ var completionScripts = map[string]string{
             COMPREPLY=( $(compgen -W "$(gpk completions installed)" -- "$cur") ) ;;
         unhold)
             COMPREPLY=( $(compgen -W "$(gpk completions held)" -- "$cur") ) ;;
+        snapshot|snap)
+            COMPREPLY=( $(compgen -W "save list diff prune" -- "$cur") ) ;;
     esac
 }
 complete -F _gpk gpk
@@ -112,6 +114,7 @@ _gpk() {
     case "$cmd" in
         remove|upgrade|info|source-of|why|versions|downgrade|hold) compadd -- ${(f)"$(gpk completions installed)"} ;;
         unhold) compadd -- ${(f)"$(gpk completions held)"} ;;
+        snapshot|snap) compadd -- save list diff prune ;;
     esac
 }
 compdef _gpk gpk
@@ -120,6 +123,7 @@ compdef _gpk gpk
 complete -c gpk -n "__fish_use_subcommand" -a "(gpk completions commands)"
 complete -c gpk -n "__fish_seen_subcommand_from remove upgrade info source-of why versions downgrade hold" -a "(gpk completions installed)"
 complete -c gpk -n "__fish_seen_subcommand_from unhold" -a "(gpk completions held)"
+complete -c gpk -n "__fish_seen_subcommand_from snapshot snap" -a "save list diff prune"
 complete -c gpk -l manager -x -a "(gpk completions managers)"
 complete -c gpk -s m -x -a "(gpk completions managers)"
 `,
