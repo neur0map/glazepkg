@@ -177,12 +177,30 @@ prefer = ["aur", "brew"]
 
 [search]
 bottom_up = true   # best match printed last, right above your prompt
+
+[managers]
+skip = ["pnpm"]    # leave these alone; see "One manager keeps failing" below
 ```
 
 Miss yay's bottom-up search order? Pass `--bottomup` to `search` (or `-Ss`),
 or set `bottom_up = true` as above to make it the default — `--topdown` flips
 any single run back. Result numbers don't move: `1` is always the best match,
 so the interactive `--install` picker means the same thing in either order.
+
+### One manager keeps failing
+
+A manager whose CLI is misconfigured fails on every run, which makes
+`gpk upgrade` exit non-zero forever even when everything else worked. Take it
+out of the rotation:
+
+```bash
+gpk managers skip pnpm      # or: gpk managers unskip pnpm
+```
+
+Skipped managers are left out of every command, still listed by `gpk managers`
+so nothing disappears quietly, and still reachable when you name one directly
+with `--manager pnpm`. The failure summary prints the exact command, so you
+never have to look it up.
 
 | Plain words | Short flags |
 |---|---|

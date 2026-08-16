@@ -3,6 +3,27 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
+## v0.6.6 — 2026-08-16
+
+### Added
+- `gpk managers skip <name>` (and `unskip`) takes a manager out of the rotation
+  by writing `[managers] skip` in the config. A manager whose CLI is
+  misconfigured fails on every single run, which made `gpk upgrade` exit
+  non-zero forever even when every other manager succeeded, and the only way
+  out was naming every other manager by hand. Skipped managers drop out of
+  scans, lists and upgrades in both the CLI and the TUI, still appear in
+  `gpk managers` marked as skipped so nothing vanishes quietly, and are still
+  reachable with `--manager <name>`. The failure summary prints the command.
+
+### Fixed
+- `dotnet-tool` no longer reports itself available with no .NET SDK installed.
+  A machine carrying just the host and runtime fails every `dotnet tool`
+  command, so gpk was adding a guaranteed failure to every `gpk upgrade` there.
+- `aqua` no longer reports itself available with no config for it to act on.
+  Without one, aqua's own commands exit with "configuration file isn't found".
+- The cli tests pin their config and data dirs, so a developer's own
+  `config.toml` can no longer decide whether the suite passes.
+
 ## v0.6.4 — 2026-08-16
 
 ### Fixed

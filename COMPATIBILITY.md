@@ -102,6 +102,10 @@ Column legend:
 
 **Scan is universal.** Every manager `gpk` knows about lists installed packages, so `gpk list` and the TUI always work. Even `windows-updates` and `maven` — which have no install/remove semantics — implement `Scan` (windows-updates returns pending Windows updates; maven returns artifacts cached in `~/.m2/repository`).
 
+**`avail` means the manager can actually do the work**, not just that a binary with the right name is on `PATH`. Two managers need more than the binary: `dotnet-tool` requires an installed SDK, since a machine carrying only the .NET host and runtime fails every `dotnet tool` command, and `aqua` requires a config it can act on (`AQUA_GLOBAL_CONFIG`, or an `aqua.yaml` in the working directory or a parent), since aqua's own commands exit with "configuration file isn't found" without one. Both checks are filesystem-only; `Available` runs for every manager on every command.
+
+**Any manager can be switched off.** `gpk managers skip <name>` adds it to `[managers] skip` in the config and gpk then treats it as not installed: it drops out of scans, lists and upgrades, so one habitually broken tool stops making `gpk upgrade` exit non-zero. It still shows in `gpk managers` marked as skipped, and naming it with `--manager` overrides the setting.
+
 **`Desc` (`Describer`)** — when missing, `gpk info` and the TUI's detail view still show name/version/source/size, just without a description string. Missing: `nuget`, `windows-updates`, `maven`, `aqua`, `bin`, `dotnet-tool`.
 
 **`Deps` (`DependencyLister`)** — when missing, `gpk info` and the TUI's `d` overlay show "(no dependency info)". This is most useful for system managers (pacman, apt, dnf, brew); cross-platform language managers like `cargo`, `go`, `bun`, `uv`, etc. often don't expose deps in a useful single-package way.

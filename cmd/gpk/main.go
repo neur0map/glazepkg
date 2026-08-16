@@ -118,6 +118,7 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", cmd("outdated", 24), "List packages with available updates")
 	fmt.Printf("  %s %s\n", cmd("installed <pkg>...", 24), "Check if packages are installed (exit 0/2)")
 	fmt.Printf("  %s %s\n", cmd("managers", 24), "Show which managers are detected, with counts")
+	fmt.Printf("  %s %s\n", cmd("managers skip <m>", 24), "Stop using a manager that keeps failing (unskip to undo)")
 	fmt.Printf("  %s %s\n", cmd("export [-o file]", 24), "Dump installed packages for backup/migration")
 	fmt.Printf("  %s %s\n", cmd("outdated --notify", 24), "Also raise a desktop notification when updates exist")
 	fmt.Println()
