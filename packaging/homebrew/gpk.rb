@@ -6,26 +6,42 @@ class Gpk < Formula
   license "GPL-3.0-or-later"
   head "https://github.com/neur0map/glazepkg.git", branch: "main"
 
-  livecheck do
-    url :stable
-    strategy :github_latest
-  end
-
   depends_on "go" => :build
 
   def install
-    # noselfupdate compiles out the self-updater, so `gpk update` refuses
-    # instead of replacing the binary Homebrew owns.
     system "go", "build", *std_go_args(ldflags: "-X main.version=v#{version}", tags: "noselfupdate"), "./cmd/gpk"
     generate_completions_from_executable(bin/"gpk", "completion")
   end
 
   test do
-    assert_match "gpk v#{version}", shell_output("#{bin}/gpk --version")
-    assert_match "PACMAN / YAY FLAGS", shell_output("#{bin}/gpk --help")
-    assert_match "_gpk", shell_output("#{bin}/gpk completion bash")
+    require "json"
 
-    # This build must never replace its own binary.
+    assert_match "gpk v#{version}", shell_output("#{bin}/gpk --version")
+
+    # Detect a package manager that really is on this machine, and report it.
+    managers = JSON.parse(shell_output("#{bin}/gpk managers --json --quiet"))
+    assert_equal 1, managers["schema"]
+    brew_entry = managers["data"].find { |entry| entry["name"] == "brew" }
+    refute_nil brew_entry, "gpk did not detect Homebrew"
+    assert_equal true, brew_entry["available"]
+
+    # Scan through that manager and emit the documented envelope.
+    listed = JSON.parse(shell_output("#{bin}/gpk list --json --manager brew --quiet"))
+    assert_equal 1, listed["schema"]
+    assert_kind_of Array, listed["data"]
+
+    # Resolve an installed package back to the manager that owns it.
+    assert_match "brew", shell_output("#{bin}/gpk source-of gpk")
+
+    # Exit 2 is the documented "meaningful no", not a failure.
+    shell_output("#{bin}/gpk installed gpk-does-not-exist --quiet", 2)
+
+    # Snapshot, then diff it against the live system.
+    system bin/"gpk", "snapshot", "--manager", "brew", "--quiet"
+    assert_match "1 snapshot", shell_output("#{bin}/gpk snapshot list")
+    assert_match "no changes", shell_output("#{bin}/gpk snapshot diff --manager brew --quiet")
+
+    # This build cannot replace its own binary.
     assert_match(/upgrade/i, shell_output("#{bin}/gpk update 2>&1", 1))
   end
 end
