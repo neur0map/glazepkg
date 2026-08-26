@@ -54,7 +54,7 @@ Not sure which manager has it? gpk searches them all and shows you — name, ver
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install neur0map/tap/gpk
+brew install gpk
 ```
 
 ### Arch Linux (AUR)
