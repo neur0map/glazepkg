@@ -192,3 +192,78 @@ func TestScoopParseStatusOutputScoopUpdateMessage(t *testing.T) {
 		t.Errorf("expected 0 updates, got %v", updates)
 	}
 }
+
+func TestScoopParseListOutputStripsANSI(t *testing.T) {
+	s := &Scoop{}
+	input := "Installed apps:\r\n\r\n" +
+		"\x1b[32;1mName            \x1b[0m\x1b[32;1m Version           \x1b[0m\x1b[32;1m Source\x1b[0m\r\n" +
+		"\x1b[32;1m----            \x1b[0m \x1b[32;1m-------           \x1b[0m \x1b[32;1m------\x1b[0m\r\n" +
+		"7zip             26.02              main\r\n"
+
+	pkgs, err := s.parseListOutput(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d: %v", len(pkgs), pkgs)
+	}
+	if pkgs[0].Name != "7zip" || pkgs[0].Version != "26.02" || pkgs[0].Repository != "main" {
+		t.Errorf("unexpected package: %+v", pkgs[0])
+	}
+}
+
+func TestScoopParseStatusOutputStripsANSI(t *testing.T) {
+	s := &Scoop{}
+	input := "Scoop is up to date.\r\n\r\n" +
+		"\x1b[32;1mName    \x1b[0m\x1b[32;1m Installed Version \x1b[0m\x1b[32;1m Latest Version\x1b[0m\r\n" +
+		"\x1b[32;1m----    \x1b[0m \x1b[32;1m----------------- \x1b[0m \x1b[32;1m--------------\x1b[0m\r\n" +
+		"git      2.43.0             2.44.0\r\n"
+
+	updates := s.parseStatusOutput(input)
+	if updates["git"] != "2.44.0" {
+		t.Fatalf("git = %q, want 2.44.0 (all updates: %v)", updates["git"], updates)
+	}
+}
+
+func TestScoopParseStatusOutputKeepsTableAfterScoopUpdateNotice(t *testing.T) {
+	s := &Scoop{}
+	input := "Run scoop update to update Scoop itself.\n" +
+		"Name  Installed Version  Latest Version\n" +
+		"----  -----------------  --------------\n" +
+		"git   2.43.0             2.44.0\n"
+
+	updates := s.parseStatusOutput(input)
+	if updates["git"] != "2.44.0" {
+		t.Fatalf("git = %q, want 2.44.0 (all updates: %v)", updates["git"], updates)
+	}
+}
+
+func TestScoopParseSearchOutputStripsANSIAndSkipsHeader(t *testing.T) {
+	s := &Scoop{}
+	input := "Results from local buckets...\r\n\r\n" +
+		"\x1b[32;1mName            \x1b[0m\x1b[32;1m Version\x1b[0m\x1b[32;1m Source\x1b[0m\x1b[32;1m Binaries\x1b[0m\r\n" +
+		"\x1b[32;1m----            \x1b[0m \x1b[32;1m-------\x1b[0m \x1b[32;1m------\x1b[0m \x1b[32;1m--------\x1b[0m\r\n" +
+		"7zip             26.02   main\r\n" +
+		"7zip19.00-helper 19.00   main\r\n"
+
+	pkgs := s.parseSearchOutput(input)
+	if len(pkgs) != 2 {
+		t.Fatalf("expected 2 packages, got %d: %v", len(pkgs), pkgs)
+	}
+	if pkgs[0].Name != "7zip" || pkgs[0].Version != "26.02" {
+		t.Errorf("unexpected first package: %+v", pkgs[0])
+	}
+	if pkgs[1].Name != "7zip19.00-helper" || pkgs[1].Version != "19.00" {
+		t.Errorf("unexpected second package: %+v", pkgs[1])
+	}
+}
+
+func TestScoopParseSearchOutputLegacy(t *testing.T) {
+	s := &Scoop{}
+	input := "'main' bucket:\n    7zip (26.02)\n"
+
+	pkgs := s.parseSearchOutput(input)
+	if len(pkgs) != 1 || pkgs[0].Name != "7zip" || pkgs[0].Version != "26.02" {
+		t.Fatalf("unexpected packages: %v", pkgs)
+	}
+}
