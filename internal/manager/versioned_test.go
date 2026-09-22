@@ -1,6 +1,9 @@
 package manager
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -47,5 +50,42 @@ func TestUpgradeAllCmd(t *testing.T) {
 	got := strings.Join(cmd.Args, " ")
 	if !strings.Contains(got, "pacman -Syu --noconfirm") {
 		t.Errorf("pacman UpgradeAllCmd(yes) = %q", got)
+	}
+}
+
+func TestCargoUpgradeAllNeedsCargoUpdate(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	if cmd := (&Cargo{}).UpgradeAllCmd(true); cmd != nil {
+		t.Fatalf("without cargo-install-update got %q, want nil", cmd.Args)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cargo-install-update"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := (&Cargo{}).UpgradeAllCmd(true)
+	if cmd == nil {
+		t.Fatal("with cargo-install-update got nil")
+	}
+	if got := strings.Join(cmd.Args, " "); got != "cargo install-update --all" {
+		t.Errorf("cargo UpgradeAllCmd = %q", got)
+	}
+}
+
+// A project pinning another pnpm via packageManager must not decide which
+// global dir gpk operates on.
+func TestPnpmRunsFromHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cmds := []*exec.Cmd{
+		(&Pnpm{}).UpgradeAllCmd(true),
+		(&Pnpm{}).UpgradeCmd("vite"),
+		(&Pnpm{}).InstallCmd("vite"),
+		(&Pnpm{}).RemoveCmd("vite"),
+		(&Pnpm{}).InstallVersionCmd("vite", "8.0.0"),
+	}
+	for _, cmd := range cmds {
+		if cmd.Dir != home {
+			t.Errorf("%q runs in %q, want %q", cmd.Args, cmd.Dir, home)
+		}
 	}
 }

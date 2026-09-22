@@ -46,7 +46,7 @@ func (n *Npm) CleanCacheCmd(_, _ bool) *exec.Cmd {
 }
 
 func (n *Pnpm) CleanCacheCmd(_, _ bool) *exec.Cmd {
-	return exec.Command("pnpm", "store", "prune")
+	return pnpmCmd("store", "prune")
 }
 
 func (b *Bun) CleanCacheCmd(_, _ bool) *exec.Cmd {
