@@ -83,7 +83,16 @@ func (n *Npm) UpgradeAllCmd(_ bool) *exec.Cmd {
 }
 
 func (n *Pnpm) UpgradeAllCmd(_ bool) *exec.Cmd {
-	return exec.Command("pnpm", "update", "-g")
+	return pnpmCmd("update", "-g")
+}
+
+// Cargo has no built-in bulk upgrade; cargo-update provides one and skips
+// crates installed from a local path.
+func (c *Cargo) UpgradeAllCmd(_ bool) *exec.Cmd {
+	if !commandExists("cargo-install-update") {
+		return nil
+	}
+	return exec.Command("cargo", "install-update", "--all")
 }
 
 func (g *Gem) UpgradeAllCmd(_ bool) *exec.Cmd {

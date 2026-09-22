@@ -2,6 +2,7 @@ package manager
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -11,12 +12,21 @@ import (
 
 type Pnpm struct{}
 
+// pnpmCmd runs pnpm from the home directory. Inside a project whose
+// packageManager pins another pnpm, pnpm switches to that version, and its
+// global commands then resolve a different global dir and bin dir.
+func pnpmCmd(args ...string) *exec.Cmd {
+	cmd := exec.Command("pnpm", args...)
+	cmd.Dir, _ = os.UserHomeDir()
+	return cmd
+}
+
 func (n *Pnpm) Name() model.Source { return model.SourcePnpm }
 
 func (n *Pnpm) Available() bool { return commandExists("pnpm") }
 
 func (n *Pnpm) Scan() ([]model.Package, error) {
-	out, err := exec.Command("pnpm", "ls", "-g", "--json", "--depth=0").Output()
+	out, err := pnpmCmd("ls", "-g", "--json", "--depth=0").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -50,11 +60,11 @@ func (n *Pnpm) Scan() ([]model.Package, error) {
 }
 
 func (n *Pnpm) RemoveCmd(name string) *exec.Cmd {
-	return exec.Command("pnpm", "remove", "-g", name)
+	return pnpmCmd("remove", "-g", name)
 }
 
 func (n *Pnpm) CheckUpdates(pkgs []model.Package) map[string]string {
-	out, err := exec.Command("pnpm", "outdated", "-g", "--json").Output()
+	out, err := pnpmCmd("outdated", "-g", "--json").Output()
 	if err != nil && out == nil {
 		return nil
 	}
@@ -86,7 +96,7 @@ func (n *Pnpm) ListDependencies(pkgs []model.Package) map[string][]string {
 			continue
 		}
 		seen[pkg.Name] = struct{}{}
-		out, err := exec.Command("pnpm", "info", pkg.Name, "dependencies", "--json").Output()
+		out, err := pnpmCmd("info", pkg.Name, "dependencies", "--json").Output()
 		if err != nil || len(out) == 0 {
 			deps[pkg.Name] = nil
 			continue
@@ -114,7 +124,7 @@ func (n *Pnpm) Describe(pkgs []model.Package) map[string]string {
 			continue
 		}
 		seen[pkg.Name] = struct{}{}
-		out, err := exec.Command("pnpm", "info", pkg.Name, "description").Output()
+		out, err := pnpmCmd("info", pkg.Name, "description").Output()
 		if err != nil {
 			continue
 		}
@@ -127,9 +137,9 @@ func (n *Pnpm) Describe(pkgs []model.Package) map[string]string {
 }
 
 func (n *Pnpm) UpgradeCmd(name string) *exec.Cmd {
-	return exec.Command("pnpm", "update", "-g", name)
+	return pnpmCmd("update", "-g", name)
 }
 
 func (n *Pnpm) InstallCmd(name string) *exec.Cmd {
-	return exec.Command("pnpm", "add", "-g", name)
+	return pnpmCmd("add", "-g", name)
 }

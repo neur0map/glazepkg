@@ -27,7 +27,7 @@ func (n *Npm) InstallVersionCmd(name, version string) *exec.Cmd {
 }
 
 func (n *Pnpm) InstallVersionCmd(name, version string) *exec.Cmd {
-	return exec.Command("pnpm", "add", "-g", name+"@"+version)
+	return pnpmCmd("add", "-g", name+"@"+version)
 }
 
 func (b *Bun) InstallVersionCmd(name, version string) *exec.Cmd {
