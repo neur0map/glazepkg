@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/neur0map/glazepkg/internal/model"
 )
 
@@ -27,8 +28,11 @@ func (s *Scoop) Scan() ([]model.Package, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.parseListOutput(string(out))
+}
 
-	text := string(out)
+func (s *Scoop) parseListOutput(text string) ([]model.Package, error) {
+	text = ansi.Strip(text)
 
 	// Modern tabular format uses the same dash-separator layout as winget;
 	// wingetIsSep/wingetColumns/wingetExtract are reused deliberately.
@@ -155,12 +159,8 @@ func (s *Scoop) CheckUpdates(_ []model.Package) map[string]string {
 // parseStatusOutput parses `scoop status` text output into a name→latestVersion map.
 // Columns: Name, Installed Version, Latest Version, [Missing Deps], [Info]
 func (s *Scoop) parseStatusOutput(text string) map[string]string {
+	text = ansi.Strip(text)
 	updates := make(map[string]string)
-
-	// "Everything is ok!" means nothing to update
-	if strings.Contains(text, "Everything is ok") || strings.Contains(text, "scoop update") {
-		return updates
-	}
 
 	var colStarts []int
 	scanner := bufio.NewScanner(strings.NewReader(text))
@@ -197,38 +197,44 @@ func (s *Scoop) RemoveCmd(name string) *exec.Cmd {
 }
 
 func (s *Scoop) Search(query string) ([]model.Package, error) {
-	// Run: scoop search query
-	// Output varies but typically: "name (version)" lines under bucket headers
 	out, err := exec.Command("scoop", "search", query).Output()
 	if err != nil {
 		return nil, nil
 	}
+	return s.parseSearchOutput(string(out)), nil
+}
+
+// parseSearchOutput handles both legacy "name (version)" output and the
+// tabular output produced by current Scoop versions.
+func (s *Scoop) parseSearchOutput(text string) []model.Package {
 	var pkgs []model.Package
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner := bufio.NewScanner(strings.NewReader(ansi.Strip(text)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "'") || strings.HasPrefix(line, "Results") || strings.HasPrefix(line, "-") {
 			continue
 		}
-		// Format varies: "    name (version)"
+
 		fields := strings.Fields(line)
-		if len(fields) < 1 {
+		if len(fields) == 0 {
 			continue
 		}
-		name := fields[0]
+		// Current Scoop prints a table; older versions only print package rows.
+		if len(fields) >= 2 && fields[0] == "Name" && fields[1] == "Version" {
+			continue
+		}
+
 		version := ""
 		if len(fields) >= 2 {
-			v := fields[1]
-			v = strings.Trim(v, "()")
-			version = v
+			version = strings.Trim(fields[1], "()")
 		}
 		pkgs = append(pkgs, model.Package{
-			Name:    name,
+			Name:    fields[0],
 			Version: version,
 			Source:  model.SourceScoop,
 		})
 	}
-	return pkgs, nil
+	return pkgs
 }
 
 func (s *Scoop) Describe(pkgs []model.Package) map[string]string {
