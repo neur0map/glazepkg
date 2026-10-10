@@ -1,8 +1,34 @@
 package manager
 
 import (
+	"fmt"
 	"testing"
 )
+
+// TestWingetParseTextOutputContinuousSeparator verifies that WinGet
+// packages are parsed when the table uses a continuous dash separator.
+func TestWingetParseTextOutputContinuousSeparator(t *testing.T) {
+	header := fmt.Sprintf("%-35s%-30s%-16s%-12s%s",
+		"Name", "Id", "Version", "Available", "Source")
+
+	row := fmt.Sprintf("%-35s%-30s%-16s%-12s%s",
+		"Alacritty", "Alacritty.Alacritty", "0.17.0", "", "winget")
+
+	input := header + "\n" +
+		"------------------------------------------------------------\n" +
+		row + "\n"
+
+	pkgs := (&Winget{}).parseTextOutput(input)
+
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(pkgs))
+	}
+
+	if pkgs[0].Name != "Alacritty" ||
+		pkgs[0].Version != "0.17.0" {
+		t.Errorf("unexpected package: %+v", pkgs[0])
+	}
+}
 
 // ── wingetIsSep ──────────────────────────────────────────────────────────────
 
