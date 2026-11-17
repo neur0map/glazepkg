@@ -67,7 +67,10 @@ type Package struct {
 	LatestVersion string    `json:"-"` // not persisted, populated at runtime
 	Location      string    `json:"-"`
 	Installed     bool      `json:"-"` // not persisted, populated at runtime by search
-	SizeBytes     int64     `json:"size_bytes,omitempty"`
+	// ID is the name a manager installs by when it differs from the display
+	// name its search shows (a flatpak app id); empty otherwise. Runtime only.
+	ID        string `json:"-"`
+	SizeBytes int64  `json:"size_bytes,omitempty"`
 }
 
 // Key returns a unique identifier for this package across all managers.

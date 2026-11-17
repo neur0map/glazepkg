@@ -18,7 +18,7 @@ func init() {
 	subcommands["remove"] = runRemove
 }
 
-func runRemove(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
+func runRemove(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) (code int) {
 	args = prepManagerArgs(args, mgrs)
 	fs := flag.NewFlagSet("remove", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -30,6 +30,7 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 		quietFlag    = fs.Bool("quiet", false, "suppress progress on stderr")
 		noCacheFlag  = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
 		jsonFlag     = fs.Bool("json", false, "emit the resolved plan as JSON and exit (no execution)")
+		eventsFlag   = fs.Bool("events", false, "stream NDJSON progress events on stdout (needs --yes)")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -39,6 +40,16 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			return ExitOK
 		}
 		return ExitErr
+	}
+
+	var ev *eventRun
+	if *eventsFlag {
+		ev, stderr = startEvents(stdout, stderr)
+		defer func() { ev.finish(code) }()
+		if c, ok := eventsFlagsOK(*yesFlag, *jsonFlag, stderr); !ok {
+			return c
+		}
+		*quietFlag = true
 	}
 
 	names := fs.Args()
@@ -74,6 +85,11 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			if p.Name == name {
 				matches = append(matches, p)
 			}
+		}
+		// The scan lists what the user installed on purpose; a named manager
+		// can still find a package that came in as a dependency.
+		if len(matches) == 0 && strings.TrimSpace(*mgrFlag) != "" {
+			matches = lookupInstalled(filtered, name)
 		}
 		if len(matches) == 0 {
 			fmt.Fprintf(stderr, "error: %q is not installed in any searched manager\n", name)
@@ -135,8 +151,9 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 			return ExitErr
 		}
 
-		cmdDisplay := strings.Join(stripSudoStdinFlag(cmd).Args, " ")
+		cmdDisplay := strings.Join(displayArgs(cmd), " ")
 
+		pkg = withRequiredBy(mgr, pkg)
 		warning := ""
 		if len(pkg.RequiredBy) > 0 {
 			req := strings.Join(pkg.RequiredBy, ", ")
@@ -152,13 +169,32 @@ func runRemove(args []string, mgrs []manager.Manager, version string, stdout, st
 	if *jsonFlag {
 		steps := make([]planStep, 0, len(plans))
 		for _, p := range plans {
-			steps = append(steps, planStep{Manager: string(p.mgr.Name()), Name: p.pkg.Name, Version: p.pkg.Version, Command: cmdArgs(removeCmdFor(p.mgr, p.pkg.Name, *withDepsFlag, *yesFlag))})
+			steps = append(steps, planStep{Manager: string(p.mgr.Name()), Name: p.pkg.Name, Version: p.pkg.Version, RequiredBy: p.pkg.RequiredBy, Command: cmdArgs(removeCmdFor(p.mgr, p.pkg.Name, *withDepsFlag, *yesFlag))})
 		}
 		if err := emitPlanJSON(stdout, version, "remove", steps); err != nil {
 			fmt.Fprintf(stderr, "error: encoding JSON: %v\n", err)
 			return ExitErr
 		}
 		return ExitOK
+	}
+
+	if ev != nil {
+		grp := nextGroup()
+		steps := make([]eventStep, 0, len(plans))
+		for _, p := range plans {
+			steps = append(steps, eventStep{
+				plan: eventPlanStep{Manager: string(p.mgr.Name()), Name: p.pkg.Name, Version: p.pkg.Version, RequiredBy: p.pkg.RequiredBy},
+				cmd:  removeCmdFor(p.mgr, p.pkg.Name, *withDepsFlag, *yesFlag),
+				after: func() {
+					invalidateAfterWrite(p.mgr, nil, []model.Package{p.pkg})
+					_ = snapshot.AppendHistory(snapshot.HistoryItem{
+						Group: grp, Time: time.Now(), Op: snapshot.OpRemove,
+						Source: p.mgr.Name(), Name: p.pkg.Name, Version: p.pkg.Version,
+					})
+				},
+			})
+		}
+		return runEventPlan(ev, "remove", steps, *dryRunFlag, false, stderr)
 	}
 
 	st := newStyler()

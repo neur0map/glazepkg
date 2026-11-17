@@ -124,7 +124,7 @@ func runSearch(args []string, mgrs []manager.Manager, version string, stdout, st
 		}
 		plans = append(plans, plan)
 	}
-	return executeInstalls(plans, *yesFlag, false, *quietFlag, st, r, stdout, stderr)
+	return executeInstalls(nil, plans, *yesFlag, false, *quietFlag, st, r, stdout, stderr)
 }
 
 // searchManagers queries every available Searcher in parallel and returns one
@@ -163,7 +163,7 @@ func searchManagers(filtered []manager.Manager, query string) ([]searchRow, erro
 			if src == "" {
 				src = r.from
 			}
-			key := string(src) + ":" + p.Name
+			key := string(src) + ":" + installName(p)
 			if seen[key] {
 				continue
 			}
@@ -223,7 +223,8 @@ func markInstalledRows(rows []searchRow) {
 		installed["*:"+p.Name] = true
 	}
 	for i := range rows {
-		if installed[string(rows[i].pkg.Source)+":"+rows[i].pkg.Name] || installed["*:"+rows[i].pkg.Name] {
+		n := installName(rows[i].pkg)
+		if installed[string(rows[i].pkg.Source)+":"+n] || installed["*:"+n] {
 			rows[i].installed = true
 		}
 	}

@@ -19,7 +19,7 @@ func init() {
 	subcommands["upgrade"] = runUpgrade
 }
 
-func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
+func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) (code int) {
 	args = prepManagerArgs(args, mgrs)
 	fs := flag.NewFlagSet("upgrade", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -30,6 +30,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 		quietFlag   = fs.Bool("quiet", false, "suppress progress on stderr")
 		noCacheFlag = fs.Bool("no-cache", false, "bypass the scan cache; do a fresh live scan")
 		jsonFlag    = fs.Bool("json", false, "emit the resolved plan as JSON and exit (no execution)")
+		eventsFlag  = fs.Bool("events", false, "stream NDJSON progress events on stdout (needs --yes)")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -39,6 +40,16 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			return ExitOK
 		}
 		return ExitErr
+	}
+
+	var ev *eventRun
+	if *eventsFlag {
+		ev, stderr = startEvents(stdout, stderr)
+		defer func() { ev.finish(code) }()
+		if c, ok := eventsFlagsOK(*yesFlag, *jsonFlag, stderr); !ok {
+			return c
+		}
+		*quietFlag = true
 	}
 
 	filtered, err := parseManagerFilter(*mgrFlag, mgrs)
@@ -52,7 +63,7 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 
 	names := fs.Args()
 	if len(names) == 0 {
-		return runUpgradeAll(filtered, *yesFlag, *dryRunFlag, *quietFlag, *jsonFlag, version, st, r, stdout, stderr)
+		return runUpgradeAll(ev, filtered, *yesFlag, *dryRunFlag, *quietFlag, *jsonFlag, version, st, r, stdout, stderr)
 	}
 
 	pkgs, err := collectPackages(filtered, *noCacheFlag, true, stderr, false)
@@ -106,6 +117,9 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 	}
 	if len(plans) == 0 {
 		fmt.Fprintln(stderr, "nothing to upgrade")
+		if ev != nil {
+			return runEventPlan(ev, "upgrade", nil, *dryRunFlag, false, stderr)
+		}
 		return ExitOK
 	}
 
@@ -119,6 +133,32 @@ func runUpgrade(args []string, mgrs []manager.Manager, version string, stdout, s
 			return ExitErr
 		}
 		return ExitOK
+	}
+
+	if ev != nil {
+		grp := nextGroup()
+		steps := make([]eventStep, 0, len(plans))
+		for _, p := range plans {
+			steps = append(steps, eventStep{
+				plan: eventPlanStep{Manager: string(p.mgr.Name()), Name: p.pkg.Name},
+				cmd:  upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag),
+				after: func() {
+					invalidateAfterWrite(p.mgr, []model.Package{p.pkg}, nil)
+					_ = snapshot.AppendHistory(snapshot.HistoryItem{
+						Group: grp, Time: time.Now(), Op: snapshot.OpUpgrade,
+						Source: p.mgr.Name(), Name: p.pkg.Name,
+					})
+				},
+			})
+		}
+		return runEventPlan(ev, "upgrade", steps, *dryRunFlag, false, stderr)
+	}
+
+	for _, p := range plans {
+		if _, err := withPrivilege(upgradeCmdFor(p.mgr, p.pkg.Name, *yesFlag)); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return ExitErr
+		}
 	}
 
 	fmt.Fprintln(stdout, st.title("Upgrade plan"))
@@ -182,7 +222,7 @@ func upgradeCmdFor(mgr manager.Manager, name string, yes bool) *exec.Cmd {
 // runUpgradeAll runs each available manager's bulk upgrade command — the
 // `gpk upgrade` / `-Syu` "bring everything up to date" path. A failure in one
 // manager doesn't stop the others.
-func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool, version string, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
+func runUpgradeAll(ev *eventRun, filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool, version string, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
 	holds := snapshot.LoadHolds()
 	var rows []groupedCmd
 	for _, m := range filtered {
@@ -214,6 +254,9 @@ func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool
 	}
 	if len(rows) == 0 {
 		fmt.Fprintln(stderr, "no installed managers support bulk upgrade")
+		if ev != nil {
+			return runEventPlan(ev, "upgrade", nil, dryRun, true, stderr)
+		}
 		return ExitOK
 	}
 	if jsonMode {
@@ -226,6 +269,18 @@ func runUpgradeAll(filtered []manager.Manager, yes, dryRun, quiet, jsonMode bool
 			return ExitErr
 		}
 		return ExitOK
+	}
+	if ev != nil {
+		steps := make([]eventStep, 0, len(rows))
+		for _, row := range rows {
+			steps = append(steps, eventStep{
+				plan:  eventPlanStep{Manager: string(row.mgr.Name())},
+				cmd:   row.cmd,
+				after: func() { invalidateAfterWrite(row.mgr, nil, nil) },
+			})
+		}
+		// Like the terminal run, one manager failing doesn't stop the others.
+		return runEventPlan(ev, "upgrade", steps, dryRun, true, stderr)
 	}
 	return executeGrouped("Upgrade everything", "upgrade", rows, dryRun, yes, quiet, st, r, stdout, stderr)
 }

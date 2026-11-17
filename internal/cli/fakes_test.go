@@ -35,6 +35,7 @@ type fakeManager struct {
 	cleanCacheFn           func(all, yes bool) *exec.Cmd
 	orphansFn              func() ([]string, error)
 	removeOrphansFn        func(orphans []string, yes bool) *exec.Cmd
+	lookupInstalledFn      func(names []string) map[string]model.Package
 }
 
 func (f *fakeManager) Name() model.Source { return f.name }
@@ -171,6 +172,13 @@ func (f *fakeManager) RemoveCmdWithDepsYes(name string) *exec.Cmd {
 		return nil
 	}
 	return f.removeCmdWithDepsYesFn(name)
+}
+
+func (f *fakeManager) LookupInstalled(names []string) map[string]model.Package {
+	if f.lookupInstalledFn == nil {
+		return nil
+	}
+	return f.lookupInstalledFn(names)
 }
 
 // fakePackage is a one-liner constructor for tests that only care about the

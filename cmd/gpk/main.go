@@ -125,6 +125,7 @@ func printHelp() {
 	fmt.Printf("%s %s\n", section("COMMANDS"), muted("· read"))
 	fmt.Printf("  %s %s\n", cmd("search <query>", 24), "Search packages across every manager")
 	fmt.Printf("  %s %s\n", cmd("list [filter]", 24), "List installed packages")
+	fmt.Printf("  %s %s\n", cmd("apps [filter]", 24), "List launchable desktop apps with their package and size")
 	fmt.Printf("  %s %s\n", cmd("info <pkg>", 24), "Show details for one package")
 	fmt.Printf("  %s %s\n", cmd("source-of <pkg>", 24), "Print which manager has a package")
 	fmt.Printf("  %s %s\n", cmd("why <pkg>", 24), "Show what depends on a package (reverse deps)")
@@ -169,6 +170,8 @@ func printHelp() {
 	fmt.Printf("  %s %s\n", flagText("--yes, -y", 20), "skip prompts")
 	fmt.Printf("  %s %s\n", flagText("--dry-run", 20), "print the command without running it")
 	fmt.Printf("  %s %s\n", flagText("--quiet, -q", 20), "suppress progress on stderr")
+	fmt.Printf("  %s %s\n", flagText("--events", 20), "install/remove/upgrade: NDJSON progress on stdout (with --yes)")
+	fmt.Printf("  %s %s\n", flagText("--privilege MODE", 20), "sudo, pkexec, none or auto for root commands ($GPK_PRIVILEGE)")
 	fmt.Printf("  %s\n", muted("Run `gpk <subcommand> --help` for the full per-command flag list."))
 	fmt.Println()
 

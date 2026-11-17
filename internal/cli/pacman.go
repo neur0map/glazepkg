@@ -105,7 +105,7 @@ func rewritePacmanFlags(args []string) []string {
 // values of gpk's value-taking flags. Used to tell a bare `-Sy` (refresh) from
 // `-Sy pkg` (refresh + install).
 func hasPositional(args []string) bool {
-	valueFlags := map[string]bool{"--manager": true, "-m": true, "--limit": true}
+	valueFlags := map[string]bool{"--manager": true, "-m": true, "--limit": true, "--privilege": true}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		if a == "--" {

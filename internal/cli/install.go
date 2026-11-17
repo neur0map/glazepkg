@@ -39,7 +39,7 @@ type candidate struct {
 	pkg model.Package
 }
 
-func runInstall(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
+func runInstall(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) (code int) {
 	args = prepManagerArgs(args, mgrs)
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -50,6 +50,7 @@ func runInstall(args []string, mgrs []manager.Manager, version string, stdout, s
 		quietFlag  = fs.Bool("quiet", false, "suppress progress messages on stderr")
 		jsonFlag   = fs.Bool("json", false, "emit the resolved plan as JSON and exit (no execution)")
 		pickFlag   = fs.Bool("pick-version", false, "choose the version to install interactively")
+		eventsFlag = fs.Bool("events", false, "stream NDJSON progress events on stdout (needs --yes)")
 	)
 	fs.BoolVar(yesFlag, "y", false, "alias for --yes")
 	fs.BoolVar(quietFlag, "q", false, "alias for --quiet")
@@ -59,6 +60,20 @@ func runInstall(args []string, mgrs []manager.Manager, version string, stdout, s
 			return ExitOK
 		}
 		return ExitErr
+	}
+
+	var ev *eventRun
+	if *eventsFlag {
+		ev, stderr = startEvents(stdout, stderr)
+		defer func() { ev.finish(code) }()
+		if c, ok := eventsFlagsOK(*yesFlag, *jsonFlag, stderr); !ok {
+			return c
+		}
+		if *pickFlag {
+			fmt.Fprintln(stderr, "error: --pick-version is interactive and can't run with --events; pin a version with name@version instead")
+			return ExitErr
+		}
+		*quietFlag = true
 	}
 
 	names := fs.Args()
@@ -76,8 +91,8 @@ func runInstall(args []string, mgrs []manager.Manager, version string, stdout, s
 	st := newStyler()
 	r := newPromptReader(stdin)
 	resolveR := r
-	if *jsonFlag {
-		resolveR = nil // JSON mode is non-interactive: ambiguity returns exit 3
+	if *jsonFlag || ev != nil {
+		resolveR = nil // JSON and event modes are non-interactive: ambiguity returns exit 3
 	}
 	prefer := config.Load().Install.Prefer
 
@@ -118,7 +133,7 @@ func runInstall(args []string, mgrs []manager.Manager, version string, stdout, s
 		return ExitOK
 	}
 
-	return executeInstalls(plans, *yesFlag, *dryRunFlag, *quietFlag, st, r, stdout, stderr)
+	return executeInstalls(ev, plans, *yesFlag, *dryRunFlag, *quietFlag, st, r, stdout, stderr)
 }
 
 // resolvePlan turns one requested name into a concrete plan. When a name lives
@@ -213,7 +228,16 @@ func buildPlan(c candidate, ver string, stderr io.Writer) (installPlan, int, boo
 		fmt.Fprintf(stderr, "error: %s does not support install\n", c.mgr.Name())
 		return installPlan{}, ExitErr, false
 	}
-	return installPlan{mgr: c.mgr, name: c.pkg.Name, version: ver, availVer: c.pkg.Version, desc: c.pkg.Description}, ExitOK, true
+	return installPlan{mgr: c.mgr, name: installName(c.pkg), version: ver, availVer: c.pkg.Version, desc: c.pkg.Description}, ExitOK, true
+}
+
+// installName is what the manager installs a search result by: the id when
+// its search shows a display name instead (flatpak), otherwise the name.
+func installName(p model.Package) string {
+	if p.ID != "" {
+		return p.ID
+	}
+	return p.Name
 }
 
 // findInstallCandidates returns one candidate per source that has an exact
@@ -249,7 +273,7 @@ func findInstallCandidates(name string, filtered []manager.Manager) ([]candidate
 			searchErr = fmt.Errorf("%s: %w", r.from, r.err)
 		}
 		for _, p := range r.pkgs {
-			if p.Name != name {
+			if p.Name != name && p.ID != name {
 				continue
 			}
 			src := p.Source
@@ -338,18 +362,29 @@ func pickCandidate(name string, cands []candidate, st *styler, r *bufio.Reader, 
 }
 
 // executeInstalls renders the plan, prompts (unless yes), and runs each
-// install. Shared by `gpk install` and the search-and-install picker.
-func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
+// install. Shared by `gpk install` and the search-and-install picker. With an
+// event stream (ev) the plan and progress go out as NDJSON instead.
+func executeInstalls(ev *eventRun, plans []installPlan, yes, dryRun, quiet bool, st *styler, r *bufio.Reader, stdout, stderr io.Writer) int {
 	if len(plans) == 0 {
 		return ExitOK
 	}
-	fmt.Fprintln(stdout, st.title("Install plan"))
+	if ev != nil {
+		return executeInstallEvents(ev, plans, yes, dryRun, stderr)
+	}
 	for _, p := range plans {
 		cmd := installCmdFor(p, yes)
 		if cmd == nil {
 			fmt.Fprintf(stderr, "error: %s cannot install %s\n", p.mgr.Name(), p.name)
 			return ExitErr
 		}
+		if _, err := withPrivilege(cmd); err != nil {
+			fmt.Fprintf(stderr, "error: %v\n", err)
+			return ExitErr
+		}
+	}
+	fmt.Fprintln(stdout, st.title("Install plan"))
+	for _, p := range plans {
+		cmd := installCmdFor(p, yes)
 		target := p.name
 		switch {
 		case p.version != "":
@@ -417,6 +452,48 @@ func executeInstalls(plans []installPlan, yes, dryRun, quiet bool, st *styler, r
 	return ExitOK
 }
 
+// executeInstallEvents runs the install plans as an NDJSON event stream.
+func executeInstallEvents(ev *eventRun, plans []installPlan, yes, dryRun bool, stderr io.Writer) int {
+	grp := nextGroup()
+	steps := make([]eventStep, 0, len(plans))
+	for _, p := range plans {
+		cmd := installCmdFor(p, yes)
+		if cmd == nil {
+			fmt.Fprintf(stderr, "error: %s cannot install %s\n", p.mgr.Name(), p.name)
+			return ExitErr
+		}
+		ver := p.version
+		if ver == "" {
+			ver = p.availVer
+		}
+		steps = append(steps, eventStep{
+			plan: eventPlanStep{Manager: string(p.mgr.Name()), Name: p.name, Version: ver},
+			cmd:  cmd,
+			after: func() {
+				invalidateAfterWrite(p.mgr, []model.Package{{Name: p.name, Source: p.mgr.Name()}}, nil)
+				_ = snapshot.AppendHistory(snapshot.HistoryItem{
+					Group: grp, Time: time.Now(), Op: snapshot.OpInstall,
+					Source: p.mgr.Name(), Name: p.name, Version: ver,
+				})
+			},
+		})
+	}
+	return runEventPlan(ev, "install", steps, dryRun, false, stderr)
+}
+
+// eventsFlagsOK rejects flag combinations an event stream can't honour.
+func eventsFlagsOK(yes, jsonPlan bool, stderr io.Writer) (int, bool) {
+	if jsonPlan {
+		fmt.Fprintln(stderr, "error: --events and --json can't be combined; --json only prints the plan")
+		return ExitErr, false
+	}
+	if !yes {
+		fmt.Fprintln(stderr, "error: --events needs --yes: nothing can be confirmed on an event stream")
+		return ExitErr, false
+	}
+	return ExitOK, true
+}
+
 func installCmdFor(p installPlan, yes bool) *exec.Cmd {
 	if p.version != "" {
 		if v, ok := p.mgr.(manager.VersionedInstaller); ok {
@@ -438,7 +515,7 @@ func installCmdFor(p installPlan, yes bool) *exec.Cmd {
 }
 
 func displayCmd(cmd *exec.Cmd) string {
-	args := stripSudoStdinFlag(cmd).Args
+	args := displayArgs(cmd)
 	// AUR makepkg builds are wrapped in `sh -c <script> sh <name>`; show the
 	// meaningful build line rather than the bootstrap shell script.
 	if len(args) >= 2 && args[0] == "sh" {

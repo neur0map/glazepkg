@@ -36,7 +36,17 @@ func (p *Pacman) Scan() ([]model.Package, error) {
 			InstalledAt: time.Now(),
 		})
 	}
+	applySizes(pkgs, pacmanSizes(packageNames(pkgs)))
 	return pkgs, nil
+}
+
+// packageNames returns the names of pkgs in order.
+func packageNames(pkgs []model.Package) []string {
+	names := make([]string, len(pkgs))
+	for i, p := range pkgs {
+		names[i] = p.Name
+	}
+	return names
 }
 
 func (p *Pacman) Describe(pkgs []model.Package) map[string]string {

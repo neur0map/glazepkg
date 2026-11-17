@@ -29,6 +29,12 @@ var subcommands = map[string]subcommandFunc{}
 // mean" hint; any other bareword is treated as a search query with an
 // interactive install picker, the way `yay <pkg>` behaves.
 func Dispatch(args []string, mgrs []manager.Manager, version string, stdout, stderr io.Writer, stdin io.Reader) int {
+	args, mode, err := liftPrivilege(args, stdin)
+	if err != nil {
+		fmt.Fprintf(stderr, "error: %v\n", err)
+		return ExitErr
+	}
+	privilege = mode
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "error: no subcommand specified")
 		return ExitErr

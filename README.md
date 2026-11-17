@@ -169,6 +169,7 @@ gpk autoremove            # remove dependencies nothing needs
 gpk hold linux            # pin a package so upgrades skip it
 gpk undo                  # reverse the last thing gpk did
 gpk managers              # which managers are detected, with package counts
+gpk apps                  # launchable desktop apps, the package behind each, and its size
 gpk theme dracula         # switch the color theme (shared with the TUI)
 gpk export -o pkgs.json   # back up everything installed
 gpk import pkgs.json      # restore it on another machine (skips installed)
@@ -245,6 +246,62 @@ envelope), and `install`/`remove`/`upgrade`/`downgrade` accept `--json` to print
 the resolved plan — manager, version, and the exact command — without running
 anything. Exit codes are stable (`0` ok, `1` error, `2` "no", `3` ambiguous), so
 gpk drops cleanly behind a GUI or script.
+
+`gpk list --json` carries each package's installed size (`size_bytes`, plus a
+human `size`) for pacman, aur, flatpak, dnf and xbps, read in one batched query
+per manager and cached with the scan.
+
+`gpk apps --json` lists what an app launcher shows: one row per launchable
+desktop entry (yours, the system's and flatpak exports), joined to the package
+that installed it:
+
+```json
+{"desktop_id":"firefox","name":"Firefox","generic_name":"Web Browser","icon":"firefox",
+ "categories":["Network","WebBrowser"],"exec":"/usr/lib/firefox/firefox %u",
+ "no_display":false,"terminal":false,"desktop_file":"/usr/share/applications/firefox.desktop",
+ "package":"firefox","source":"pacman","version":"158.0.1-1","size":"302.0 MiB",
+ "size_bytes":316628008,"location":"system"}
+```
+
+`source` is the owning manager (pacman, aur, dnf, xbps, apt, flatpak, snap) or
+`local` for an entry no package owns, sized the way `gpk list -m local` measures
+it. `package` is what to pass to `gpk remove -m <source>`; a local row without
+one can't be removed by gpk. Several entries can share one package. The list is
+cached and rescanned when an applications directory or a package database
+changes; `--no-cache` forces a scan and `-m flatpak,local` narrows it.
+
+`gpk list` shows what was installed on purpose, but with a named manager
+`gpk remove` and `gpk installed` also find packages that came in as a
+dependency (pacman, aur, dnf, xbps). Remove plans carry `required_by` when
+other installed packages need the package; gpk never forces such a removal.
+
+For a GUI driving installs, `install`, `remove` and `upgrade` take `--events`
+(with `--yes`) and print one JSON object per line instead of the terminal
+output:
+
+```
+{"event":"plan","action":"install","steps":[{"manager":"pacman","name":"ripgrep","version":"15.2.0-1"}]}
+{"event":"step","index":0,"phase":"start"}
+{"event":"log","index":0,"line":"(1/1) installing ripgrep"}
+{"event":"progress","index":0,"done":1,"total":1}
+{"event":"step","index":0,"phase":"done","exit":0}
+{"event":"done","ok":true,"exit":0,"error":""}
+```
+
+`log` carries the manager's stdout and stderr line by line; `progress` appears
+when its output has counts gpk can read (pacman, yay, paru, dnf, flatpak). The
+stream always ends with one `done` event, also when gpk fails before planning
+(`error` then holds the reason). SIGINT or SIGTERM is passed to the running
+manager and the run ends with `"ok":false` and exit 130; exit codes are
+otherwise the same as without `--events`. Nothing can be asked on the stream,
+so `--events` refuses `--json` and `--pick-version` (pin with `name@version`).
+
+Commands that need root run through `sudo` by default. `--privilege` (or the
+`GPK_PRIVILEGE` environment variable) picks another way: `pkexec` for a
+desktop session without a terminal, `none` when the caller is root already, or
+`auto` for sudo on a terminal and pkexec otherwise. Under pkexec, yay and paru
+escalate with `--sudo pkexec`; building from the AUR with plain makepkg needs a
+terminal and gpk says so instead of starting it.
 
 ### Snapshots on a schedule
 
@@ -404,6 +461,7 @@ All data lives under `~/.local/share/glazepkg/` (respects `XDG_DATA_HOME`):
 | Data | Path | Retention |
 |------|------|-----------|
 | Scan cache | `cache/scan.json` | 10 days (auto-refresh) |
+| App list cache | `cache/apps.json` | 24 hours, or until an app or package changes |
 | Description cache | `cache/descriptions.json` | 24 hours |
 | Update cache | `cache/updates.json` | 7 days |
 | User notes | `notes.json` | Permanent |

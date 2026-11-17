@@ -114,6 +114,22 @@ Column legend:
 
 **`Search` (`Searcher`)** — needed for `gpk install <pkg>` to resolve which manager has the package when `--manager` isn't passed. When missing, you must pass `--manager` explicitly (`gpk install foo --manager npm`). Missing managers default to "requires `--manager`": `pipx`, `go`, `bun`, `pnpm`, `nix`, `pkgsrc`, `nuget`, `powershell`, `windows-updates`, `maven`, `uv`, `bin`.
 
+## Installed sizes and desktop apps
+
+`gpk list --json` reports `size_bytes` for these managers, each read in one batched query per scan:
+
+| Manager | Size source | Units |
+|---|---|---|
+| pacman, aur | `expac -Q '%n\t%m'` when installed, else `pacman -Qi <names>` | bytes / binary units |
+| flatpak | `flatpak list --app --columns=application,version,size` | decimal (GLib) |
+| dnf | `rpm -qa --qf '%{NAME}\t%{SIZE}\n'` (multilib arches summed) | bytes |
+| xbps | `xbps-query -p installed_size -s ''` | binary units |
+| brew, local, maven, windows-updates | already measured by their scans | bytes |
+
+Other managers leave `size_bytes` out.
+
+`gpk apps` joins each launchable desktop entry to its owner with one query on the host's package database: `pacman -Qo` (with `pacman -Qmq` to tell aur from pacman), `rpm -qf` on dnf systems, `xbps-query -o` per applications dir, or `dpkg-query -S`. Flatpak exports are matched by `X-Flatpak` or their install path, snaps by `X-SnapInstanceName`. Anything else is `local`.
+
 ## Write-side notes
 
 **`Inst` / `Up` / `Rm` are nearly universal.** Of the 46 managers, the only ones missing write operations are:
@@ -125,13 +141,16 @@ Column legend:
 
 **`Deep` (`DeepRemover`) is rare.** Only 4 managers: pacman, apt, dnf, xbps. These tools have a dedicated "remove this package AND its orphaned dependencies" command (`pacman -Rns`, `apt-get autoremove`, `dnf autoremove`, `xbps-remove -R`). Others can be approximated by `gpk remove pkg && gpk autoremove`, but autoremove isn't exposed as a separate gpk command yet.
 
+**Dependency packages.** `Scan` lists only explicitly installed packages for pacman (`-Qen`), aur (`-Qm`), dnf (user-installed) and xbps (manual). These four also implement `InstalledLooker`, so `gpk remove -m <m>` and `gpk installed -m <m>` find a package installed as a dependency (`pacman -Qi`, `rpm -q`, `xbps-query -p pkgver`) and report what needs it (`pacman -Qi` Required By; on rpm, `rpm -q --whatrequires` for the name and every capability `rpm -q --provides` lists, since dependents require a library's soname or pkgconfig name rather than the package; `xbps-query -X`) as `required_by` in the plan. Removal is never forced; the manager refuses to break a dependency.
+
 **Non-interactive (`+y`) coverage is intentional.** Only the 5 managers whose default command prompts the user for confirmation have `*Yes` variants: pacman, aur, apt, dnf, chocolatey. Every other manager either doesn't prompt at all or bakes the non-interactive flag into its standard command — so `--yes` from gpk gives the user a noop on those (the underlying call was already silent) without needing a separate code path.
 
 ## TUI vs headless
 
 Both modes call **the same** Go interfaces. There is no manager that works in the TUI but not headless, or vice versa. The only differences are surface:
 
-- **Confirmation**: the TUI shows a modal with a password field (uses sudo `-S` to pipe). Headless prompts on the terminal and uses sudo's normal `tty` prompt; `--yes` skips entirely.
+- **Confirmation**: the TUI shows a modal with a password field (uses sudo `-S` to pipe). Headless prompts on the terminal and uses sudo's normal `tty` prompt; `--yes` skips entirely. `--privilege pkexec|none|auto` (or `GPK_PRIVILEGE`) swaps sudo for polkit, nothing (caller is root), or whichever fits the session; under pkexec, yay and paru get `--sudo pkexec`, and a plain makepkg AUR build refuses to start without a terminal.
+- **Progress for GUIs**: `install`, `remove` and `upgrade` take `--events` (with `--yes`) for an NDJSON stream of plan, step, log, progress and done events. Progress counts come from pacman, yay, paru, dnf (4 and 5) and flatpak output; other managers stream log lines only.
 - **Batch operations**: the TUI's `m` multi-select with `Space` lets you select packages across managers and run a single command per privilege group. Headless takes multiple package names per command (`gpk install a b c`) but doesn't yet have a `gpk upgrade --all`.
 - **Snapshots / diff / export**: Phase 1 TUI-only. A future phase may add headless equivalents.
 

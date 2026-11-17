@@ -174,7 +174,14 @@ func parseDesktopApp(path, home string, owned map[string]bool) (localApp, bool) 
 	if owned[path] {
 		return localApp{}, false
 	}
+	return localAppFromEntry(path, home, entry), true
+}
 
+// localAppFromEntry measures the app a parsed .desktop entry launches: its
+// install root, loose icon and bin launchers, their total size and a version
+// read from the install dir. It applies no visibility or ownership filter, so
+// `gpk apps` can size unowned entries the local scan itself would skip.
+func localAppFromEntry(path, home string, entry map[string]string) localApp {
 	app := localApp{
 		name:        firstNonEmpty(entry["Name"], strings.TrimSuffix(filepath.Base(path), ".desktop")),
 		desc:        firstNonEmpty(entry["Comment"], entry["GenericName"]),
@@ -222,7 +229,7 @@ func parseDesktopApp(path, home string, owned map[string]bool) (localApp, bool) 
 	if app.privileged {
 		app.scope = "system"
 	}
-	return app, true
+	return app
 }
 
 // --- standalone binaries (CLI apps) ---

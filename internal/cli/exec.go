@@ -27,17 +27,21 @@ func UseStableLocale() {
 
 // headlessExec runs cmd with the parent process's stdin/stdout/stderr so
 // interactive prompts (sudo password, pacman confirmations) reach the
-// user's terminal. If cmd is a sudo wrapper using "-S" (read password from
-// stdin — a TUI-era convention), the "-S" is stripped so sudo uses its
-// normal tty prompt instead.
+// user's terminal. A privileged command (the manager package's `sudo -S`
+// marker) is rewritten for the --privilege mode first: sudo with its normal
+// tty prompt, pkexec, or no wrapper at all.
 //
-// This is the only place exec.Cmd is run in the cli package. All write
-// subcommands call this, never exec.Cmd.Run directly.
+// This and runEventStep (the --events runner) are the only places exec.Cmd
+// is run in the cli package. Write subcommands call one of them, never
+// exec.Cmd.Run directly.
 func headlessExec(cmd *exec.Cmd) error {
 	if cmd == nil {
 		return fmt.Errorf("nil command")
 	}
-	cmd = stripSudoStdinFlag(cmd)
+	cmd, err := withPrivilege(cmd)
+	if err != nil {
+		return err
+	}
 	if cmd.Env == nil {
 		cmd.Env = userEnv
 	}

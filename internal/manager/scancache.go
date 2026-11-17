@@ -11,7 +11,13 @@ import (
 
 const scanCacheTTL = 10 * 24 * time.Hour // 10 days
 
+// scanCacheVersion is bumped when a scan starts filling fields an older cache
+// never had (v2: installed sizes for pacman, aur, flatpak, dnf and xbps), so an
+// upgrade rescans once instead of serving the old shape for up to ten days.
+const scanCacheVersion = 2
+
 type scanCache struct {
+	Version   int             `json:"version,omitempty"`
 	Timestamp time.Time       `json:"timestamp"`
 	Packages  []model.Package `json:"packages"`
 }
@@ -36,7 +42,7 @@ func LoadScanCache() []model.Package {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil
 	}
-	if time.Since(c.Timestamp) > scanCacheTTL {
+	if c.Version < scanCacheVersion || time.Since(c.Timestamp) > scanCacheTTL {
 		return nil
 	}
 	return c.Packages
@@ -156,6 +162,7 @@ func DeleteScanCache() {
 // SaveScanCache writes the package list to the cache file.
 func SaveScanCache(pkgs []model.Package) {
 	c := scanCache{
+		Version:   scanCacheVersion,
 		Timestamp: time.Now(),
 		Packages:  pkgs,
 	}

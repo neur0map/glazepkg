@@ -41,6 +41,7 @@ func (a *AUR) Scan() ([]model.Package, error) {
 			InstalledAt: time.Now(),
 		})
 	}
+	applySizes(pkgs, pacmanSizes(packageNames(pkgs)))
 	return pkgs, nil
 }
 

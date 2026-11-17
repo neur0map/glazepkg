@@ -64,6 +64,7 @@ func (x *Xbps) Scan() ([]model.Package, error) {
 			InstalledAt: time.Now(),
 		})
 	}
+	applySizes(pkgs, xbpsSizes())
 	return pkgs, nil
 }
 

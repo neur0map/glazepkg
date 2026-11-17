@@ -35,6 +35,9 @@ func writeEnvelope(w io.Writer, version string, data interface{}) error {
 // from model.Package only by including LatestVersion (which model.Package
 // hides with json:"-" so it doesn't leak into snapshot files).
 type cliPackage struct {
+	// ID is the install name when a manager's search shows a display name
+	// instead (flatpak: the app id); omitted when it equals Name.
+	ID            string       `json:"id,omitempty"`
 	Name          string       `json:"name"`
 	Version       string       `json:"version"`
 	Source        model.Source `json:"source"`
@@ -51,6 +54,7 @@ type cliPackage struct {
 
 func toCLIPackage(p model.Package) cliPackage {
 	return cliPackage{
+		ID:            p.ID,
 		Name:          p.Name,
 		Version:       p.Version,
 		Source:        p.Source,

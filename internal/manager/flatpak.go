@@ -16,31 +16,51 @@ func (f *Flatpak) Name() model.Source { return model.SourceFlatpak }
 func (f *Flatpak) Available() bool { return commandExists("flatpak") }
 
 func (f *Flatpak) Scan() ([]model.Package, error) {
-	out, err := exec.Command("flatpak", "list", "--app", "--columns=application,version").Output()
+	out, err := exec.Command("flatpak", "list", "--app", "--columns=application,version,size").Output()
 	if err != nil {
-		return nil, err
+		// Flatpak releases without the size column: fall back to the plain list.
+		if out, err = exec.Command("flatpak", "list", "--app", "--columns=application,version").Output(); err != nil {
+			return nil, err
+		}
 	}
+	return ParseFlatpakList(string(out)), nil
+}
 
+// ParseFlatpakList reads `flatpak list --app --columns=application,version,size`
+// output. Columns are tab-separated and the version may be empty, so splitting
+// on whitespace would shift the size into the version; output without tabs (a
+// two-column list from an older flatpak) is split on whitespace.
+func ParseFlatpakList(out string) []model.Package {
 	var pkgs []model.Package
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner := bufio.NewScanner(strings.NewReader(out))
 	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) < 1 {
+		line := scanner.Text()
+		var fields []string
+		if strings.Contains(line, "\t") {
+			fields = strings.Split(line, "\t")
+		} else {
+			fields = strings.Fields(line)
+		}
+		if len(fields) < 1 || strings.TrimSpace(fields[0]) == "" {
 			continue
 		}
-		name := fields[0]
-		version := ""
-		if len(fields) >= 2 {
-			version = fields[1]
-		}
-		pkgs = append(pkgs, model.Package{
-			Name:        name,
-			Version:     version,
+		pkg := model.Package{
+			Name:        strings.TrimSpace(fields[0]),
 			Source:      model.SourceFlatpak,
 			InstalledAt: time.Now(),
-		})
+		}
+		if len(fields) >= 2 {
+			pkg.Version = strings.TrimSpace(fields[1])
+		}
+		if len(fields) >= 3 {
+			if b := ParseFlatpakSize(fields[2]); b > 0 {
+				pkg.SizeBytes = b
+				pkg.Size = FormatBytes(b)
+			}
+		}
+		pkgs = append(pkgs, pkg)
 	}
-	return pkgs, nil
+	return pkgs
 }
 
 func (f *Flatpak) CheckUpdates(pkgs []model.Package) map[string]string {
@@ -126,6 +146,7 @@ func (f *Flatpak) Search(query string) ([]model.Package, error) {
 		version := strings.TrimSpace(fields[3])
 		pkgs = append(pkgs, model.Package{
 			Name:        name,
+			ID:          strings.TrimSpace(fields[2]),
 			Version:     version,
 			Source:      model.SourceFlatpak,
 			Description: desc,

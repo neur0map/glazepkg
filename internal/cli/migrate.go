@@ -158,7 +158,7 @@ func runImport(args []string, mgrs []manager.Manager, version string, stdout, st
 	}
 
 	r := newPromptReader(stdin)
-	return executeInstalls(plans, *yesFlag, *dryRunFlag, *quietFlag, st, r, stdout, stderr)
+	return executeInstalls(nil, plans, *yesFlag, *dryRunFlag, *quietFlag, st, r, stdout, stderr)
 }
 
 // resolveImport maps an entry to an available manager: by its source when

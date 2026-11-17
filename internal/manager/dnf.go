@@ -59,6 +59,9 @@ func (d *Dnf) Scan() ([]model.Package, error) {
 			InstalledAt: time.Now(),
 		})
 	}
+	if commandExists("rpm") {
+		applySizes(pkgs, rpmSizes())
+	}
 	return pkgs, nil
 }
 

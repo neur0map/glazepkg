@@ -3,6 +3,55 @@
 Notable changes to gpk. Dates are roughly when work landed; the format loosely
 follows Keep a Changelog.
 
+## v0.7.0 (2026-11-16)
+
+### Added
+- `gpk list --json` fills `size_bytes` and `size` with the installed size for
+  pacman, aur, flatpak, dnf and xbps. Each manager answers in one batched query
+  (`expac` when installed, otherwise `pacman -Qi`; `flatpak list` with the size
+  column; `rpm -qa`; `xbps-query -p installed_size`), so a scan costs one extra
+  command per manager, and the sizes are cached with the scan. The scan cache
+  carries a version now, so the first run after upgrading rescans once instead
+  of serving a cache without sizes for up to ten days.
+- `gpk apps [--json] [--no-cache] [-m managers] [filter]` lists every launchable
+  desktop entry (the user's, the system's in `$XDG_DATA_DIRS`, and flatpak
+  exports) with its name, icon, categories and Exec line, joined to the package
+  that owns it (pacman, aur, dnf, xbps, apt, flatpak or snap) with that
+  package's version and installed size. Entries no package owns report
+  `source: "local"` and the size the local manager measures, with a `package`
+  name when `gpk remove -m local` can remove them. A user copy of a packaged
+  entry still belongs to the package. Ownership is one batched query; the list
+  is cached and rescanned when an applications dir or a package database
+  changes, or after 24 hours.
+- `--events` on `install`, `remove` and `upgrade` (with `--yes`) prints NDJSON
+  on stdout for GUIs: a `plan` event, then per step `start`, the manager's
+  output as `log` lines (stdout and stderr), `progress` counts read from
+  pacman, yay, paru, dnf and flatpak output, and `done` with the exit code,
+  closing with one final `done` event that also covers failures before the
+  plan. SIGINT and SIGTERM are passed to the running manager and end the run
+  with `"ok":false` and exit 130. Other exit codes are unchanged. Nothing can
+  be asked on an event stream, so `--events` needs `--yes` and refuses
+  `--json` and `--pick-version`.
+- `--privilege sudo|pkexec|none|auto` (or `GPK_PRIVILEGE`) chooses how commands
+  that need root are run: sudo as before, pkexec for a desktop session without
+  a terminal, `none` for callers that are root already, or `auto` (sudo with a
+  terminal, pkexec without one when it is installed). JSON plans show the
+  command as it will run. Under pkexec, yay and paru get `--sudo pkexec`; an
+  AUR build with plain makepkg stops with an error asking for a terminal,
+  since makepkg prompts for the sudo password itself. The flag works with the
+  pacman-style operations too (`gpk -Sy --privilege pkexec` still refreshes).
+- Flatpak search results carry the app id as `id` in `--json`, and installing
+  a flatpak by app id or by its display name now installs the app id.
+- `gpk remove` and `gpk installed` with a named manager (`-m pacman`, `aur`,
+  `dnf` or `xbps`) also find packages installed as dependencies, which the
+  scan leaves out (`pacman -Qi`, `rpm -q`, `xbps-query`); `gpk list` still
+  shows only what was installed on purpose. Remove plans (`--json` and the
+  `--events` plan) carry `required_by` for a package other installed packages
+  need, so a GUI can warn first: pacman's Required By, every package requiring
+  anything an rpm provides (its sonames and pkgconfig names, not only its
+  name), or `xbps-query -X`. gpk never forces such a removal; the manager
+  refuses it and says why.
+
 ## v0.6.7 — 2026-08-16
 
 ### Fixed

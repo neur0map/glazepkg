@@ -67,6 +67,11 @@ func runInstalled(args []string, mgrs []manager.Manager, version string, stdout,
 	var missing []string
 	for _, n := range names {
 		matches := byName[n]
+		// A named manager also counts packages installed as dependencies,
+		// which the explicit-only scan leaves out.
+		if len(matches) == 0 && strings.TrimSpace(*mgrFlag) != "" {
+			matches = lookupInstalled(filtered, n)
+		}
 		r := result{Name: n, Installed: len(matches) > 0, Matches: toCLIPackages(matches)}
 		results = append(results, r)
 		if !r.Installed {
