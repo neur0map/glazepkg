@@ -1,7 +1,7 @@
 package manager
 
 import (
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -142,23 +142,37 @@ func (m *Maven) Scan() ([]model.Package, error) {
 
 var mavenHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
+var mavenBaseURL = "https://repo1.maven.org/maven2"
+
+const mavenMaxWorkers = 10
+
 func (m *Maven) CheckUpdates(pkgs []model.Package) map[string]string {
 	updates := make(map[string]string)
 	latestVersions := make(map[string]string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, mavenMaxWorkers)
 	for _, p := range pkgs {
 		// Description holds the full groupId:artifactId coordinate.
 		parts := strings.SplitN(p.Description, ":", 2)
 		if len(parts) != 2 {
 			continue
 		}
-		groupID, artifactID := parts[0], parts[1]
-
-		latest := mavenCentralLatest(groupID, artifactID)
-		if latest != "" && latest != p.Version {
-			updates[p.Name] = latest
-			latestVersions[p.Name] = latest
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(p model.Package, groupID, artifactID string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			latest := mavenCentralLatest(groupID, artifactID)
+			if latest != "" && latest != p.Version {
+				mu.Lock()
+				updates[p.Name] = latest
+				latestVersions[p.Name] = latest
+				mu.Unlock()
+			}
+		}(p, parts[0], parts[1])
 	}
+	wg.Wait()
 
 	mavenMu.Lock()
 	mavenLatestVersions = latestVersions
@@ -194,12 +208,11 @@ func (m *Maven) UpgradeCmd(name string) *exec.Cmd {
 	return cmd
 }
 
-// mavenCentralLatest queries Maven Central for the latest release version.
+// mavenCentralLatest reads the latest release version from the artifact's
+// maven-metadata.xml on Maven Central.
 func mavenCentralLatest(groupID, artifactID string) string {
-	url := fmt.Sprintf(
-		"https://search.maven.org/solrsearch/select?q=g:%%22%s%%22+AND+a:%%22%s%%22&rows=1&wt=json",
-		groupID, artifactID,
-	)
+	url := fmt.Sprintf("%s/%s/%s/maven-metadata.xml",
+		mavenBaseURL, strings.ReplaceAll(groupID, ".", "/"), artifactID)
 	resp, err := mavenHTTPClient.Get(url)
 	if err != nil {
 		return ""
@@ -209,20 +222,17 @@ func mavenCentralLatest(groupID, artifactID string) string {
 		return ""
 	}
 
-	var result struct {
-		Response struct {
-			Docs []struct {
-				LatestVersion string `json:"latestVersion"`
-			} `json:"docs"`
-		} `json:"response"`
+	var meta struct {
+		Release string `xml:"versioning>release"`
+		Latest  string `xml:"versioning>latest"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := xml.NewDecoder(resp.Body).Decode(&meta); err != nil {
 		return ""
 	}
-	if len(result.Response.Docs) == 0 {
-		return ""
+	if meta.Release != "" {
+		return meta.Release
 	}
-	return result.Response.Docs[0].LatestVersion
+	return meta.Latest
 }
 
 // pomPackaging reads the <packaging> element from a POM file.
