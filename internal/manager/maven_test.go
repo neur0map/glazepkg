@@ -12,7 +12,7 @@ func TestMavenCheckUpdatesReadsMetadata(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/junit/junit/maven-metadata.xml":
-			w.Write([]byte(`<metadata><versioning><latest>4.13.2</latest><release>4.13.2</release></versioning></metadata>`))
+			w.Write([]byte(`<metadata><versioning><latest>5.0.0-SNAPSHOT</latest><release>4.13.2</release></versioning></metadata>`))
 		case "/org/example/old/maven-metadata.xml":
 			w.Write([]byte(`<metadata><versioning><latest>1.1</latest></versioning></metadata>`))
 		default:
