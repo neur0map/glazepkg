@@ -111,30 +111,55 @@ func (w *Winget) parseText() ([]model.Package, error) {
 //	Name                  Id                    Version    Available  Source
 //	--------------------  --------------------  ---------  ---------  ------
 //	Git                   Git.Git               2.44.0     2.45.0     winget
+
+// parseTextOutput parses installed packages from WinGet's text table.
+// It falls back to header-based column positions when the separator
+// does not provide enough column boundaries.
 func (w *Winget) parseTextOutput(s string) []model.Package {
 	var colStarts []int
 	var pkgs []model.Package
+	var header string
+
 	scanner := bufio.NewScanner(strings.NewReader(s))
 	for scanner.Scan() {
 		line := scanner.Text()
+
 		if colStarts == nil {
 			if wingetIsSep(line) {
 				colStarts = wingetColumns(line)
+
+				// Fix for continuous dashed separators
+				if len(colStarts) < 3 {
+					colStarts = nil
+					for _, name := range []string{
+						"Name", "Id", "Version",
+						"Available", "Source",
+					} {
+						if i := strings.Index(header, name); i >= 0 {
+							colStarts = append(colStarts, i)
+						}
+					}
+				}
+			} else {
+				header = line
 			}
 			continue
 		}
+
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
+
 		fields := wingetExtract(line, colStarts)
-		// Columns: Name, Id, Version, [Available], [Source]
 		if len(fields) < 3 || fields[0] == "" {
 			continue
 		}
+
 		v := fields[2]
 		if v == "" {
 			v = "unknown"
 		}
+
 		pkgs = append(pkgs, model.Package{
 			Name:        fields[0],
 			Version:     v,
